@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AnyAtom } from '@qstyle/core';
+import type { AnyAtom, StaticAtom } from '@qstyle/core';
+import { assignOrderingGroups, hashStaticAtom } from '@qstyle/core';
 import { composeCssProp, flattenCssProp } from './compose.js';
 import { css } from './index.js';
 
@@ -118,5 +119,81 @@ describe('composeCssProp', () => {
     ]);
     expect(out.atoms).toHaveLength(1);
     expect(staticValue(out.atoms[0]!)).toBe('blue');
+  });
+
+  it('keeps object + handle + object source order (CMP-009)', () => {
+    const handle = css({ color: 'red' });
+    const out = composeCssProp([{ display: 'flex' }, handle, { color: 'blue', gap: 4 }]);
+    // object(handle 前) -> handle -> object(handle 後) の順が保たれ、
+    // 同一 property の conflict は後勝ちで末尾に置き換わる。
+    expect(out.atoms.map((a) => a.property)).toEqual(['display', 'color', 'gap']);
+    expect(staticValue(out.atoms.find((a) => a.property === 'color')!)).toBe('blue');
+    expect(staticValue(out.atoms.find((a) => a.property === 'display')!)).toBe('flex');
+    expect(staticValue(out.atoms.find((a) => a.property === 'gap')!)).toBe('4px');
+  });
+
+  it('orders shorthand earlier / longhand later in one ordering group (CMP-012)', () => {
+    // shorthand が先: `margin: 8px` の後に `margin-top: 16px` が効く
+    // (source order がそのまま CSS 順序になることが保証される)。
+    const out = composeCssProp([{ margin: '8px' }, { marginTop: '16px' }]);
+    expect(out.atoms.map((a) => [a.property, staticValue(a)])).toEqual([
+      ['margin', '8px'],
+      ['margin-top', '16px'],
+    ]);
+    // 衝突検出: safety analysis が同一 ordering group にまとめる。
+    const grouped = assignOrderingGroups(out.atoms as readonly StaticAtom[]);
+    expect(grouped[0]?.ordering.group).toBe(grouped[1]?.ordering.group);
+    expect(grouped.map((a) => a.property)).toEqual(['margin', 'margin-top']);
+  });
+
+  it('orders longhand earlier / shorthand later in one ordering group (CMP-013)', () => {
+    // longhand が先: `margin-top: 16px` が `margin: 8px` に上書きされる
+    // (source 順序どおり。atomic 化で並び替えない)。
+    const out = composeCssProp([{ marginTop: '16px' }, { margin: '8px' }]);
+    expect(out.atoms.map((a) => [a.property, staticValue(a)])).toEqual([
+      ['margin-top', '16px'],
+      ['margin', '8px'],
+    ]);
+    const grouped = assignOrderingGroups(out.atoms as readonly StaticAtom[]);
+    expect(grouped[0]?.ordering.group).toBe(grouped[1]?.ordering.group);
+  });
+
+  it('resolves nested selector conflicts per context (CMP-015)', () => {
+    const base = css({ color: 'black', '&:hover': { color: 'red' } });
+    const hover = css({ '&:hover': { color: 'blue' } });
+    const out = composeCssProp([base, hover]);
+    // :hover 同士は同一 context conflict → 後勝ち。base は無傷。
+    expect(out.atoms).toHaveLength(2);
+    const hoverAtom = out.atoms.find((a) => a.context.pseudo?.[0] === ':hover');
+    const baseAtom = out.atoms.find((a) => a.context.pseudo === undefined);
+    expect(staticValue(hoverAtom!)).toBe('blue');
+    expect(staticValue(baseAtom!)).toBe('black');
+    // context が異なる atom は混ざらない (identity も分離)。
+    expect(hashStaticAtom(baseAtom as StaticAtom)).not.toBe(
+      hashStaticAtom(hoverAtom as StaticAtom),
+    );
+  });
+
+  it('resolves equal-specificity conflicts by source order (CSS-009)', () => {
+    // 同一 property + 同一 context (= 等詳細度) は後勝ちで 1 atom になる。
+    const out = composeCssProp([
+      css({ '&:hover': { color: 'red' } }),
+      css({ '&:hover': { color: 'blue' } }),
+    ]);
+    expect(out.atoms).toHaveLength(1);
+    expect(staticValue(out.atoms[0]!)).toBe('blue');
+    expect(out.atoms[0]?.context.pseudo).toEqual([':hover']);
+  });
+
+  it('keeps different-specificity atoms separate in source order (CSS-010)', () => {
+    // base (0,1,0) と :hover (0,2,0) は詳細度が異なるため独立に保持され、
+    // serialize 順は source order のまま。
+    const out = composeCssProp([{ color: 'black' }, { '&:hover': { color: 'blue' } }]);
+    expect(out.atoms.map((a) => [a.property, staticValue(a), a.context.pseudo?.[0]])).toEqual([
+      ['color', 'black', undefined],
+      ['color', 'blue', ':hover'],
+    ]);
+    const [base, hover] = out.atoms as readonly StaticAtom[];
+    expect(hashStaticAtom(base!)).not.toBe(hashStaticAtom(hover!));
   });
 });

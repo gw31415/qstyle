@@ -339,8 +339,59 @@ export function assignOrderingGroups(atoms: readonly StaticAtom[]): StaticAtom[]
 }
 
 const PROPERTY_RE = /^[a-z-][a-z0-9-]*$/;
+/** custom property 名は case-sensitive かつ ident 文字を広く許す (空白のみ不可)。 */
+const CUSTOM_PROPERTY_RE = /^--[^\s]+$/;
 const FORBIDDEN_VALUE_RE = /expression\(|url\(\s*javascript:/i;
 const FORBIDDEN_PROPERTIES: ReadonlySet<string> = new Set<string>(['behavior', '-moz-binding']);
+const URL_OPEN_RE = /^url\(/i;
+
+/** `"` / `'` で始まる quoted string の閉じ位置 (exclusive)。escape は 2 文字消費。 */
+function skipQuotedValue(text: string, start: number): number {
+  const quote: string = text[start] ?? '';
+  let i: number = start + 1;
+  while (i < text.length) {
+    const ch: string = text[i] ?? '';
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+    if (ch === quote) return i + 1;
+    i += 1;
+  }
+  return -1;
+}
+
+/**
+ * declaration value / var() fallback 中に、quoted string・url() token の外側で
+ * declaration / rule 境界を壊す文字 (`<` `>` `;` `{` `}`) が出現するか
+ * (OBJ-023 / DYN-019)。unterminated quote / url も invalid とする。
+ */
+export function hasInvalidDeclarationChars(value: string): boolean {
+  let i = 0;
+  while (i < value.length) {
+    const ch: string = value[i] ?? '';
+    if (ch === '"' || ch === "'") {
+      const end: number = skipQuotedValue(value, i);
+      if (end < 0) return true;
+      i = end;
+      continue;
+    }
+    if (ch === '\\') {
+      // unquoted context の backslash は escape。次の 1 文字を消費する。
+      i += 2;
+      continue;
+    }
+    if ((ch === 'u' || ch === 'U') && URL_OPEN_RE.test(value.slice(i))) {
+      const close: number = value.indexOf(')', i);
+      if (close < 0) return true;
+      i = close + 1;
+      continue;
+    }
+    if (ch === '<' || ch === '>' || ch === ';' || ch === '{' || ch === '}') return true;
+    i += 1;
+  }
+  return false;
+}
 
 /**
  * declaration が安全に atomicize 可能か判定する (plan.md §17, FLB-010)。
@@ -353,9 +404,14 @@ export function classifyDeclaration(
 ): 'atomic' | { residual: ResidualReason } {
   if (property.length === 0 || value.trim().length === 0) return { residual: 'unsupported-syntax' };
   // 大文字 / 空白を含む property は canonical 化せず residual (曖昧な寄せを実装しない)。
-  if (!PROPERTY_RE.test(property)) return { residual: 'unsupported-syntax' };
-  if (property === '--') return { residual: 'unsupported-syntax' };
+  // custom property (`--*`) のみ case-sensitive な名前をそのまま許す。
+  if (property.startsWith('--')) {
+    if (!CUSTOM_PROPERTY_RE.test(property)) return { residual: 'unsupported-syntax' };
+  } else {
+    if (!PROPERTY_RE.test(property)) return { residual: 'unsupported-syntax' };
+  }
   if (FORBIDDEN_PROPERTIES.has(property)) return { residual: 'unsupported-syntax' };
   if (FORBIDDEN_VALUE_RE.test(value)) return { residual: 'unsupported-syntax' };
+  if (hasInvalidDeclarationChars(value)) return { residual: 'unsupported-syntax' };
   return 'atomic';
 }

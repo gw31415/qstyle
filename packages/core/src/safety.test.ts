@@ -170,4 +170,61 @@ describe('classifyDeclaration', () => {
       residual: 'unsupported-syntax',
     });
   });
+
+  it('rejects value syntax that cannot be a single declaration (OBJ-023)', () => {
+    // `<` / `>` は quoted string の外では不正な値文字。
+    expect(classifyDeclaration('display', 'fl<<ex')).toEqual({
+      residual: 'unsupported-syntax',
+    });
+    // declaration 境界 (`;`) や rule 境界 (`{` `}`) を壊す値。
+    expect(classifyDeclaration('color', 'red; background: url(x)')).toEqual({
+      residual: 'unsupported-syntax',
+    });
+    expect(classifyDeclaration('color', 'red } .evil { color: blue')).toEqual({
+      residual: 'unsupported-syntax',
+    });
+    // unterminated quote / url。
+    expect(classifyDeclaration('content', '"unterminated')).toEqual({
+      residual: 'unsupported-syntax',
+    });
+    expect(classifyDeclaration('background-image', 'url(data:image/png;base64,AAA')).toEqual({
+      residual: 'unsupported-syntax',
+    });
+    // empty value も silent emit しない。
+    expect(classifyDeclaration('display', '')).toEqual({ residual: 'unsupported-syntax' });
+  });
+
+  it('accepts values with quoting, urls, functions, commas and unicode (OBJ-013..017/024)', () => {
+    expect(classifyDeclaration('color', 'var(--x)')).toBe('atomic');
+    expect(classifyDeclaration('color', 'var(--x, blue)')).toBe('atomic');
+    expect(classifyDeclaration('width', 'calc(100% - 8px)')).toBe('atomic');
+    expect(classifyDeclaration('width', 'min(1rem, 4vw)')).toBe('atomic');
+    expect(classifyDeclaration('width', 'clamp(1px, 2vw, 8px)')).toBe('atomic');
+    expect(classifyDeclaration('font-family', 'Arial, sans-serif')).toBe('atomic');
+    // quoting / escape を含む content 値。
+    expect(classifyDeclaration('content', '"quoted"')).toBe('atomic');
+    expect(classifyDeclaration('content', '\\"')).toBe('atomic');
+    expect(classifyDeclaration('quotes', `"a, b"`)).toBe('atomic');
+    // data URL / quoted url。
+    expect(
+      classifyDeclaration(
+        'background-image',
+        'url(data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27/%3E)',
+      ),
+    ).toBe('atomic');
+    expect(classifyDeclaration('background-image', 'url("https://example.com/a.png")')).toBe(
+      'atomic',
+    );
+    // unicode。
+    expect(classifyDeclaration('content', '"日本語と English"')).toBe('atomic');
+  });
+
+  it('accepts case-sensitive custom property names', () => {
+    // custom property 名は大文字小文字を区別するためそのまま受理する
+    // (property 規則 `^[a-z-]...` は非 custom property のみに適用)。
+    expect(classifyDeclaration('--my-Var', 'x')).toBe('atomic');
+    expect(classifyDeclaration('--my var', 'x')).toEqual({
+      residual: 'unsupported-syntax',
+    });
+  });
 });

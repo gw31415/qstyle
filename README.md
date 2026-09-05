@@ -129,16 +129,53 @@ qstyle({
 - `preserve`: atomic 化せず宣言順のまま 1 block 化 (Level 0)。順序依存ペアは untouched
 - `strict`: 最適化不能箇所を compile error にする (safe は residual/untouched + 警告)
 - `promotion: 'never'` は dynamic 値を inline のままにし、`cost-based` (既定) は module 内共有構造のみ class 化する
-- `backend: 'css-asset'` では hashed CSS + `qstyle.routes.json` を emit し、`virtual:qstyle/route-loader` の `loadRouteStyles(route)` で route 単位に `<link>` 注入できる
+- `backend: 'css-asset'` (Backend B): 下記「配信 (backend: 'css-asset')」参照。build のみに影響し、dev (serve) は `qwik-native` と同じ per-module CSS + HMR パイプラインのまま
 
 ## Virtual modules
 
 - `virtual:qstyle/registry` — 収集済み id→CSS の対応表
-- `virtual:qstyle/pack/<id>` — 個別 pack (side-effect import で同梱)
+- `virtual:qstyle/pack/<id>` — 個別 pack (side-effect import で同梱。qwik-native のみ)
 - `virtual:qstyle/manifest` — module→atom の対応表
 - `virtual:qstyle/residuals` — 最適化不能理由の一覧 (inspector 表示用)
 - `virtual:qstyle/route-loader` — `loadRouteStyles(route)` (css-asset 用)
 - `virtual:qstyle/dev/<hash>.css` — serve 時のみ。per-module CSS (Vite CSS HMR 対応)
+
+## 配信 (backend: 'css-asset')
+
+Qwik optimizer は client build で `build.cssCodeSplit = false` を強制するため、
+vite/qwik の CSS 配管に乗せた CSS はすべて単一 asset に統合され SSR HTML に
+インラインされる。`backend: 'css-asset'` はこの配管に一切乗せず、plugin 自身が
+chunk planner の結果 (usage clustering + min/max sizing) に従って
+content-hash 付き CSS asset を直接 emit する。chunk 内の宣言 dedup (§39 v1) は
+hash 計算前に適用済み。
+
+生成物:
+
+- `dist/assets/qstyle.<hash>.css` — chunk 単位の CSS asset (hash は最終 bytes 由来)
+- `dist/qstyle.units.json` — unit id → asset file name の逆引き index
+  (`{ "version": 1, "units": { "q_xxxxxxxx": ["assets/qstyle.<hash>.css"] } }`)
+- `dist/qstyle.routes.json` — route → 必要 asset file names (`routes` option 未指定時は entries 空)
+
+lazy 読み込み (実装済み): transform が CSS を持つ各 module の先頭に
+`import { ensureModuleStyles } from '@qstyle/qwik/client'; ensureModuleStyles([...unitIds])`
+を注入する。JS bundle には unit id のみが埋め込まれ (chunk の file name は
+transform 時点で確定しないため)、`ensureModuleStyles` が `qstyle.units.json` を
+1 回だけ fetch して unit id → file name を解決し、未読の `<link rel="stylesheet">`
+を head に追加する (同一 href の二重追加なし、SSR では no-op、fetch 失敗時は
+console.error のみで crash しない)。
+
+route 単位の読み込みは別経路として `virtual:qstyle/route-loader` の
+`loadRouteStyles(route)` が残っている (`qstyle.routes.json` の asset 名解決を利用)。
+
+**hosting 推奨**: asset 名は content hash 付きなので
+`Cache-Control: public, max-age=31536000, immutable`
+を `assets/qstyle.*.css` に設定すること (`@qstyle/core` の
+`IMMUTABLE_CACHE_HEADER` に同値を定義済み)。
+
+**未実装** (plan.md R1.4/R1.5): SSR/SSG 向けの `<QstyleLinks />` head link 注入と
+client navigation での自動 route style 取得は未実装。初期表示の head link は
+現在のところ `ensureModuleStyles` (module 評価時) または `loadRouteStyles` の
+手動呼び出しで賄う。
 
 ## Inspector
 

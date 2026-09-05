@@ -31,6 +31,7 @@ export {
   SHORTHAND_MAP,
   assignOrderingGroups,
   classifyDeclaration,
+  hasInvalidDeclarationChars,
   isShorthand,
   longhandsOf,
   needsOrderingGroup,

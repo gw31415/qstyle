@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { hashParametricAtom, hashStaticAtom } from '@qstyle/core';
+import {
+  hashParametricAtom,
+  hashStaticAtom,
+  serializeParametricDecl,
+} from '@qstyle/core';
 import { css, lowerStyleObject } from './index.js';
 import { lowerTaggedTemplate } from './template.js';
 
@@ -203,5 +207,78 @@ describe('css template overload', () => {
     `;
     expect(h.__qstyleBrand).toBe('StyleHandle');
     expect(h.atoms).toHaveLength(2);
+  });
+});
+
+describe('lowerTaggedTemplate interpolation identity', () => {
+  it('slots identifier interpolations instead of static folding (TPL-006)', () => {
+    // vite transform は式を静的解決できない場合 null placeholder を渡す
+    // (lowerTemplateSpans が exprs.map(() => null))。library level では
+    // identifier 相当の非 primitive 値は常に runtime slot になり fold されない。
+    // const 解決可否の判断は transform 側の責務 (TPL-005 は primitive のみ fold)。
+    const gapExpr = { expr: 'gap' } as unknown;
+    const out = tag`gap: ${gapExpr}px;`;
+    expect(out.atoms).toHaveLength(0);
+    expect(out.parametrics).toHaveLength(1);
+    expect(out.parametrics[0]?.valueTemplate).toEqual([
+      { kind: 'slot', slotIndex: 0 },
+      { kind: 'text', text: 'px' },
+    ]);
+    // vite と同じ呼び出し方 (全式 null) でも fold されない。
+    const raw = lowerTaggedTemplate(['gap: ', 'px;'], [null]);
+    expect(raw.atoms).toHaveLength(0);
+    expect(raw.parametrics).toHaveLength(1);
+  });
+
+  it('slots runtime string/color interpolations as var() without CSS injection (TPL-008)', () => {
+    // runtime 式の文字列化は一切行われないため、値が CSS text に混入しない。
+    const colorExpr = { toString: () => "'; } body { background: red" } as unknown;
+    const out = tag`color: ${colorExpr};`;
+    expect(out.residuals).toHaveLength(0);
+    expect(out.atoms).toHaveLength(0);
+    const atom = out.parametrics[0];
+    expect(atom?.slots[0]?.valueType).toBe('custom');
+    const decl: string = serializeParametricDecl(atom!);
+    expect(decl).toBe(`color:var(${atom?.slots[0]?.id})`);
+    expect(decl).not.toContain('body');
+    expect(decl).not.toContain(';');
+  });
+
+  it('builds a compound ValueTemplate with two slots (TPL-009)', () => {
+    const x = {} as unknown;
+    const a = {} as unknown;
+    const out = tag`transform: translateX(${x}px) rotate(${a}deg);`;
+    expect(out.residuals).toHaveLength(0);
+    const p = out.parametrics[0];
+    expect(p?.valueTemplate).toEqual([
+      { kind: 'text', text: 'translateX(' },
+      { kind: 'slot', slotIndex: 0 },
+      { kind: 'text', text: 'px) rotate(' },
+      { kind: 'slot', slotIndex: 1 },
+      { kind: 'text', text: 'deg)' },
+    ]);
+    // 直後の静的 text から slot 型を推論 (length / angle)。
+    expect(p?.slots.map((s) => s.valueType)).toEqual(['length', 'angle']);
+    expect(serializeParametricDecl(p!)).toBe(
+      `transform:translateX(var(${p?.slots[0]?.id})px) rotate(var(${p?.slots[1]?.id})deg)`,
+    );
+  });
+
+  it('shares ParametricAtom identity across different variable names (TPL-010)', () => {
+    const aVar = {} as unknown;
+    const bVar = [] as unknown;
+    const fromA = tag`width: ${aVar}px;`.parametrics[0];
+    const fromB = tag`width: ${bVar}px;`.parametrics[0];
+    expect(hashParametricAtom(fromA!)).toBe(hashParametricAtom(fromB!));
+    expect(fromA?.slots[0]?.id).toBe(fromB?.slots[0]?.id);
+  });
+
+  it('does not silently compile at-rule condition interpolation (TPL-014)', () => {
+    const cond = { toString: () => '(width >= 768px)' } as unknown;
+    const out = tag`@media ${cond} { color: red; }`;
+    expect(out.atoms).toHaveLength(0);
+    expect(out.parametrics).toHaveLength(0);
+    expect(out.residuals).toHaveLength(1);
+    expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
   });
 });

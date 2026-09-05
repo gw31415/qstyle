@@ -1746,3 +1746,263 @@ describe('qstyle generateBundle wiring', () => {
     }
   });
 });
+
+describe('qstyle css-asset backend (plan.md §3.4 R1.1-R1.3/R1.6)', () => {
+  interface Emitted {
+    readonly fileName: string;
+    readonly source: string;
+  }
+
+  /** qstyle() の戻り配列から名前で plugin を取り出す。同一 instance の plugin 群は
+   * closure 状態 (collected / graph / unit tags) を共有するため、必ず同じ戻り値から取る。 */
+  const pluginsOf = (
+    options: Parameters<typeof qstyleFactory>[0],
+    ...names: readonly string[]
+  ): Record<string, unknown>[] => {
+    const plugins = qstyleFactory(options) as unknown as readonly Record<string, unknown>[];
+    const found: Record<string, unknown>[] = [];
+    for (const name of names) {
+      const plugin: Record<string, unknown> | undefined = plugins.find(
+        (p) => p['name'] === name,
+      );
+      if (plugin === undefined) throw new Error(`plugin ${name} not found`);
+      found.push(plugin);
+    }
+    return found;
+  };
+
+  /** noUncheckedIndexedAccess 下の取り出し用 (見つからなければ test 失敗)。 */
+  const req = (p: Record<string, unknown> | undefined): Record<string, unknown> => {
+    if (p === undefined) throw new Error('plugin not found');
+    return p;
+  };
+
+  /** build 相当の配線: buildStart -> transforms -> main/cssAsset の generateBundle。 */
+  const buildOnce = (
+    options: Parameters<typeof qstyleFactory>[0],
+    modules: readonly { readonly id: string; readonly code: string }[],
+  ): { emitted: Emitted[]; codes: string[] } => {
+    // main と cssAsset は同一 qstyle() instance から取る (closure 状態の共有)。
+    const plugins: Record<string, unknown>[] = pluginsOf(options, 'qstyle', 'qstyle:css-asset');
+    const main: Record<string, unknown> = req(plugins[0]);
+    const cssAsset: Record<string, unknown> = req(plugins[1]);
+    const buildStart = main['buildStart'] as () => void;
+    const transform = main['transform'] as (
+      code: string,
+      id: string,
+    ) => { code: string } | null;
+    const mainGenerate = main['generateBundle'] as (
+      this: { emitFile: (f: Emitted) => void },
+    ) => void;
+    const cssGenerate = cssAsset['generateBundle'] as (
+      this: { emitFile: (f: Emitted) => void },
+    ) => void;
+    buildStart();
+    const emitted: Emitted[] = [];
+    const emit = (f: Emitted): void => {
+      emitted.push(f);
+    };
+    const codes: string[] = [];
+    for (const mod of modules) {
+      const out = transform(mod.code, mod.id);
+      codes.push(out?.code ?? '');
+    }
+    mainGenerate.call({ emitFile: emit });
+    cssGenerate.call({ emitFile: emit });
+    return { emitted, codes };
+  };
+
+  it('injects ensureModuleStyles(unit ids) instead of pack css import (R1.6)', () => {
+    const main: Record<string, unknown> = req(pluginsOf({ backend: 'css-asset' }, 'qstyle')[0]);
+    const transform = main['transform'] as (
+      code: string,
+      id: string,
+    ) => { code: string } | null;
+    const out = transform(
+      `export const A = () => <div css={{ display: 'flex' }} />;`,
+      '/src/ca-a.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(out?.code).toContain(`import { ensureModuleStyles } from '@qstyle/qwik/client';`);
+    expect(out?.code).toMatch(/^ensureModuleStyles\(\["q_[0-9a-f]{8}"\]\);/m);
+    expect(out?.code).not.toContain('virtual:qstyle/pack/');
+  });
+
+  it('keeps the dev pipeline under css-asset (serve は backend によらず現状維持)', () => {
+    const main: Record<string, unknown> = req(
+      pluginsOf({ backend: 'css-asset', diagnostics: 'silent' }, 'qstyle')[0],
+    );
+    const configResolved = main['configResolved'] as (config: {
+      command: string;
+      mode: string;
+    }) => void;
+    configResolved({ command: 'serve', mode: 'development' });
+    const transform = main['transform'] as (
+      code: string,
+      id: string,
+    ) => { code: string } | null;
+    const out = transform(
+      `export const A = () => <div css={{ display: 'flex' }} />;`,
+      '/src/ca-dev.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(out?.code).toContain('virtual:qstyle/dev/');
+    expect(out?.code).not.toContain('ensureModuleStyles');
+  });
+
+  it('emits hashed css assets + qstyle.units.json deterministically (R1.1/R1.2)', () => {
+    const modules = [
+      { id: '/src/ca-a.tsx', code: `export const A = () => <div css={{ display: 'flex' }} />;` },
+      {
+        id: '/src/ca-b.tsx',
+        code: `export const B = () => <div css={{ display: 'flex', gap: 8 }} />;`,
+      },
+    ];
+    const first = buildOnce({ backend: 'css-asset' }, modules);
+    const second = buildOnce({ backend: 'css-asset' }, modules);
+    const sig = (run: { emitted: Emitted[] }): string[] =>
+      run.emitted.map((e) => `${e.fileName}:${e.source}`).sort();
+    // HASH-001 (css-asset 版): 同一入力で byte-for-byte 同一。
+    expect(sig(second)).toEqual(sig(first));
+
+    const cssAssets: Emitted[] = first.emitted.filter(
+      (e) => /^assets\/qstyle\.q_[0-9a-f]+\.css$/.test(e.fileName),
+    );
+    expect(cssAssets.length).toBeGreaterThan(0);
+    const cssText: string = cssAssets.map((e) => e.source).join('\n');
+    expect(cssText).toMatch(/\.q_[0-9a-f]{8}\{display:flex/);
+    expect(cssText).toMatch(/\.q_[0-9a-f]{8}\{gap:8px\}/);
+
+    // units index: 各 unit は恰好 1 chunk (fileName) に属し、実在 asset を指す。
+    const unitsAsset: Emitted | undefined = first.emitted.find(
+      (e) => e.fileName === 'qstyle.units.json',
+    );
+    expect(unitsAsset).toBeDefined();
+    const units: Record<string, string[]> = (
+      JSON.parse(unitsAsset?.source ?? '{}') as { units: Record<string, string[]> }
+    ).units;
+    expect(Object.keys(units)).toHaveLength(2);
+    for (const fileNames of Object.values(units)) {
+      expect(fileNames).toHaveLength(1);
+      expect(first.emitted.map((e) => e.fileName)).toContain(fileNames[0]);
+    }
+    // qwik-native 由来の emit は残る (manifest 2 件)。
+    expect(
+      first.emitted.filter((e) => e.fileName === 'qstyle.routes.json' || e.fileName === 'qstyle-manifest.json'),
+    ).toHaveLength(2);
+  });
+
+  it('applies §39 v1 dedup inside a chunk before hashing (R1.2)', () => {
+    // 同一 module 内の 2 css prop は usage signature が一致するため同一 chunk になる。
+    const code = `export const M = () => (<section><div css={{ display: 'flex' }} /><div css={{ display: 'flex', gap: 8 }} /></section>);`;
+    const { emitted } = buildOnce({ backend: 'css-asset' }, [
+      { id: '/src/ca-m.tsx', code },
+    ]);
+    const cssAssets: Emitted[] = emitted.filter(
+      (e) => /^assets\/qstyle\.q_[0-9a-f]+\.css$/.test(e.fileName),
+    );
+    expect(cssAssets).toHaveLength(1);
+    const css: string = cssAssets[0]?.source ?? '';
+    // 共有 decl は group selector 化され、chunk 内に 1 回だけ現れる。
+    expect(css).toMatch(/\.q_[0-9a-f]{8},\.q_[0-9a-f]{8}\{display:flex\}\.q_[0-9a-f]{8}\{gap:8px\}/);
+    expect(css.split('display:flex').length - 1).toBe(1);
+  });
+
+  it('resolves route manifest assets to emitted file names (R1.3)', () => {
+    const modules = [
+      {
+        id: '/src/ca-route.tsx',
+        code: `export const R = () => <div css={{ display: 'flex' }} />;`,
+      },
+    ];
+    const { emitted } = buildOnce(
+      { backend: 'css-asset', routes: { '/': ['/src/ca-route.tsx'] } },
+      modules,
+    );
+    const routesAsset: Emitted | undefined = emitted.find(
+      (e) => e.fileName === 'qstyle.routes.json',
+    );
+    expect(routesAsset).toBeDefined();
+    const manifest = JSON.parse(routesAsset?.source ?? '{}') as {
+      entries: { route: string; assets: string[] }[];
+    };
+    expect(manifest.entries).toHaveLength(1);
+    const entry = manifest.entries[0];
+    expect(entry?.route).toBe('/');
+    const cssFileNames: string[] = emitted
+      .filter((e) => /^assets\/qstyle\.q_[0-9a-f]+\.css$/.test(e.fileName))
+      .map((e) => e.fileName);
+    expect(entry?.assets.length).toBeGreaterThan(0);
+    for (const asset of entry?.assets ?? []) {
+      expect(cssFileNames).toContain(asset);
+    }
+  });
+
+  it('exposes chunk plans (members/bytes/fileName) via __chunkPlans (R1.8 metadata)', () => {
+    const plugins: Record<string, unknown>[] = pluginsOf(
+      { backend: 'css-asset' },
+      'qstyle',
+      'qstyle:css-asset',
+    );
+    const main: Record<string, unknown> = req(plugins[0]);
+    const cssAsset: Record<string, unknown> = req(plugins[1]);
+    const buildStart = main['buildStart'] as () => void;
+    const transform = main['transform'] as (
+      code: string,
+      id: string,
+    ) => { code: string } | null;
+    const generate = cssAsset['generateBundle'] as (
+      this: { emitFile: (f: Emitted) => void },
+    ) => void;
+    buildStart();
+    transform(
+      `export const A = () => <div css={{ display: 'flex' }} />;`,
+      '/src/ca-meta.tsx',
+    );
+    generate.call({ emitFile: (): void => undefined });
+    const plans = cssAsset['__chunkPlans'] as {
+      id: string;
+      members: readonly string[];
+      bytes: number;
+      fileName: string;
+    }[];
+    expect(plans.length).toBeGreaterThan(0);
+    for (const plan of plans) {
+      expect(plan.id).toMatch(/^pack_[0-9a-f]{6}$/);
+      expect(plan.members.length).toBeGreaterThan(0);
+      expect(plan.fileName).toMatch(/^assets\/qstyle\.q_[0-9a-f]+\.css$/);
+    }
+  });
+
+  it('qstyle:dedup does not touch css-asset output (§3.4 R1.1 実行順依存)', () => {
+    const dedupPlugin: Record<string, unknown> = req(
+      pluginsOf({ backend: 'css-asset' }, 'qstyle:dedup')[0],
+    );
+    const generate = dedupPlugin['generateBundle'] as (
+      this: unknown,
+      options: unknown,
+      bundle: Record<string, unknown>,
+    ) => void;
+    interface MutableAsset {
+      type: string;
+      fileName: string;
+      source: string;
+    }
+    const qstyleAsset: MutableAsset = {
+      type: 'asset',
+      fileName: 'assets/qstyle.q_dead.css',
+      source: '.q_aaaaaaaa{color:red}.q_bbbbbbbb{color:red}',
+    };
+    const viteAsset: MutableAsset = {
+      type: 'asset',
+      fileName: 'assets/style.css',
+      source: '.q_cccccccc{color:red}.q_dddddddd{color:red}',
+    };
+    generate.call(undefined, {}, { q: qstyleAsset, v: viteAsset });
+    // css-asset の出力は emit 前 (hash 計算前) dedup 済みのため無編集。
+    expect(qstyleAsset.source).toBe('.q_aaaaaaaa{color:red}.q_bbbbbbbb{color:red}');
+    // vite 配管由来の CSS には従来どおり適用される。
+    expect(viteAsset.source).not.toBe('.q_cccccccc{color:red}.q_dddddddd{color:red}');
+    expect(viteAsset.source).toContain('.q_cccccccc,.q_dddddddd{color:red}');
+  });
+});

@@ -1,4 +1,5 @@
 import { canonicalProperty, fnv1aHex } from './atom.js';
+import { hasInvalidDeclarationChars } from './safety.js';
 import type {
   OrderingConstraints,
   ParametricAtom,
@@ -70,6 +71,15 @@ export function createParametricAtom(input: CreateParametricAtomInput): Parametr
 
   if (input.slots.length === 0) {
     throw new Error('createParametricAtom: at least one slot is required');
+  }
+  for (const slot of input.slots) {
+    // fallback は var() の第 2 引数として CSS text に直接現れるため、
+    // declaration 境界を壊す文字列は受理しない (DYN-019)。
+    if (slot.fallback !== undefined && hasInvalidDeclarationChars(slot.fallback)) {
+      throw new Error(
+        `createParametricAtom: fallback ${JSON.stringify(slot.fallback)} contains characters that would break the declaration boundary`,
+      );
+    }
   }
   for (const part of input.parts) {
     if (part.kind === 'slot') {

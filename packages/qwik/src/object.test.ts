@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { lowerStyleObject } from './object.js';
+import { assignOrderingGroups, hashStaticAtom, needsOrderingGroup } from '@qstyle/core';
+import type { StaticAtom } from '@qstyle/core';
+import { lowerStyleObject, parseNestedKey, splitImportant } from './object.js';
 
 describe('lowerStyleObject', () => {
   it('lowers a single declaration (OBJ-001)', () => {
@@ -87,5 +89,245 @@ describe('lowerStyleObject', () => {
     const out = lowerStyleObject({});
     expect(out.atoms).toHaveLength(0);
     expect(out.residuals).toHaveLength(0);
+  });
+});
+
+describe('lowerStyleObject value serialization', () => {
+  it('kebab-cases vendor-prefixed properties with meaning intact (OBJ-004)', () => {
+    const out = lowerStyleObject({
+      WebkitTransform: 'translateX(1px)',
+      MozAppearance: 'none',
+      OTransition: 'none',
+      msFlexAlign: 'center',
+    });
+    const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
+    expect(byProp['-webkit-transform']).toBe('translateX(1px)');
+    expect(byProp['-moz-appearance']).toBe('none');
+    expect(byProp['-o-transition']).toBe('none');
+    // `ms` は小文字始まりの vendor prefix (`ms-flex-align` は不正)。
+    expect(byProp['-ms-flex-align']).toBe('center');
+    expect(out.residuals).toHaveLength(0);
+  });
+
+  it('keeps CSS variable references intact (OBJ-013)', () => {
+    const out = lowerStyleObject({ color: 'var(--x)', padding: 'var(--a, 1px)' });
+    expect(out.residuals).toHaveLength(0);
+    const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
+    expect(byProp['color']).toBe('var(--x)');
+    expect(byProp['padding']).toBe('var(--a, 1px)');
+    // 定義側の custom property も素通しで、参照を壊さない。
+    const def = lowerStyleObject({ '--x': '#00f', '--a': '2px' });
+    expect(def.atoms.map((a) => [a.property, a.value])).toEqual([
+      ['--x', '#00f'],
+      ['--a', '2px'],
+    ]);
+  });
+
+  it('keeps calc/min/clamp values intact (OBJ-014)', () => {
+    const out = lowerStyleObject({
+      width: 'calc(100% - 8px)',
+      fontSize: 'min(1rem, 4vw)',
+      padding: 'clamp(1px, 2vw, 8px)',
+    });
+    expect(out.residuals).toHaveLength(0);
+    const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
+    expect(byProp['width']).toBe('calc(100% - 8px)');
+    expect(byProp['font-size']).toBe('min(1rem, 4vw)');
+    expect(byProp['padding']).toBe('clamp(1px, 2vw, 8px)');
+  });
+
+  it('keeps comma-separated token boundaries (OBJ-015)', () => {
+    const out = lowerStyleObject({
+      fontFamily: 'Arial, sans-serif',
+      transitionProperty: 'color, background-color',
+    });
+    expect(out.residuals).toHaveLength(0);
+    const fonts = out.atoms.find((a) => a.property === 'font-family')?.value ?? '';
+    expect(fonts).toBe('Arial, sans-serif');
+    // token 列の境界 (comma) と順序が保たれる。
+    expect(fonts.split(',').map((t) => t.trim())).toEqual(['Arial', 'sans-serif']);
+  });
+
+  it('keeps quoting and escapes in content values (OBJ-016)', () => {
+    const out = lowerStyleObject({
+      content: '"quoted"',
+      quotes: `'"inner"'`,
+      escaped: '\\"',
+    });
+    expect(out.residuals).toHaveLength(0);
+    const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
+    expect(byProp['content']).toBe('"quoted"');
+    expect(byProp['quotes']).toBe(`'"inner"'`);
+    expect(byProp['escaped']).toBe('\\"');
+  });
+
+  it('keeps data URLs and quoted urls intact (OBJ-017)', () => {
+    const svg = 'url(data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27/%3E)';
+    const out = lowerStyleObject({
+      backgroundImage: svg,
+      maskImage: 'url("https://example.com/a.png")',
+    });
+    expect(out.residuals).toHaveLength(0);
+    const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
+    expect(byProp['background-image']).toBe(svg);
+    expect(byProp['mask-image']).toBe('url("https://example.com/a.png")');
+  });
+
+  it('emits unknown property typos as-is (OBJ-022 — 現状固定)', () => {
+    // 未知だが well-formed な property は atom として出し、解釈は CSS 自身の
+    // 前方互換 error recovery (browser が未知 property を無視する) に委ねる。
+    // 既知 property table による明示 diagnostic は R4 (plan.md §6.2) で扱う。
+    const out = lowerStyleObject({ displayy: 'flex' });
+    expect(out.atoms).toHaveLength(1);
+    expect(out.atoms[0]?.property).toBe('displayy');
+    expect(out.atoms[0]?.value).toBe('flex');
+    expect(out.residuals).toHaveLength(0);
+    expect(out.diagnostics).toHaveLength(0);
+  });
+
+  it('does not silently emit invalid value syntax (OBJ-023)', () => {
+    const out = lowerStyleObject({ display: 'fl<<ex' });
+    expect(out.atoms).toHaveLength(0);
+    expect(out.residuals).toHaveLength(1);
+    expect(out.residuals[0]?.reason).toBe('unsupported-syntax');
+    expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+    // declaration 境界を壊す値も silent emit しない。
+    const inject = lowerStyleObject({ color: 'red; background: url(x)' });
+    expect(inject.atoms).toHaveLength(0);
+    expect(inject.residuals[0]?.reason).toBe('unsupported-syntax');
+  });
+
+  it('serializes unicode values intact (OBJ-024)', () => {
+    const out = lowerStyleObject({ content: '"日本語と English"' });
+    expect(out.residuals).toHaveLength(0);
+    expect(out.atoms[0]?.property).toBe('content');
+    expect(out.atoms[0]?.value).toBe('"日本語と English"');
+  });
+
+  it('passes var() with fallback through serialization (CSS-006/007)', () => {
+    const out = lowerStyleObject({ color: 'var(--brand, blue)' });
+    expect(out.atoms[0]?.value).toBe('var(--brand, blue)');
+    // 等価な空白表現は canonical 化で同一になる (fallback 依存の意味を壊さない)。
+    const padded = lowerStyleObject({ color: 'var(--brand,  blue)' });
+    expect(padded.atoms[0]?.value).toBe('var(--brand, blue)');
+  });
+
+  it('splits trailing !important into the flag (CSS-008)', () => {
+    expect(splitImportant('red !important')).toEqual({ value: 'red', important: true });
+    expect(splitImportant('red')).toEqual({ value: 'red', important: false });
+    const out = lowerStyleObject({ color: 'red !important' });
+    expect(out.atoms[0]?.important).toBe(true);
+    expect(out.atoms[0]?.value).toBe('red');
+    expect(lowerStyleObject({ color: 'red' }).atoms[0]?.important).toBe(false);
+    // priority の違いは identity に反映される。
+    const important = out.atoms[0]!;
+    const plain = lowerStyleObject({ color: 'red' }).atoms[0]!;
+    expect(hashStaticAtom(important)).not.toBe(hashStaticAtom(plain));
+  });
+
+  it('passes animation values through without misconversion (CSS-013)', () => {
+    const out = lowerStyleObject({
+      animation: 'slide 1s linear infinite',
+      animationDelay: '250ms',
+      animationIterationCount: 3,
+    });
+    expect(out.residuals).toHaveLength(0);
+    const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
+    // shorthand は token 列がそのまま出る (`1s` が `1spx` 等に化けない)。
+    expect(byProp['animation']).toBe('slide 1s linear infinite');
+    expect(byProp['animation-delay']).toBe('250ms');
+    expect(byProp['animation-iteration-count']).toBe('3');
+    // animation shorthand との順序依存は ordering group で保護される。
+    expect(needsOrderingGroup('animation', 'animation-duration')).toBe(true);
+    const grouped = assignOrderingGroups(
+      [...out.atoms, ...lowerStyleObject({ animationDuration: '2s' }).atoms] as StaticAtom[],
+    );
+    const shorthand = grouped.find((a) => a.property === 'animation');
+    const duration = grouped.find((a) => a.property === 'animation-duration');
+    expect(shorthand?.ordering.group).toBe(duration?.ordering.group);
+  });
+});
+
+describe('lowerStyleObject selectors and at-rules', () => {
+  it('accepts &:focus and &:focus-visible as pseudo context (SEL-002)', () => {
+    const out = lowerStyleObject({
+      '&:focus': { outline: 'none' },
+      '&:focus-visible': { outline: '2px solid blue' },
+    });
+    expect(out.residuals).toHaveLength(0);
+    expect(out.atoms[0]?.context.pseudo).toEqual([':focus']);
+    expect(out.atoms[1]?.context.pseudo).toEqual([':focus-visible']);
+  });
+
+  it('accepts &::before and &::after as pseudo elements (SEL-003)', () => {
+    const out = lowerStyleObject({
+      '&::before': { content: '""' },
+      '&::after': { content: '"†"' },
+    });
+    expect(out.residuals).toHaveLength(0);
+    expect(out.atoms[0]?.context.pseudo).toEqual(['::before']);
+    expect(out.atoms[1]?.context.pseudo).toEqual(['::after']);
+  });
+
+  it('residualizes :is() selector-list args and :has() relational args (SEL-008/009 — 現状固定)', () => {
+    // 現行 parseNestedKey は pseudo 引数に空白 / combinator を含む形式を受理しない。
+    expect(parseNestedKey('&:is(.a, .b)')).toBeNull();
+    expect(parseNestedKey('&:has(> img)')).toBeNull();
+    for (const key of ['&:is(.a, .b)', '&:has(> img)']) {
+      const out = lowerStyleObject({ [key]: { color: 'red' } });
+      expect(out.atoms).toHaveLength(0);
+      expect(out.residuals[0]?.reason).toBe('unsupported-selector');
+      expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+    }
+    // 単一の simple arg (空白なし) は pseudo として受理される (現状固定)。
+    expect(parseNestedKey('&:not(.foo)')).toEqual({ pseudo: [':not(.foo)'] });
+    expect(lowerStyleObject({ '&:not(.foo)': { color: 'red' } }).atoms[0]?.context.pseudo).toEqual(
+      [':not(.foo)'],
+    );
+  });
+
+  it('residualizes re-occurrence of & (SEL-010 — 現状固定)', () => {
+    for (const key of ['&:hover &', '& &']) {
+      const out = lowerStyleObject({ [key]: { color: 'red' } });
+      expect(out.atoms).toHaveLength(0);
+      expect(out.residuals[0]?.reason).toBe('unsupported-selector');
+      expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+    }
+  });
+
+  it('combines media and pseudo contexts (SEL-012)', () => {
+    const out = lowerStyleObject({
+      color: 'black',
+      '@media (width >= 768px)': { '&:hover': { color: 'blue' } },
+    });
+    expect(out.residuals).toHaveLength(0);
+    const base = out.atoms.find((a) => a.value === 'black');
+    const hover = out.atoms.find((a) => a.value === 'blue');
+    expect(base?.context.media).toBeUndefined();
+    expect(base?.context.pseudo).toBeUndefined();
+    expect(hover?.context.media).toBe('(width >= 768px)');
+    expect(hover?.context.pseudo).toEqual([':hover']);
+  });
+
+  it('accepts @supports with the condition preserved (SEL-013)', () => {
+    const out = lowerStyleObject({ '@supports (display: grid)': { display: 'grid' } });
+    expect(out.residuals).toHaveLength(0);
+    expect(out.atoms[0]?.context.supports).toBe('(display: grid)');
+    expect(out.atoms[0]?.value).toBe('grid');
+  });
+
+  it('accepts @container with the condition preserved (SEL-014)', () => {
+    const out = lowerStyleObject({ '@container card (min-width: 400px)': { padding: 4 } });
+    expect(out.residuals).toHaveLength(0);
+    expect(out.atoms[0]?.context.container).toBe('card (min-width: 400px)');
+    expect(out.atoms[0]?.value).toBe('4px');
+  });
+
+  it('residualizes cascade layer at-rules (SEL-015 — 現状固定)', () => {
+    const out = lowerStyleObject({ '@layer base': { color: 'red' } });
+    expect(out.atoms).toHaveLength(0);
+    expect(out.residuals).toHaveLength(1);
+    expect(out.residuals[0]?.reason).toBe('unsupported-at-rule');
+    expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
   });
 });

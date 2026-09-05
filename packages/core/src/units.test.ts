@@ -36,6 +36,28 @@ describe('units', () => {
     expect(serializeCssValue('opacity', 0)).toBe('0');
   });
 
+  it('keeps negative signs for numbers (OBJ-009)', () => {
+    // length 系は符号を保持したまま px 補完、unitless は単位なしのまま。
+    expect(serializeCssValue('margin', -8)).toBe('-8px');
+    expect(serializeCssValue('marginTop', -0.25)).toBe('-0.25px');
+    expect(serializeCssValue('opacity', -0.5)).toBe('-0.5');
+    expect(serializeCssValue('zIndex', -1)).toBe('-1');
+    expect(serializeCssValue('top', -4)).toBe('-4px');
+    // 負の custom property 数値も単位推測しない。
+    expect(serializeCssValue('--x', -8)).toBe('-8');
+  });
+
+  it('canonicalizes decimal spellings deterministically (OBJ-010)', () => {
+    expect(serializeCssValue('padding', 0.5)).toBe('0.5px');
+    // `0.50` / `5e-1` は JS number としては同一値なので同一 canonical 表現になる。
+    expect(serializeCssValue('padding', Number('0.50'))).toBe('0.5px');
+    expect(serializeCssValue('padding', 5e-1)).toBe('0.5px');
+    expect(serializeCssValue('opacity', 0.5)).toBe(serializeCssValue('opacity', 0.50));
+    // 文字列値は数値として再解釈しない (意味を変えない)。表現は決定的。
+    expect(serializeCssValue('padding', '0.50px')).toBe('0.50px');
+    expect(serializeCssValue('padding', ' 0.5px ')).toBe('0.5px');
+  });
+
   it('canonicalizes camelCase property before lookup (OBJ-003)', () => {
     const atom = createStaticAtom({ property: 'backgroundColor', value: 'red' });
     expect(atom.property).toBe('background-color');

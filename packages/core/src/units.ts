@@ -41,11 +41,13 @@ export const UNITLESS_PROPERTIES: ReadonlySet<string> = new Set<string>([
 
 /**
  * atom.ts との循環 import を避けるための局所コピー。
- * atom.ts の canonicalProperty と同一規則 (camelCase→kebab、custom property は不変)。
+ * atom.ts の canonicalProperty と同一規則 (camelCase→kebab、custom property は不変、
+ * 小文字始まりの `ms` vendor prefix は `-ms-` 化)。
  */
 function toCanonicalProperty(input: string): string {
+  if (input.startsWith('--')) return input;
   const kebab: string = input.replace(/[A-Z]/g, (m: string) => `-${m.toLowerCase()}`);
-  return kebab.startsWith('--') ? input : kebab.toLowerCase();
+  return kebab.startsWith('ms-') ? `-${kebab}` : kebab;
 }
 
 /** atom.ts の canonicalValue と同一規則 (前後 trim + 内部連続空白の単一化)。 */

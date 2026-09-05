@@ -1,4 +1,4 @@
-import { createStaticAtom } from '@qstyle/core';
+import { canonicalProperty, classifyDeclaration, createStaticAtom } from '@qstyle/core';
 import type {
   Provenance,
   ResidualRuleNode,
@@ -141,17 +141,28 @@ function lowerInto(
       // 末尾 `!important` は value 文字列ではなく important flag に立てる
       // (CMP-014 / CSS-008: priority を cascade 上正しく保つため)。
       // 数値は createStaticAtom 経由で serialize (px 付与等) する。
-      if (typeof value === 'number') {
-        sink.atoms.push(
-          createStaticAtom({ property: key, value, context, provenance }),
-        );
+      const split: ImportantSplit =
+        typeof value === 'number'
+          ? { value: String(value), important: false }
+          : splitImportant(value);
+      // canonical 化した property と value を safety 判定に通す (OBJ-023:
+      // 構文として不正な値を silent emit しない)。
+      const verdict = classifyDeclaration(canonicalProperty(key), split.value);
+      if (verdict !== 'atomic') {
+        sink.residuals.push({
+          kind: 'residual-rule',
+          cssText: `${key}`,
+          scope: 'component',
+          reason: verdict.residual,
+          provenance,
+        });
+        warn(sink, `invalid declaration for property ${JSON.stringify(key)}`);
         continue;
       }
-      const split: ImportantSplit = splitImportant(value);
       sink.atoms.push(
         createStaticAtom({
           property: key,
-          value: split.value,
+          value: typeof value === 'number' ? value : split.value,
           important: split.important,
           context,
           provenance,

@@ -17,6 +17,10 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     },
+    "./client": {
+      "import": "./dist/client.mjs",
+      "require": "./dist/client.cjs"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

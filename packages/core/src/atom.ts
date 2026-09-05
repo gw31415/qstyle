@@ -3,8 +3,11 @@ import { serializeCssValue } from './units.js';
 
 /** プロパティ名を canonical kebab-case へ (Milestone 1 で fixture 化する)。 */
 export function canonicalProperty(input: string): string {
+  if (input.startsWith('--')) return input;
   const kebab = input.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
-  return kebab.startsWith('--') ? input : kebab.toLowerCase();
+  // `ms` は唯一小文字始まりの vendor prefix (`msTransform` -> `-ms-transform`)。
+  // React の hyphenateStyleName と同一規則 (OBJ-004)。
+  return kebab.startsWith('ms-') ? `-${kebab}` : kebab;
 }
 
 /** 値の最小 canonicalization: 前後空白の除去 + 内部連続空白の単一化。 */
