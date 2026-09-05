@@ -9,16 +9,16 @@ export interface StyleHandle {
   readonly atoms: readonly StaticAtom[];
   readonly residuals: readonly ResidualRuleNode[];
 }
-export { lowerStyleObject } from './object.js';
-export type { Diagnostic, LowerOptions, LoweredStyle } from './object.js';
+export { lowerStyleObject, splitImportant } from './object.js';
+export type { Diagnostic, ImportantSplit, LowerOptions, LoweredStyle } from './object.js';
 export { composeCssProp, flattenCssProp, isStyleHandle } from './compose.js';
 export type { ComposedStyle } from './compose.js';
+export { lowerTaggedTemplate } from './template.js';
+export type { TemplateLowerOptions } from './template.js';
+import { lowerTaggedTemplate } from './template.js';
 
 function isTemplateStringsArray(value: unknown): value is TemplateStringsArray {
   return Array.isArray(value) && 'raw' in (value as unknown as Record<string, unknown>);
-}
-export interface StyleHandle {
-  readonly __qstyleBrand: 'StyleHandle';
 }
 
 export type CssPrimitive = string | number;
@@ -43,10 +43,11 @@ export function css(
   arg: StyleObject | TemplateStringsArray,
   ..._values: readonly unknown[]
 ): StyleHandle {
-  // tagged template literal は M4 で lowering する。M3 時点では空 handle。
+  // tagged template literal は lowerTaggedTemplate で lowering する。
+  // runtime interpolation は M5 の RuntimeSlot までの stub として residual。
   if (isTemplateStringsArray(arg)) {
-    void _values;
-    return { __qstyleBrand: 'StyleHandle', atoms: [], residuals: [] };
+    const lowered = lowerTaggedTemplate(arg, _values);
+    return { __qstyleBrand: 'StyleHandle', atoms: lowered.atoms, residuals: lowered.residuals };
   }
   // object syntax は eager に lowering して handle に保持する。
   // build 時 transform が handle 参照を解決するまでの dev fallback でもある。

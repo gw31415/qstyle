@@ -22,6 +22,21 @@ export interface LowerOptions {
   readonly source?: string | undefined;
 }
 
+export interface ImportantSplit {
+  readonly value: string;
+  readonly important: boolean;
+}
+
+/**
+ * 末尾 `!important` を value 文字列から important flag へ分離する。
+ * template literal 側 (template.ts) と共有する。
+ */
+export function splitImportant(raw: string): ImportantSplit {
+  const m: RegExpMatchArray | null = /^(.*?)\s*!important\s*$/i.exec(raw);
+  if (m === null) return { value: raw, important: false };
+  return { value: m[1] ?? '', important: true };
+}
+
 const DANGEROUS_KEYS: ReadonlySet<string> = new Set([
   '__proto__',
   'constructor',
@@ -81,17 +96,22 @@ function lowerInto(
     if (typeof value === 'string' || typeof value === 'number') {
       // 末尾 `!important` は value 文字列ではなく important flag に立てる
       // (CMP-014 / CSS-008: priority を cascade 上正しく保つため)。
-      let important = false;
-      let raw: string | number = value;
-      if (typeof raw === 'string') {
-        const m: RegExpMatchArray | null = /^(.*?)\s*!important\s*$/i.exec(raw);
-        if (m !== null) {
-          raw = m[1] ?? '';
-          important = true;
-        }
+      // 数値は createStaticAtom 経由で serialize (px 付与等) する。
+      if (typeof value === 'number') {
+        sink.atoms.push(
+          createStaticAtom({ property: key, value, context, provenance }),
+        );
+        continue;
       }
+      const split: ImportantSplit = splitImportant(value);
       sink.atoms.push(
-        createStaticAtom({ property: key, value: raw, important, context, provenance }),
+        createStaticAtom({
+          property: key,
+          value: split.value,
+          important: split.important,
+          context,
+          provenance,
+        }),
       );
       continue;
     }
