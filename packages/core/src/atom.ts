@@ -1,4 +1,5 @@
 import type { OrderingConstraints, Provenance, RuleContext, StaticAtom } from './ir.js';
+import { serializeCssValue } from './units.js';
 
 /** プロパティ名を canonical kebab-case へ (Milestone 1 で fixture 化する)。 */
 export function canonicalProperty(input: string): string {
@@ -13,7 +14,7 @@ export function canonicalValue(input: string): string {
 
 export interface CreateStaticAtomInput {
   readonly property: string;
-  readonly value: string;
+  readonly value: string | number;
   readonly important?: boolean | undefined;
   readonly context?: RuleContext | undefined;
   readonly ordering?: OrderingConstraints | undefined;
@@ -24,7 +25,7 @@ export function createStaticAtom(input: CreateStaticAtomInput): StaticAtom {
   return {
     kind: 'static-atom',
     property: canonicalProperty(input.property),
-    value: canonicalValue(input.value),
+    value: serializeCssValue(input.property, input.value),
     important: input.important ?? false,
     context: input.context ?? {},
     ordering: input.ordering ?? {},
@@ -33,9 +34,10 @@ export function createStaticAtom(input: CreateStaticAtomInput): StaticAtom {
 }
 
 /**
- * Semantic hash (plan.md §43 の最小版)。
- * chunk membership を含めない。FNV-1a 32bit → 8桁hex。
- * Milestone 1/6 で canonical template / ordering semantics を含める。
+ * Semantic hash (plan.md §43)。
+ * canonical property / value・important・selector/conditional context・ordering semantics を含める。
+ * chunk membership は含めない (style identity と delivery identity の分離, §3.3)。
+ * FNV-1a 32bit → 8桁hex。
  */
 export function hashStaticAtom(atom: StaticAtom): string {
   const payload = JSON.stringify([
@@ -43,6 +45,7 @@ export function hashStaticAtom(atom: StaticAtom): string {
     atom.value,
     atom.important,
     atom.context,
+    atom.ordering,
   ]);
   let h = 0x811c9dc5;
   for (let i = 0; i < payload.length; i += 1) {
