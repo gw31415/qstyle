@@ -82,16 +82,5 @@ opencode セッション「実装の続き」(2026-09-06 深夜、TODO 全件完
 
 1. **lazy CSS 配信が Qwik の設計と衝突** (最重要)。
    実ビルドの検証で、CSS がすべて 1 アセットに集約され head inline されることを確認。原因は Qwik optimizer が client build で `build.cssCodeSplit = false` を無条件に設定すること (`@qwik.dev/core/dist/optimizer.mjs:2720`)。qwik 側に CSS chunking のオプションは見つかっていない (cssChunking 等で検索ヒットなし)。「初期表示で不要な CSS を配信しない」という目標 2 を Qwik-native backend (Backend A) で達成するには、Backend B (hashed CSS assets + 自前の injection) への切り替え、または qwik 内部への依存 (plan.md §104 のリスク) の受入れが必要。**設計判断が未決。**
-2. **haven-web の lint 修正 66 ファイルが現行ツリーに存在しない。**
-   2026-09-06 に実施した lint 修正 (`pnpm run check` 0 errors / 0 warnings、テスト 114/114、branded ID 化、ssh2 の pnpm patch-commit 等) は、workspace が qstyle コピーで置き換えられる際に失われた。**復元可能**: opencode スナップショット (プロジェクト `47e6440b` の snapshot リポジトリ、ツリー `9d2e9def38e76f2dac6985c90c573cd299fb5504`) に修正完了時点の全ツリーが残っている。git オブジェクトとして取り出せる。
-3. haven-web 側の qstyle 統合変更 8 ファイルも未コミット。
-
-### 3.6 次のアクション (優先順)
-
-1. `workspace/` (qstyle) の未コミット 10 ファイルをコミット。
-2. opencode スナップショットから haven-web の lint 修正を復元し、`pnpm run check` 0 warnings を再確認の上コミット。
-3. haven-web の qstyle 統合 8 ファイルをコミット。
-4. 課題 1 (cssCodeSplit) について Backend A vs Backend B の設計判断を行い、plan.md §44–50 を更新。
-5. M11 へ向けて Release Gate P0 (correctness / lifecycle) を実アプリ fixture で走らせる。
 
 > **実施上の申し添え:** 上記の計画・手段は拘束しない。目標 (plan.md §1 の成功条件、特に lazy CSS 配信の実現) を達成できるなら、実装者はより有効な方法を自由に選定してよい。計画を外す場合は、その判断理由を変更内容とともに報告すること。
