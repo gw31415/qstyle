@@ -46,3 +46,14 @@ export type {
   TemplatePartInput,
   TemplateSlotInput,
 } from './parametric.js';
+export {
+  createUsageGraph,
+  groupByUsageSignature,
+  jaccardSimilarity,
+  recordComponentBoundary,
+  recordComponentRoute,
+  recordUsage,
+  routeSignature,
+  usageSignature,
+} from './usage.js';
+export type { UsageGraph } from './usage.js';
