@@ -28,6 +28,14 @@ export {
 export { DedupRegistry } from './dedup.js';
 export type { DedupAddResult } from './dedup.js';
 export {
+  SHORTHAND_MAP,
+  assignOrderingGroups,
+  classifyDeclaration,
+  isShorthand,
+  longhandsOf,
+  needsOrderingGroup,
+} from './safety.js';
+export {
   createParametricAtom,
   hashParametricAtom,
   inferSlotType,
