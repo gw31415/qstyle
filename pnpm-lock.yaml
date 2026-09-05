@@ -216,6 +216,9 @@ importers:
       '@qstyle/core':
         specifier: workspace:^
         version: link:../core
+      '@qstyle/qwik':
+        specifier: workspace:^
+        version: link:../qwik
     devDependencies:
       '@types/node':
         specifier: ^26.4.1

@@ -54,6 +54,40 @@ function hasCombinator(selector: string): boolean {
 }
 
 /**
+ * ネストキー (`&:hover` / `@media ...` 等) を context 差分へ変換する。
+ * template literal 側 (template.ts) と共有する。対応不能なら null。
+ */
+export function parseNestedKey(key: string): RuleContext | null {
+  if (key.startsWith('&')) {
+    const pseudo: string | null = extractPseudo(key);
+    if (pseudo === null) return null;
+    return { pseudo: [pseudo] };
+  }
+  if (key.startsWith('@')) {
+    const lowered: string = key.toLowerCase();
+    if (lowered.startsWith('@media')) {
+      return { media: key.slice('@media'.length).trim() };
+    }
+    if (lowered.startsWith('@supports')) {
+      return { supports: key.slice('@supports'.length).trim() };
+    }
+    if (lowered.startsWith('@container')) {
+      return { container: key.slice('@container'.length).trim() };
+    }
+    return null;
+  }
+  return null;
+}
+
+export function mergeRuleContext(base: RuleContext, delta: RuleContext): RuleContext {
+  return {
+    ...base,
+    ...delta,
+    pseudo: [...(base.pseudo ?? []), ...(delta.pseudo ?? [])],
+  };
+}
+
+/**
  * `&:hover` / `&::before` / `:focus-visible`-with-args 形のみ抽出する。
  * combinator や複雑な関数引数を含む場合は null (residual 側に回す)。
  */
@@ -116,75 +150,32 @@ function lowerInto(
       continue;
     }
 
-    if (key.startsWith('&')) {
+    if (key.startsWith('&') || key.startsWith('@')) {
+      const isSelector: boolean = key.startsWith('&');
       if (!isPlainObject(value)) {
         sink.residuals.push({
           kind: 'residual-rule',
           cssText: key,
           scope: 'component',
-          reason: 'unsupported-selector',
+          reason: isSelector ? 'unsupported-selector' : 'unsupported-at-rule',
           provenance,
         });
-        warn(sink, `unsupported nested selector value for ${JSON.stringify(key)}`);
+        warn(sink, `unsupported nested value for ${JSON.stringify(key)}`);
         continue;
       }
-      const pseudo: string | null = extractPseudo(key);
-      if (pseudo === null) {
+      const delta: RuleContext | null = parseNestedKey(key);
+      if (delta === null) {
         sink.residuals.push({
           kind: 'residual-rule',
           cssText: key,
           scope: 'component',
-          reason: 'unsupported-selector',
+          reason: isSelector ? 'unsupported-selector' : 'unsupported-at-rule',
           provenance,
         });
-        warn(sink, `unsupported nested selector ${JSON.stringify(key)}`);
+        warn(sink, `unsupported nested key ${JSON.stringify(key)}`);
         continue;
       }
-      lowerInto(
-        value,
-        { ...context, pseudo: [...(context.pseudo ?? []), pseudo] },
-        provenance,
-        sink,
-      );
-      continue;
-    }
-
-    if (key.startsWith('@')) {
-      if (!isPlainObject(value)) {
-        sink.residuals.push({
-          kind: 'residual-rule',
-          cssText: key,
-          scope: 'component',
-          reason: 'unsupported-at-rule',
-          provenance,
-        });
-        warn(sink, `unsupported at-rule value for ${JSON.stringify(key)}`);
-        continue;
-      }
-      const lowered: string = key.toLowerCase();
-      if (lowered.startsWith('@media')) {
-        const condition: string = key.slice('@media'.length).trim();
-        lowerInto(value, { ...context, media: condition }, provenance, sink);
-        continue;
-      }
-      if (lowered.startsWith('@supports')) {
-        const condition: string = key.slice('@supports'.length).trim();
-        lowerInto(value, { ...context, supports: condition }, provenance, sink);
-        continue;
-      }
-      if (lowered.startsWith('@container')) {
-        const condition: string = key.slice('@container'.length).trim();
-        lowerInto(value, { ...context, container: condition }, provenance, sink);
-        continue;
-      }
-      sink.residuals.push({
-        kind: 'residual-rule',
-        cssText: key,
-        scope: 'component',
-        reason: 'unsupported-at-rule',
-        provenance,
-      });
-      warn(sink, `unsupported at-rule ${JSON.stringify(key)}`);
+      lowerInto(value, mergeRuleContext(context, delta), provenance, sink);
       continue;
     }
 

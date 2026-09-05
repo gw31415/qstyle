@@ -1,7 +1,17 @@
-import type { Provenance, ResidualRuleNode, StaticAtom } from '@qstyle/core';
+import { createParametricAtom } from '@qstyle/core';
+import type {
+  ParametricAtom,
+  Provenance,
+  ResidualRuleNode,
+  RuleContext,
+  RuntimeValueType,
+  StaticAtom,
+  TemplatePartInput,
+  TemplateSlotInput,
+} from '@qstyle/core';
 import { isStyleHandle } from './compose.js';
 import type { Diagnostic } from './object.js';
-import { lowerStyleObject } from './object.js';
+import { lowerStyleObject, mergeRuleContext, parseNestedKey, splitImportant } from './object.js';
 import type { StyleHandle } from './index.js';
 
 export interface TemplateLowerOptions {
@@ -10,6 +20,7 @@ export interface TemplateLowerOptions {
 
 export interface LoweredTemplate {
   readonly atoms: StaticAtom[];
+  readonly parametrics: ParametricAtom[];
   readonly residuals: ResidualRuleNode[];
   readonly diagnostics: Diagnostic[];
 }
@@ -101,11 +112,13 @@ function scanItems(scanner: Scanner, inBlock: boolean): ScannedItem[] | null {
       items.push({ kind: 'runtime' });
       return;
     }
-    if (value.includes('\0')) {
-      // value 内の interpolation は M4 では扱わない (M5 の RuntimeSlot へ)。
+    if (value.includes(HANDLE_MARK)) {
+      // value 内の StyleHandle 参照は M5b でも未対応。
       items.push({ kind: 'runtime' });
       return;
     }
+    // value 内の runtime interpolation は marker を保持したまま decl に載せ、
+    // lowering 段階で ParametricAtom へ落とす。
     items.push({ kind: 'decl', prop, value });
   };
 
@@ -236,41 +249,226 @@ function parseStandaloneSlot(text: string): ScannedItem | null {
 type Segment =
   | { kind: 'record'; record: Record<string, unknown> }
   | { kind: 'handle'; handle: StyleHandle }
+  | { kind: 'parametric'; atom: ParametricAtom }
   | { kind: 'runtime' };
+
+interface TemplateSink {
+  readonly parametrics: ParametricAtom[];
+  readonly residuals: ResidualRuleNode[];
+  readonly diagnostics: Diagnostic[];
+  readonly provenance: readonly Provenance[];
+}
+
+/** decl value 内の runtime marker 列 (`\0R\0`)。 */
+const RUNTIME_SEQ = `${RUNTIME_MARK}\0`;
+
+function hasRuntimeMarker(value: string): boolean {
+  return value.includes(RUNTIME_SEQ);
+}
+
+// 単位 prefix -> slot 型。長い単位から先に照合する (`rem` vs `em`, `ms` vs `s`)。
+const UNIT_TABLE: ReadonlyArray<readonly [string, RuntimeValueType]> = [
+  ['px', 'length'],
+  ['em', 'length'],
+  ['rem', 'length'],
+  ['vw', 'length'],
+  ['vh', 'length'],
+  ['vmin', 'length'],
+  ['vmax', 'length'],
+  ['ch', 'length'],
+  ['ex', 'length'],
+  ['cm', 'length'],
+  ['mm', 'length'],
+  ['in', 'length'],
+  ['pt', 'length'],
+  ['pc', 'length'],
+  ['q', 'length'],
+  ['lh', 'length'],
+  ['rlh', 'length'],
+  ['cap', 'length'],
+  ['ic', 'length'],
+  ['vi', 'length'],
+  ['vb', 'length'],
+  ['cqw', 'length'],
+  ['cqh', 'length'],
+  ['cqi', 'length'],
+  ['cqb', 'length'],
+  ['cqmin', 'length'],
+  ['cqmax', 'length'],
+  ['%', 'percentage'],
+  ['deg', 'angle'],
+  ['grad', 'angle'],
+  ['rad', 'angle'],
+  ['turn', 'angle'],
+  ['ms', 'time'],
+  ['s', 'time'],
+];
+const ORDERED_UNITS: ReadonlyArray<readonly [string, RuntimeValueType]> = [...UNIT_TABLE].sort(
+  (a, b) => b[0].length - a[0].length,
+);
+
+/**
+ * marker 直後の静的 text から slot 型を推測する (DYN-001/003)。
+ * 単位 prefix に一致し、かつその直後が `[a-zA-Z%]` でない場合のみ型を付け、
+ * それ以外 (単一 marker そのまま等) は 'custom'。
+ */
+function inferTypeFromSuffix(text: string): RuntimeValueType {
+  const lower: string = text.toLowerCase();
+  for (const [unit, type] of ORDERED_UNITS) {
+    if (!lower.startsWith(unit)) continue;
+    if (/[a-zA-Z%]/.test(lower.charAt(unit.length))) continue;
+    return type;
+  }
+  return 'custom';
+}
+
+/**
+ * decl value を marker で分割して ParametricAtom の構成要素へ変換する。
+ * 静的 run は text 部分、各 `\0R\0` は slot 部分 (型は直後の text から推測)。
+ * marker を含まない value には呼ばれない (null は保険)。
+ */
+function splitRuntimeValue(
+  value: string,
+): { parts: TemplatePartInput[]; slots: TemplateSlotInput[] } | null {
+  const parts: TemplatePartInput[] = [];
+  const slots: TemplateSlotInput[] = [];
+  let buffer = '';
+  let index = 0;
+  while (index < value.length) {
+    if (value.startsWith(RUNTIME_SEQ, index)) {
+      slots.push({ valueType: inferTypeFromSuffix(value.slice(index + RUNTIME_SEQ.length)) });
+      if (buffer !== '') {
+        parts.push({ kind: 'text', text: buffer });
+        buffer = '';
+      }
+      parts.push({ kind: 'slot', slotIndex: slots.length - 1 });
+      index += RUNTIME_SEQ.length;
+      continue;
+    }
+    buffer += value[index] ?? '';
+    index += 1;
+  }
+  if (buffer !== '') parts.push({ kind: 'text', text: buffer });
+  if (slots.length === 0) return null;
+  return { parts, slots };
+}
+
+/**
+ * runtime decl (value が `\0R\0` を含む) を ParametricAtom へ落とす。
+ * `!important` は静的 value と同様に flag へ分離する。失敗時は residual + warn。
+ */
+function buildParametricAtom(
+  prop: string,
+  rawValue: string,
+  context: RuleContext,
+  sink: TemplateSink,
+): ParametricAtom | null {
+  const split = splitImportant(rawValue);
+  const parsed = splitRuntimeValue(split.value);
+  if (parsed === null) {
+    sink.residuals.push({
+      kind: 'residual-rule',
+      cssText: `${prop}:${rawValue}`,
+      scope: 'component',
+      reason: 'unsupported-value',
+      provenance: sink.provenance,
+    });
+    sink.diagnostics.push({ severity: 'warn', message: 'runtime interpolation needs a slot' });
+    return null;
+  }
+  return createParametricAtom({
+    property: prop,
+    parts: parsed.parts,
+    slots: parsed.slots,
+    important: split.important,
+    context,
+    provenance: sink.provenance,
+  });
+}
+
+/** block 部分木が runtime decl を含むか (含むなら template 側で context を解決する)。 */
+function containsRuntimeDecl(item: { readonly items: readonly ScannedItem[] }): boolean {
+  return item.items.some((child) => {
+    if (child.kind === 'decl') return hasRuntimeMarker(child.value);
+    if (child.kind === 'block') return containsRuntimeDecl(child);
+    return false;
+  });
+}
+
+/**
+ * block を record へ落とす。runtime decl を含む block はここでネスト key を
+ * context へ解決し (DYN-008)、対応不能なら block 全体を residual にして
+ * null を返す。static decl のみの block は従来どおり record 経由。
+ */
+function lowerBlock(
+  item: { readonly header: string; readonly items: ScannedItem[] },
+  sink: TemplateSink,
+  context: RuleContext,
+): Record<string, unknown> | null {
+  if (!containsRuntimeDecl(item)) return blockToRecord(item.items, sink, context);
+  const delta: RuleContext | null = parseNestedKey(item.header);
+  if (delta === null) {
+    sink.residuals.push({
+      kind: 'residual-rule',
+      cssText: item.header,
+      scope: 'component',
+      reason: item.header.startsWith('&') ? 'unsupported-selector' : 'unsupported-at-rule',
+      provenance: sink.provenance,
+    });
+    sink.diagnostics.push({
+      severity: 'warn',
+      message: `unsupported nested key ${JSON.stringify(item.header)}`,
+    });
+    return null;
+  }
+  return blockToRecord(item.items, sink, mergeRuleContext(context, delta));
+}
 
 function blockToRecord(
   items: ScannedItem[],
-  provenance: readonly Provenance[],
-  residuals: ResidualRuleNode[],
-  diagnostics: Diagnostic[],
+  sink: TemplateSink,
+  context: RuleContext,
 ): Record<string, unknown> {
   const record: Record<string, unknown> = {};
   for (const item of items) {
     if (item.kind === 'decl') {
+      if (hasRuntimeMarker(item.value)) {
+        // runtime decl は record に載せず、ここで context を解決して
+        // ParametricAtom へ落とす。静的 decl は従来どおり nested record 経由。
+        const atom: ParametricAtom | null = buildParametricAtom(
+          item.prop,
+          item.value,
+          context,
+          sink,
+        );
+        if (atom !== null) sink.parametrics.push(atom);
+        continue;
+      }
       record[item.prop] = item.value;
     } else if (item.kind === 'block') {
-      record[item.header] = blockToRecord(item.items, provenance, residuals, diagnostics);
+      const inner = lowerBlock(item, sink, context);
+      if (inner !== null) record[item.header] = inner;
     } else if (item.kind === 'handle') {
-      residuals.push({
+      sink.residuals.push({
         kind: 'residual-rule',
         cssText: 'nested StyleHandle interpolation',
         scope: 'component',
         reason: 'unsupported-value',
-        provenance,
+        provenance: sink.provenance,
       });
-      diagnostics.push({
+      sink.diagnostics.push({
         severity: 'warn',
         message: 'StyleHandle interpolation inside a nested block is not supported yet',
       });
     } else {
-      residuals.push({
+      sink.residuals.push({
         kind: 'residual-rule',
         cssText: 'runtime interpolation',
         scope: 'component',
         reason: 'unsupported-value',
-        provenance,
+        provenance: sink.provenance,
       });
-      diagnostics.push({
+      sink.diagnostics.push({
         severity: 'warn',
         message: 'runtime interpolation needs M5 ParametricAtom; kept as residual for now',
       });
@@ -282,8 +480,9 @@ function blockToRecord(
 /**
  * `css` tagged template literal を Style IR へ lowering する (plan.md §22)。
  * object syntax と同一の canonical IR に落とすため、両記法の等価な宣言は
- * 同一 semantic hash になる (TPL-017)。runtime interpolation は M5 までの
- * stub として residual + warn に落とす。
+ * 同一 semantic hash になる (TPL-017)。decl value 内の runtime interpolation
+ * は ParametricAtom (M5b) へ落とし、それ以外の marker (prop / selector / 単独)
+ * は residual + warn に落とす。
  */
 export function lowerTaggedTemplate(
   strings: TemplateStringsArray | readonly string[],
@@ -294,8 +493,10 @@ export function lowerTaggedTemplate(
     { source: opts.source ?? '<template>', line: 1, column: 1 },
   ];
   const atoms: StaticAtom[] = [];
+  const parametrics: ParametricAtom[] = [];
   const residuals: ResidualRuleNode[] = [];
   const diagnostics: Diagnostic[] = [];
+  const sink: TemplateSink = { parametrics, residuals, diagnostics, provenance };
   const pushResidual = (cssText: string, message: string): void => {
     residuals.push({
       kind: 'residual-rule',
@@ -312,7 +513,7 @@ export function lowerTaggedTemplate(
   const items: ScannedItem[] | null = scanItems(scanner, false);
   if (items === null) {
     pushResidual(text, 'unbalanced block in template literal');
-    return { atoms, residuals, diagnostics };
+    return { atoms, parametrics, residuals, diagnostics };
   }
 
   const segments: Segment[] = [];
@@ -327,14 +528,18 @@ export function lowerTaggedTemplate(
 
   for (const item of items) {
     if (item.kind === 'decl') {
+      if (hasRuntimeMarker(item.value)) {
+        // decl value の runtime interpolation は ParametricAtom として独立 op にする。
+        // source 順を保つため record segment をここで区切る。
+        const atom = buildParametricAtom(item.prop, item.value, {}, sink);
+        if (atom !== null) segments.push({ kind: 'parametric', atom });
+        current = null;
+        continue;
+      }
       currentRecord()[item.prop] = item.value;
     } else if (item.kind === 'block') {
-      currentRecord()[item.header] = blockToRecord(
-        item.items,
-        provenance,
-        residuals,
-        diagnostics,
-      );
+      const inner = lowerBlock(item, sink, {});
+      if (inner !== null) currentRecord()[item.header] = inner;
     } else if (item.kind === 'handle') {
       segments.push({ kind: 'handle', handle: item.handle });
       current = null;
@@ -347,9 +552,12 @@ export function lowerTaggedTemplate(
   for (const segment of segments) {
     if (segment.kind === 'handle') {
       for (const atom of segment.handle.atoms) atoms.push(atom);
+      for (const parametric of segment.handle.parametrics) parametrics.push(parametric);
       for (const residual of segment.handle.residuals) residuals.push(residual);
+    } else if (segment.kind === 'parametric') {
+      parametrics.push(segment.atom);
     } else if (segment.kind === 'runtime') {
-      pushResidual('runtime interpolation', 'runtime interpolation needs M5 ParametricAtom');
+      pushResidual('runtime interpolation', 'runtime interpolation without a property context');
     } else {
       const lowered = lowerStyleObject(
         segment.record as Parameters<typeof lowerStyleObject>[0],
@@ -360,5 +568,5 @@ export function lowerTaggedTemplate(
       for (const diagnostic of lowered.diagnostics) diagnostics.push(diagnostic);
     }
   }
-  return { atoms, residuals, diagnostics };
+  return { atoms, parametrics, residuals, diagnostics };
 }

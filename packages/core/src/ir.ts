@@ -33,6 +33,9 @@ export interface StaticAtom {
 
 export type StyleNode = StaticAtom | ParametricAtom | ResidualRuleNode;
 
+/** static / parametric を区別しない atom 処理用の合併型。 */
+export type AnyAtom = StaticAtom | ParametricAtom;
+
 /**
  * 最適化不能として residual に落とした理由 (plan.md §15, §59)。
  * Milestone 1 では分類語彙のみ定義し、判定ロジックは M6 で実装する。

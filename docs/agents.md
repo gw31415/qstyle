@@ -22,6 +22,21 @@ opencode run -m zai/glm-5.3-flash --dir /home/ubuntu/qstyle "指示..."
 
 - z.ai は残高不足だと `429 Insufficient balance or no resource package` で失敗する。
   失敗時はチャージ待ち (別モデルに切替)。
+
+### coding-plan 契約のキーを使う場合 (検証済み 2026-09-05)
+
+opencode の `zai` プロバイダは paas endpoint (`/api/paas/v4`) を叩き、
+coding-plan の entitlement では残高不足 (code 1113) になる。coding-plan キーは
+Anthropic 互換 endpoint で使う:
+
+```bash
+export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+export ANTHROPIC_AUTH_TOKEN="$(python3 -c "import json; print(json.load(open('$HOME/.local/share/opencode/auth.json'))['zai']['key'])")"
+echo "..." | claude -p --model glm-5.3-flash
+```
+
+`unrecognized_model` の警告は出るが、応答モデル自身は `glm-5.3-flash/z.ai` と
+名乗る (身元確認済み)。キーを画面に出さないこと。
 - `claude -p` に長いプロンプトを引数で渡すと
   `Input must be provided either through stdin or as a prompt argument` になる。
   プロンプトはファイルに書いて stdin リダイレクトで渡す:

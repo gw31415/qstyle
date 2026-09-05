@@ -1,10 +1,12 @@
-import type { ResidualRuleNode, StaticAtom } from '@qstyle/core';
+import type { AnyAtom, ParametricAtom, ResidualRuleNode } from '@qstyle/core';
 import { lowerStyleObject } from './object.js';
 import type { Diagnostic } from './object.js';
 import type { CssProp, StyleHandle, StyleObject } from './index.js';
 
 export interface ComposedStyle {
-  readonly atoms: StaticAtom[];
+  readonly atoms: AnyAtom[];
+  /** 最終的に残った ParametricAtom (atoms の subset、出現順)。 */
+  readonly parametrics: ParametricAtom[];
   readonly residuals: ResidualRuleNode[];
   readonly diagnostics: Diagnostic[];
 }
@@ -43,17 +45,25 @@ function isCssPropArray(p: CssProp): p is readonly CssProp[] {
  * composition 上の競合キー。property + context + important が一致すれば
  * 後の contribution が勝つ (class 文字列順序には依存させない。plan.md §112)。
  */
-function conflictKey(atom: StaticAtom): string {
+function conflictKey(atom: AnyAtom): string {
   return JSON.stringify([atom.property, atom.context, atom.important]);
 }
 
-function semanticKey(atom: StaticAtom): string {
-  return JSON.stringify([
-    atom.property,
-    atom.value,
-    atom.important,
-    atom.context,
-  ]);
+/**
+ * semantic 重複判定キー。static は value、parametric は value template と
+ * slot 型で同一性を判定する (実際の runtime 値は含まない)。
+ */
+function semanticKey(atom: AnyAtom): string {
+  if (atom.kind === 'parametric-atom') {
+    return JSON.stringify([
+      atom.property,
+      atom.valueTemplate,
+      atom.slots.map((slot) => slot.valueType),
+      atom.important,
+      atom.context,
+    ]);
+  }
+  return JSON.stringify([atom.property, atom.value, atom.important, atom.context]);
 }
 
 /**
@@ -65,7 +75,7 @@ export function composeCssProp(
   prop: CssProp,
   opts: { readonly source?: string | undefined } = {},
 ): ComposedStyle {
-  const atoms: StaticAtom[] = [];
+  const atoms: AnyAtom[] = [];
   const residuals: ResidualRuleNode[] = [];
   const diagnostics: Diagnostic[] = [];
   // conflictKey -> atoms 内 index。semantic 重複はスキップする。
@@ -75,18 +85,20 @@ export function composeCssProp(
   for (const part of flattenCssProp(prop)) {
     const lowered = isStyleHandle(part)
       ? {
+          // handle は静的 atom と parametric の両方を寄与する。
           atoms: part.atoms,
+          parametrics: part.parametrics,
           residuals: part.residuals,
           diagnostics: [] as Diagnostic[],
         }
-      : lowerStyleObject(part, opts);
-    const partAtoms: readonly StaticAtom[] = lowered.atoms;
+      : { ...lowerStyleObject(part, opts), parametrics: [] as readonly ParametricAtom[] };
+    const partAtoms: readonly AnyAtom[] = lowered.atoms;
     const partResiduals: readonly ResidualRuleNode[] = lowered.residuals;
     const partDiagnostics: readonly Diagnostic[] = lowered.diagnostics;
     for (const residual of partResiduals) residuals.push(residual);
     for (const diagnostic of partDiagnostics) diagnostics.push(diagnostic);
 
-    for (const atom of partAtoms) {
+    for (const atom of [...lowered.parametrics, ...partAtoms]) {
       const sem: string = semanticKey(atom);
       if (seenSemantics.has(sem)) continue;
       seenSemantics.add(sem);
@@ -96,7 +108,7 @@ export function composeCssProp(
         positions.set(key, atoms.length);
         atoms.push(atom);
       } else {
-        // 後勝ち: 旧位置を除去して末尾へ。
+        // 後勝ち: 旧位置を除去して末尾へ (kind を問わない)。
         atoms.splice(existing, 1);
         positions.clear();
         atoms.forEach((a, i) => positions.set(conflictKey(a), i));
@@ -105,5 +117,8 @@ export function composeCssProp(
       }
     }
   }
-  return { atoms, residuals, diagnostics };
+  const parametrics: ParametricAtom[] = atoms.filter(
+    (a): a is ParametricAtom => a.kind === 'parametric-atom',
+  );
+  return { atoms, parametrics, residuals, diagnostics };
 }

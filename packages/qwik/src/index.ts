@@ -1,15 +1,17 @@
 // @qstyle/qwik — MVP authoring API surface (plan.md §19-24)。
 // Milestone 2 以降で transform 本体を実装する。現時点では型 + runtime stub。
-import type { ResidualRuleNode, StaticAtom } from '@qstyle/core';
+import type { ParametricAtom, ResidualRuleNode, StaticAtom } from '@qstyle/core';
 import { lowerStyleObject } from './object.js';
 
 export interface StyleHandle {
   readonly __qstyleBrand: 'StyleHandle';
   /** compile 時に確定した static 寄与 (M4 以降は template 由来も含む)。 */
   readonly atoms: readonly StaticAtom[];
+  /** runtime 値スロットを持つ共有可能構造 (M5b 以降)。 */
+  readonly parametrics: readonly ParametricAtom[];
   readonly residuals: readonly ResidualRuleNode[];
 }
-export { lowerStyleObject, splitImportant } from './object.js';
+export { lowerStyleObject, mergeRuleContext, parseNestedKey, splitImportant } from './object.js';
 export type { Diagnostic, ImportantSplit, LowerOptions, LoweredStyle } from './object.js';
 export { composeCssProp, flattenCssProp, isStyleHandle } from './compose.js';
 export type { ComposedStyle } from './compose.js';
@@ -44,13 +46,22 @@ export function css(
   ..._values: readonly unknown[]
 ): StyleHandle {
   // tagged template literal は lowerTaggedTemplate で lowering する。
-  // runtime interpolation は M5 の RuntimeSlot までの stub として residual。
   if (isTemplateStringsArray(arg)) {
     const lowered = lowerTaggedTemplate(arg, _values);
-    return { __qstyleBrand: 'StyleHandle', atoms: lowered.atoms, residuals: lowered.residuals };
+    return {
+      __qstyleBrand: 'StyleHandle',
+      atoms: lowered.atoms,
+      parametrics: lowered.parametrics,
+      residuals: lowered.residuals,
+    };
   }
   // object syntax は eager に lowering して handle に保持する。
   // build 時 transform が handle 参照を解決するまでの dev fallback でもある。
   const lowered = lowerStyleObject(arg);
-  return { __qstyleBrand: 'StyleHandle', atoms: lowered.atoms, residuals: lowered.residuals };
+  return {
+    __qstyleBrand: 'StyleHandle',
+    atoms: lowered.atoms,
+    parametrics: [],
+    residuals: lowered.residuals,
+  };
 }

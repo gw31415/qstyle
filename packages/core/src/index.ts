@@ -3,6 +3,7 @@
 export const VERSION: string = '0.1.0-m1';
 
 export type {
+  AnyAtom,
   OrderingConstraints,
   ParametricAtom,
   Provenance,
