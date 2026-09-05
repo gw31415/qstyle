@@ -31,7 +31,7 @@ export interface StaticAtom {
   readonly provenance: readonly Provenance[];
 }
 
-export type StyleNode = StaticAtom | ResidualRuleNode;
+export type StyleNode = StaticAtom | ParametricAtom | ResidualRuleNode;
 
 /**
  * 最適化不能として residual に落とした理由 (plan.md §15, §59)。
@@ -58,4 +58,53 @@ export interface ResidualRuleNode {
   readonly reason: ResidualReason;
   readonly provenance: readonly Provenance[];
 }
-// Milestone 2+ で ParametricAtom 等を StyleNode に追加する。
+/**
+ * runtime 値の型注釈 (plan.md §12)。semantic identity には型のみを含め、
+ * source 変数名や実際の値は含めない。
+ */
+export type RuntimeValueType =
+  | 'number'
+  | 'integer'
+  | 'length'
+  | 'percentage'
+  | 'color'
+  | 'angle'
+  | 'time'
+  | 'transform-function'
+  | 'image'
+  | 'custom';
+
+export type RuntimeSlotId = string;
+
+export interface RuntimeSlotNode {
+  readonly kind: 'runtime-slot';
+  readonly id: RuntimeSlotId;
+  readonly valueType: RuntimeValueType;
+  readonly fallback?: CanonicalValue | undefined;
+}
+
+export type CanonicalValue = string;
+
+/**
+ * 複合 dynamic value の AST 表現 (plan.md §13)。
+ * 文字列結合ではなく static text と slot 参照の列で表す。
+ */
+export type ValueTemplatePart =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'slot'; readonly slotIndex: number };
+
+/**
+ * 値だけが runtime で構造が静的な style (plan.md §11)。
+ * 実際の値は hash に含めず、同一構造は共有可能な ParametricAtom になる。
+ */
+export interface ParametricAtom {
+  readonly kind: 'parametric-atom';
+  readonly property: string;
+  readonly valueTemplate: readonly ValueTemplatePart[];
+  readonly slots: readonly RuntimeSlotNode[];
+  readonly important: boolean;
+  readonly context: RuleContext;
+  readonly ordering: OrderingConstraints;
+  readonly provenance: readonly Provenance[];
+}
+// Milestone 5b 以降で ThemeVariable / Keyframes 等を StyleNode に追加する。

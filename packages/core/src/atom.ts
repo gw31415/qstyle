@@ -40,17 +40,23 @@ export function createStaticAtom(input: CreateStaticAtomInput): StaticAtom {
  * FNV-1a 32bit → 8桁hex。
  */
 export function hashStaticAtom(atom: StaticAtom): string {
-  const payload = JSON.stringify([
-    atom.property,
-    atom.value,
-    atom.important,
-    atom.context,
-    atom.ordering,
-  ]);
+  return `q_${fnv1aHex(
+    JSON.stringify([
+      atom.property,
+      atom.value,
+      atom.important,
+      atom.context,
+      atom.ordering,
+    ]),
+  )}`;
+}
+
+/** FNV-1a 32bit → 8桁hex。parametric 側と共有する。 */
+export function fnv1aHex(payload: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < payload.length; i += 1) {
     h ^= payload.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  return `q_${(h >>> 0).toString(16).padStart(8, '0')}`;
+  return (h >>> 0).toString(16).padStart(8, '0');
 }
