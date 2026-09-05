@@ -1,11 +1,30 @@
 import type { Plugin, ResolvedConfig } from 'vite';
 import {
+  DEFAULT_CHUNK_OPTIONS,
+  VERSION,
+  assetFileName,
+  buildRouteManifest,
+  chunkHash,
   createParametricAtom,
+  createUsageGraph,
   hashParametricAtom,
   hashStaticAtom,
+  planChunks,
+  recordComponentRoute,
+  recordUsage,
+  serializeManifest,
   serializeParametricCss,
 } from '@qstyle/core';
-import type { ParametricAtom, RuntimeSlotNode, StaticAtom } from '@qstyle/core';
+import type {
+  ChunkInput,
+  ChunkOptions,
+  ChunkPlan,
+  ParametricAtom,
+  RuntimeSlotNode,
+  StaticAtom,
+  StyleManifest,
+  UsageGraph,
+} from '@qstyle/core';
 import { lowerStyleObject } from '@qstyle/qwik';
 import type { StyleObject } from '@qstyle/qwik';
 
@@ -28,6 +47,8 @@ export interface QstyleOptions {
     readonly minChunkBytes?: number | undefined;
     readonly maxChunkBytes?: number | undefined;
   } | undefined;
+  /** route -> その route が描画する module path の list (§45 route manifest の逆引き元)。 */
+  readonly routes?: Record<string, readonly string[]> | undefined;
   readonly diagnostics?: 'silent' | 'warning' | 'error' | undefined;
   readonly debug?: boolean | undefined;
 }
@@ -418,6 +439,29 @@ export function qstyle(options: QstyleOptions = {}): Plugin {
 
   const collected = new Map<string, CollectedStyle>();
   const moduleToAtoms = new Map<string, string[]>();
+  // plan.md §51: buildStart で 1 instance に reset する。plugin 生成直後の
+  // instance は単体テスト (buildStart を呼ばない) 用。
+  let graph: UsageGraph = createUsageGraph();
+  const chunkOptions: ChunkOptions = {
+    minChunkBytes: options.chunking?.minChunkBytes ?? DEFAULT_CHUNK_OPTIONS.minChunkBytes,
+    maxChunkBytes: options.chunking?.maxChunkBytes ?? DEFAULT_CHUNK_OPTIONS.maxChunkBytes,
+  };
+
+  /** module id / route option の path を usage graph の component id (basename) へ正規化する。 */
+  function moduleKey(id: string): string {
+    const slash: number = id.lastIndexOf('/');
+    return slash < 0 ? id : id.slice(slash + 1);
+  }
+
+  /** options.routes (route -> module paths) を component -> route の逆引きへ張る (冪等)。 */
+  function wireRoutes(target: UsageGraph): void {
+    for (const route of Object.keys(options.routes ?? {})) {
+      const modules: readonly string[] = options.routes?.[route] ?? [];
+      for (const modulePath of modules) {
+        recordComponentRoute(target, moduleKey(modulePath), route);
+      }
+    }
+  }
 
   const log = (...args: readonly unknown[]): void => {
     if (debug) {
@@ -430,12 +474,16 @@ export function qstyle(options: QstyleOptions = {}): Plugin {
     enforce: 'pre',
 
     configResolved(config: ResolvedConfig): void {
+      // §45: route -> module の逆引きを usage graph へ張る (routes option がなければ何もしない)。
+      wireRoutes(graph);
       log(`optimization=${optimization} backend=${backend} mode=${config.mode}`);
     },
 
     buildStart(): void {
       collected.clear();
       moduleToAtoms.clear();
+      graph = createUsageGraph();
+      wireRoutes(graph);
     },
 
     resolveId(id: string): string | null {
@@ -575,6 +623,8 @@ export function qstyle(options: QstyleOptions = {}): Plugin {
           if (!list.includes(atomId)) {
             moduleToAtoms.set(id, [...list, atomId]);
           }
+          // §38: usage graph へ style -> component (module) の edge を記録する (冪等)。
+          recordUsage(graph, atomId, moduleKey(id));
           if (!seen.has(atomId)) {
             seen.add(atomId);
             newAtomIds.push(atomId);
@@ -594,6 +644,8 @@ export function qstyle(options: QstyleOptions = {}): Plugin {
           if (!list.includes(param.id)) {
             moduleToAtoms.set(id, [...list, param.id]);
           }
+          // §38: parametric も usage graph へ記録する (static と同様、冪等)。
+          recordUsage(graph, param.id, moduleKey(id));
           if (!seen.has(param.id)) {
             seen.add(param.id);
             newAtomIds.push(param.id);
@@ -632,6 +684,44 @@ export function qstyle(options: QstyleOptions = {}): Plugin {
       for (const [mod, atoms] of moduleToAtoms) {
         manifest[mod] = atoms;
       }
+      const styles: ChunkInput[] = [...collected.values()].map((s) => ({
+        id: s.id,
+        bytes: s.cssText.length,
+      }));
+      const chunkPlans: ChunkPlan[] = planChunks(graph, styles, chunkOptions);
+      for (const plan of chunkPlans) {
+        const cssText: string = plan.members
+          .map((member) => collected.get(member)?.cssText ?? '')
+          .join('');
+        const hash: string = chunkHash(cssText);
+        this.emitFile({
+          type: 'asset',
+          fileName: assetFileName('style', hash),
+          source: cssText,
+        });
+      }
+      // route -> modules の逆引きを asset list へ解決する。
+      const routeToAssets = new Map<string, readonly string[]>();
+      for (const route of Object.keys(options.routes ?? {})) {
+        const assets = new Set<string>();
+        for (const modulePath of options.routes?.[route] ?? []) {
+          const key: string = moduleKey(modulePath);
+          for (const [mod, atoms] of moduleToAtoms) {
+            if (moduleKey(mod) === key) {
+              for (const atom of atoms) assets.add(atom);
+            }
+          }
+        }
+        routeToAssets.set(route, [...assets]);
+      }
+      const styleManifest: StyleManifest = buildRouteManifest(routeToAssets, {
+        compilerVersion: VERSION,
+      });
+      this.emitFile({
+        type: 'asset',
+        fileName: 'qstyle.routes.json',
+        source: serializeManifest(styleManifest),
+      });
       this.emitFile({
         type: 'asset',
         fileName: 'qstyle-manifest.json',
@@ -642,6 +732,7 @@ export function qstyle(options: QstyleOptions = {}): Plugin {
             backend,
             manifest,
             packs: [...collected.values()],
+            chunkPlans,
           },
           null,
           2,

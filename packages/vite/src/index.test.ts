@@ -264,3 +264,30 @@ describe('qstyle vite plugin dynamics (M5c)', () => {
     expect(code).toContain(`: props.height`);
   });
 });
+
+describe('qstyle generateBundle wiring', () => {
+  it('emits chunk-hashed assets + route manifest deterministically (HASH-001)', () => {
+    interface Emitted {
+      readonly fileName: string;
+      readonly source: string;
+    }
+    const runOnce = (): string[] => {
+      const p = qstyle({ routes: { '/': ['/src/a.tsx'] } }) as unknown as {
+        buildStart: () => void;
+        transform: (code: string, id: string) => { code: string; map: null } | null;
+        generateBundle: (this: { emitFile: (f: { fileName: string; source: string }) => void }) => void;
+      };
+      const emitted: Emitted[] = [];
+      p.buildStart();
+      p.transform(`export const A = () => <div css={{ display: 'flex' }} />;`, '/src/a.tsx');
+      p.generateBundle.call({ emitFile: (f) => emitted.push(f) });
+      return emitted.map((e) => `${e.fileName}:${e.source.length}`).sort();
+    };
+    const first: string[] = runOnce();
+    const second: string[] = runOnce();
+    // 同一入力で byte-for-byte 同一 (HASH-001 の配線側)。
+    expect(second).toEqual(first);
+    expect(first.some((e) => e.startsWith('style.q_'))).toBe(true);
+    expect(first.some((e) => e.startsWith('qstyle.routes.json'))).toBe(true);
+  });
+});
