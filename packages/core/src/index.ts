@@ -59,3 +59,12 @@ export {
 export type { UsageGraph } from './usage.js';
 export { DEFAULT_CHUNK_OPTIONS, planChunks } from './chunk.js';
 export type { ChunkInput, ChunkOptions, ChunkPlan } from './chunk.js';
+export {
+  IMMUTABLE_CACHE_HEADER,
+  assetFileName,
+  buildRouteManifest,
+  chunkHash,
+  parseManifest,
+  serializeManifest,
+} from './manifest.js';
+export type { ChunkHashInput, RouteManifestEntry, StyleManifest } from './manifest.js';
