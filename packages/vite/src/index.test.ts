@@ -4,9 +4,17 @@ import { lowerStyleObject } from '@qstyle/qwik';
 import {
   parseStyleObjectLiteral,
   parseStyleObjectLiteralWithDynamics,
-  qstyle,
+  qstyle as qstyleFactory,
   serializeAtomCss,
 } from './index.js';
+
+// qstyle() は [main, dedup] の配列を返す。テストは main プラグインを対象にする。
+const qstyle = (
+  options: Parameters<typeof qstyleFactory>[0],
+): { name?: string } => {
+  const plugins = qstyleFactory(options) as unknown as readonly { name?: string }[];
+  return plugins.find((p) => p.name === 'qstyle') as { name?: string };
+};
 
 /** 出力 code の pack import (`virtual:qstyle/pack/<id>.css`) から pack css を取る。 */
 function packCssOf(p: { load: (id: string) => string | null }, code: string): string {

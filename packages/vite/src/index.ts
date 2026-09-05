@@ -1,4 +1,5 @@
-import type { HmrContext, Plugin, ResolvedConfig } from 'vite';
+import type { HmrContext, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   DEFAULT_CHUNK_OPTIONS,
   VERSION,
@@ -35,6 +36,7 @@ import type {
   UsageGraph,
 } from '@qstyle/core';
 import { composeCssProp, lowerStyleObject, lowerTaggedTemplate } from '@qstyle/qwik';
+import { groupDuplicateCss } from './dedup.js';
 import type { StyleHandle, StyleObject } from '@qstyle/qwik';
 
 export type OptimizationLevel = 'preserve' | 'safe' | 'strict';
@@ -1916,11 +1918,11 @@ function validateQstyleOptions(options: QstyleOptions): void {
  */
 export function qstyle(
   options: QstyleOptions = {},
-): Plugin & {
+): [Plugin & {
   readonly __usageGraph: UsageGraph;
   readonly __residuals: readonly ResidualRuleNode[];
   readonly __legacyStyles: readonly LegacyStyleUsage[];
-} {
+}, Plugin] {
   validateQstyleOptions(options);
   const optimization: OptimizationLevel = options.optimization ?? 'safe';
   const backend: BackendKind = options.backend ?? 'qwik-native';
@@ -1982,7 +1984,28 @@ export function qstyle(
     }
   };
 
-  return {
+  // §39 dedup 用の記録。unit class -> 適用タグ、条件付き (同時適用が自明でない) unit。
+  const unitTagNames = new Map<string, Set<string>>();
+  const condUnitIds = new Set<string>();
+
+  /** 開始タグの tag 名を unit class に記録する (dedup の共存証明に使う)。 */
+  const recordUnitTags = (head: string, ids: readonly string[]): void => {
+    const m: RegExpExecArray | null = /^<([A-Za-z][A-Za-z0-9-]*)/.exec(head);
+    if (m === null) return;
+    const tag = m[1] as string;
+    for (const id of ids) {
+      if (!id.startsWith('q_')) continue;
+      const set = unitTagNames.get(id) ?? new Set<string>();
+      set.add(tag);
+      unitTagNames.set(id, set);
+    }
+  };
+
+  const mainPlugin: Plugin & {
+    readonly __usageGraph: UsageGraph;
+    readonly __residuals: readonly ResidualRuleNode[];
+    readonly __legacyStyles: readonly LegacyStyleUsage[];
+  } = {
     name: 'qstyle',
     enforce: 'pre',
     // ponytail: diagnostics/inspector 用の live graph 参照。buildStart で差し替わる。
@@ -2006,11 +2029,11 @@ export function qstyle(
       log(`optimization=${optimization} backend=${backend} mode=${config.mode} dev=${isDev}`);
     },
 
-    configureServer(server): void {
+    configureServer(server: ViteDevServer): void {
       // <link rel="stylesheet"> からの直接リクエスト (`/virtual:qstyle/*.css`) は
       // vite の raw css 経路に乗らない (virtual module は fs 解決できず 404 になる)。
       // middleware で plugin の load と同じ内容を text/css として返す。
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
         const url: string = (req.url ?? '').split('?')[0] ?? '';
         if (!url.startsWith('/virtual:qstyle/') || !url.endsWith('.css')) {
           next();
@@ -2023,7 +2046,7 @@ export function qstyle(
         }
         void server.pluginContainer
           .load(resolved)
-          .then((css) => {
+          .then((css: unknown) => {
             if (typeof css !== 'string') {
               res.statusCode = 404;
               res.end();
@@ -2050,6 +2073,8 @@ export function qstyle(
       devCss.clear();
       devKeys.clear();
       devTransformed.clear();
+      unitTagNames.clear();
+      condUnitIds.clear();
       graph = createUsageGraph();
       wireRoutes(graph);
     },
@@ -2492,6 +2517,8 @@ export function qstyle(
           noteSkipped('cannot find tag end; left untouched');
           return false;
         }
+        const headAll: string = code.slice(tagStart, gt);
+        recordUnitTags(headAll, ids);
         let head: string =
           code.slice(tagStart, occStart) + code.slice(exprClose, gt);
         // 自己閉じ '/' は attr 追記の邪魔になるため外し、最後に付け直す。
@@ -3351,6 +3378,7 @@ export function qstyle(
           for (const group of condGroups) {
             // 条件付き group も 1 unit 1 class に merge する (§38)。
             const groupId: string = unitIdOf(group.members.map((m) => m.atomId));
+            condUnitIds.add(groupId);
             condSegments.push(`(${group.cond} ? ${JSON.stringify(groupId)} : "")`);
             if (group.spreads.length > 0) {
               condSpreadEntries.push(`...(${group.cond} && {${group.spreads.join(', ')}})`);
@@ -3419,7 +3447,9 @@ export function qstyle(
           // 独立 ternary 分岐は単一 atom unit のまま (同時適用されないため merge しない)。
           for (const atom of conditional.atoms) {
             const atomId: string = hashStaticAtom(atom);
-            ingestUnit(unitIdOf([atomId]), [
+            const condAtomUnitId: string = unitIdOf([atomId]);
+            condUnitIds.add(condAtomUnitId);
+            ingestUnit(condAtomUnitId, [
               { atomId, context: atom.context, decl: serializeStaticDecl(atom) },
             ]);
           }
@@ -3507,12 +3537,13 @@ export function qstyle(
       const styleManifest: StyleManifest = buildRouteManifest(routeToAssets, {
         compilerVersion: VERSION,
       });
-      this.emitFile({
+      const ctx = this as unknown as { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void };
+      ctx.emitFile({
         type: 'asset',
         fileName: 'qstyle.routes.json',
         source: serializeManifest(styleManifest),
       });
-      this.emitFile({
+      ctx.emitFile({
         type: 'asset',
         fileName: 'qstyle-manifest.json',
         source: JSON.stringify(
@@ -3532,6 +3563,34 @@ export function qstyle(
       });
     },
   };
+
+  /**
+   * §39 dedup (decl 単位の統合)。vite:css / qwik の css asset 出力後に走る
+   * post plugin で、最終 css asset の `.q_*` unit rule を安全にグループ化する。
+   * 解析に失敗した場合は元のテキストをそのまま保持する (correctness first)。
+   */
+  const dedupPlugin: Plugin = {
+    name: 'qstyle:dedup',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      const meta = {
+        unitTags: unitTagNames as ReadonlyMap<string, ReadonlySet<string>>,
+        condUnitIds: condUnitIds as ReadonlySet<string>,
+      };
+      for (const file of Object.values(bundle)) {
+        if (file.type !== 'asset' || !file.fileName.endsWith('.css')) continue;
+        const source: unknown = file.source;
+        if (typeof source !== 'string') continue;
+        try {
+          file.source = groupDuplicateCss(source, meta);
+        } catch {
+          // 解析エラー時は元の CSS を保持する
+        }
+      }
+    },
+  };
+
+  return [mainPlugin, dedupPlugin];
 }
 
 export default qstyle;
