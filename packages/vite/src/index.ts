@@ -18,6 +18,7 @@ import {
   recordUsage,
   serializeManifest,
   serializeParametricCss,
+  serializeParametricDecl,
 } from '@qstyle/core';
 import type {
   ChunkInput,
@@ -65,6 +66,8 @@ export interface CollectedStyle {
   readonly id: string;
   readonly cssText: string;
   readonly sourceId: string;
+  /** unit 構成 atom ids (delivery = unit、identity = atom。§3.3/§38)。 */
+  readonly members?: readonly string[];
 }
 
 /**
@@ -613,10 +616,52 @@ export function serializeAtomCss(atom: StaticAtom, className: string): string {
   );
 }
 
-/** context wrapper (base rule + pseudo/media/supports/container)。preserve block と共有する。 */
+/** static atom の declaration 部分のみ (unit merge 用)。 */
+function serializeStaticDecl(atom: StaticAtom): string {
+  return `${atom.property}:${atom.value}${atom.important ? '!important' : ''}`;
+}
+
+/**
+ * delivery unit (適用単位) の member。identity は atom id のまま、
+ * CSS 出力・class は unit にマージする (plan.md §38 grouping, StyleX と同じ適用単位)。
+ */
+interface UnitMember {
+  readonly atomId: string;
+  readonly context: RuleContext;
+  readonly decl: string;
+}
+
+/** unit の class id。member atom ids の sort 済み hash から決定論的に導出する。 */
+function unitIdOf(memberIds: readonly string[]): string {
+  return `q_${fnv1aHex(JSON.stringify([...memberIds].sort()))}`;
+}
+
+/**
+ * unit を CSS へ serialize する。同一 context の declaration を 1 rule に merge し、
+ * context 順・宣言順は決定論的に sort する (同一 unit set ↔ 同一 cssText)。
+ * ponytail: unit をまたぐ atom の重複出力は許容 (§39 clustering で解消する)。
+ */
+function serializeUnitCss(className: string, members: readonly UnitMember[]): string {
+  const byContext = new Map<string, { context: RuleContext; decls: Set<string> }>();
+  for (const member of members) {
+    const key: string = JSON.stringify(member.context);
+    const entry = byContext.get(key) ?? { context: member.context, decls: new Set<string>() };
+    entry.decls.add(member.decl);
+    byContext.set(key, entry);
+  }
+  return [...byContext.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([, { context, decls }]) =>
+      wrapRuleContext(className, context, [...decls].sort().join(';')),
+    )
+    .join('');
+}
+
+/** context wrapper (base rule + pseudo/descendant/media/supports/container)。preserve block と共有する。 */
 function wrapRuleContext(className: string, context: RuleContext, body: string): string {
   const pseudos: readonly string[] = context.pseudo ?? [];
-  let rule: string = `.${className}${pseudos.join('')}{${body}}`;
+  const suffix: string = context.descendant !== undefined ? ` ${context.descendant}` : '';
+  let rule: string = `.${className}${pseudos.join('')}${suffix}{${body}}`;
   if (context.supports !== undefined) {
     rule = `@supports ${context.supports}{${rule}}`;
   }
@@ -1023,6 +1068,55 @@ function collectObjectHandles(code: string, table: Map<string, CssHandleEntry>):
     if (lowered.atoms.length === 0) continue;
     table.set(name, { record: parsed.record });
   }
+}
+
+/** tag直下の明示 class と最後の JSX spread の offset を返す。 */
+function scanTagAttributes(head: string): { classStart: number; lastSpreadEnd: number } | null {
+  let classStart = -1;
+  let lastSpreadEnd = -1;
+  let i = 0;
+  while (i < head.length) {
+    const ch: string = head[i] ?? '';
+    if (ch === '"' || ch === "'") {
+      const quote: string = ch;
+      i += 1;
+      while (i < head.length && head[i] !== quote) i += head[i] === '\\' ? 2 : 1;
+      if (i >= head.length) return null;
+      i += 1;
+      continue;
+    }
+    if (ch === '{') {
+      const close: number = findMatchingBrace(head, i);
+      if (close < 0) return null;
+      if (/^\s*\.\.\./.test(head.slice(i + 1, close))) lastSpreadEnd = close + 1;
+      i = close + 1;
+      continue;
+    }
+    if (
+      classStart < 0 &&
+      /\s/.test(head[i - 1] ?? '') &&
+      head.startsWith('class', i) &&
+      /^\s*=/.test(head.slice(i + 5))
+    ) {
+      classStart = i;
+    }
+    i += 1;
+  }
+  return { classStart, lastSpreadEnd };
+}
+
+/** tag head 内の `class={...}` 式を抽出する。なければ null。 */
+function extractClassExpr(
+  head: string,
+  start: number,
+): { start: number; end: number; expr: string } | null {
+  if (start < 0) return null;
+  const m: RegExpMatchArray | null = /^class\s*=\s*\{/.exec(head.slice(start));
+  if (m === null) return null;
+  const open: number = start + m[0].length - 1;
+  const close: number = findMatchingBrace(head, open);
+  if (close < 0) return null;
+  return { start, end: close + 1, expr: head.slice(open + 1, close) };
 }
 
 /**
@@ -1817,6 +1911,10 @@ export function qstyle(
 
   const collected = new Map<string, CollectedStyle>();
   const moduleToAtoms = new Map<string, string[]>();
+  /** prod: module id -> pack id (pack css は unit set の hash で決定論的に同一視)。 */
+  const modulePacks = new Map<string, string>();
+  /** prod: pack id -> css text。load(`virtual:qstyle/pack/<id>.css`) が返す。 */
+  const packCss = new Map<string, string>();
   /** legacy Qwik style hook の利用記録 (§24)。rewrite せず provenance のみ追跡する。 */
   let legacyStyles: LegacyStyleUsage[] = [];
   /** untouched 箇所の residual nodes (DIA-003: inspector で理由を表示する)。 */
@@ -1886,6 +1984,8 @@ export function qstyle(
     buildStart(): void {
       collected.clear();
       moduleToAtoms.clear();
+      modulePacks.clear();
+      packCss.clear();
       residualLog = [];
       legacyStyles = [];
       devCss.clear();
@@ -1939,18 +2039,10 @@ export function qstyle(
         return devCss.get(moduleId) ?? '';
       }
       if (path.startsWith('pack/')) {
-        const packId = path.slice('pack/'.length);
-        const style = collected.get(packId);
-        if (!style) return `export default ${JSON.stringify('')};\n`;
-        // side-effect import だけでも CSS 文字列が bundle に残るよう、
-        // export に加えて globalThis への代入 (side effect) を emit する。
-        const cssJson: string = JSON.stringify(style.cssText);
-        const idJson: string = JSON.stringify(packId);
-        return (
-          `globalThis.__qstyle_packs ??= {};\n` +
-          `globalThis.__qstyle_packs[${idJson}] = ${cssJson};\n` +
-          `export default ${cssJson};\n`
-        );
+        // pack は実 CSS module (`...css` suffix) として vite/qwik の css 配信に乗る。
+        // 中身は module の全 unit rule (§38 merge 済み)。
+        const packId: string = path.slice('pack/'.length).replace(/\.css$/, '');
+        return packCss.get(packId) ?? '';
       }
       return null;
     },
@@ -2005,7 +2097,7 @@ export function qstyle(
         return (structCounts?.get(inlineStructKey(propPath, compoundSkeleton(segments))) ?? 0) >= 2;
       };
       const provenanceSource: string = id;
-      const newAtomIds: string[] = [];
+      const newUnitIds: string[] = [];
       const seen = new Set<string>();
       // 置換は original 座標の edits として集め、最後に一括適用する (source map 用)。
       // (a)/(b) の occurrence 検出はどちらも original code 基準 (互いの span は重ならない)。
@@ -2020,34 +2112,44 @@ export function qstyle(
         if (diagnosticsMode === 'warning') skippedReasons.push(reason);
       };
 
-      /** static atoms を収集し、class 用 id 列を返す。 */
-      const ingestStatic = (srcAtoms: readonly StaticAtom[]): string[] => {
-        const ids: string[] = [];
-        for (const srcAtom of srcAtoms) {
-          const atomId: string = hashStaticAtom(srcAtom);
-          ids.push(atomId);
-          if (!collected.has(atomId)) {
-            collected.set(atomId, {
-              id: atomId,
-              cssText: serializeAtomCss(srcAtom, atomId),
-              sourceId: id,
-            });
-          }
-          const list: string[] = moduleToAtoms.get(id) ?? [];
-          if (!list.includes(atomId)) {
-            moduleToAtoms.set(id, [...list, atomId]);
-          }
-          // §38: usage graph へ style -> component (module) の edge を記録する (冪等)。
-          recordUsage(graph, atomId, moduleKey(id));
-          // §58: 同一 atom の全 origins を provenance として保持する。
-          recordSource(graph, atomId, id);
-          if (!seen.has(atomId)) {
-            seen.add(atomId);
-            newAtomIds.push(atomId);
-          }
-          log(`collected ${atomId} from ${id}`);
+      /**
+       * delivery unit を収集する (plan.md §38: 適用単位で 1 class / 1 rule に merge)。
+       * identity (dedup/provenance/usage graph) は atom 単位のまま記録する。
+       */
+      const ingestUnit = (unitId: string, members: readonly UnitMember[]): void => {
+        if (!collected.has(unitId)) {
+          collected.set(unitId, {
+            id: unitId,
+            cssText: serializeUnitCss(unitId, members),
+            sourceId: id,
+            members: [...new Set(members.map((m) => m.atomId))].sort(),
+          });
         }
-        return ids;
+        const list: string[] = moduleToAtoms.get(id) ?? [];
+        if (!list.includes(unitId)) {
+          moduleToAtoms.set(id, [...list, unitId]);
+        }
+        for (const member of members) {
+          // §38: usage graph へ style -> component (module) の edge を記録する (冪等)。
+          recordUsage(graph, member.atomId, moduleKey(id));
+          // §58: 同一 atom の全 origins を provenance として保持する。
+          recordSource(graph, member.atomId, id);
+        }
+        if (!seen.has(unitId)) {
+          seen.add(unitId);
+          newUnitIds.push(unitId);
+        }
+        log(`collected unit ${unitId} (${members.length} decls) from ${id}`);
+      };
+
+      /** 独立 ternary 分岐の atoms を単一 member unit として収集する。 */
+      const ingestAtomUnits = (atoms: readonly StaticAtom[]): void => {
+        for (const atom of atoms) {
+          const atomId: string = hashStaticAtom(atom);
+          ingestUnit(unitIdOf([atomId]), [
+            { atomId, context: atom.context, decl: serializeStaticDecl(atom) },
+          ]);
+        }
       };
 
       /**
@@ -2070,6 +2172,8 @@ export function qstyle(
         prop: string;
         slotIds: string[];
         cssText: string;
+        decl: string;
+        context: RuleContext;
         slotExprs: string[];
         important: boolean;
         valueText: string;
@@ -2079,6 +2183,8 @@ export function qstyle(
           prop: string;
           slotIds: string[];
           cssText: string;
+          decl: string;
+          context: RuleContext;
           slotExprs: string[];
           important: boolean;
           valueText: string;
@@ -2113,6 +2219,8 @@ export function qstyle(
             prop: canonicalProperty(decl.propPath),
             slotIds,
             cssText: serializeParametricCss(atom, paramId),
+            decl: serializeParametricDecl(atom),
+            context: atom.context,
             slotExprs: exprs,
             important: atom.important,
             valueText: parametricValueText(atom),
@@ -2151,7 +2259,8 @@ export function qstyle(
             const atom: StaticAtom | undefined = loweredBranch.atoms[0];
             if (atom === undefined) return null;
             atoms.push(atom);
-            return hashStaticAtom(atom);
+            // 単一 atom の unit (独立 ternary 分岐は他と同時適用されないため merge しない)。
+            return unitIdOf([hashStaticAtom(atom)]);
           };
           const trueId: string | null = branchId(c.whenTrue);
           const falseId: string | null = branchId(c.whenFalse);
@@ -2165,31 +2274,13 @@ export function qstyle(
       };
 
             const ingestParametrics = (
-        parametrics: readonly { id: string; cssText: string }[],
-      ): string[] => {        const ids: string[] = [];
-        for (const param of parametrics) {
-          ids.push(param.id);
-          if (!collected.has(param.id)) {
-            collected.set(param.id, {
-              id: param.id,
-              cssText: param.cssText,
-              sourceId: id,
-            });
-          }
-          const list: string[] = moduleToAtoms.get(id) ?? [];
-          if (!list.includes(param.id)) {
-            moduleToAtoms.set(id, [...list, param.id]);
-          }
-          // §38: parametric も usage graph へ記録する (static と同様、冪等)。
-          recordUsage(graph, param.id, moduleKey(id));
-          recordSource(graph, param.id, id);
-          if (!seen.has(param.id)) {
-            seen.add(param.id);
-            newAtomIds.push(param.id);
-          }
-          log(`collected ${param.id} (parametric) from ${id}`);
-        }
-        return ids;
+        parametrics: readonly { id: string; decl: string; context: RuleContext }[],
+      ): UnitMember[] => {
+        return parametrics.map((param) => ({
+          atomId: param.id,
+          context: param.context,
+          decl: param.decl,
+        }));
       };
 
       /** preserve block 1 件を収集する (exact rule dedup は id で自然に成立する)。 */
@@ -2205,7 +2296,7 @@ export function qstyle(
         recordSource(graph, blockId, id);
         if (!seen.has(blockId)) {
           seen.add(blockId);
-          newAtomIds.push(blockId);
+          newUnitIds.push(blockId);
         }
         log(`collected ${blockId} (preserve) from ${id}`);
       };
@@ -2240,11 +2331,26 @@ export function qstyle(
           const sep: string = kept.length > 0 ? ', ' : '';
           head2 = head.slice(0, insertAt) + `${sep}${styleEntries}` + head.slice(insertAt);
         }
-        // 同一タグ内の既存 class="..." に追記する (なければ新規付与)。
-        // 条件付き segments がある場合は class={...} 式として合成する。
-        // 既存 class={...} 式との合成は未対応のため untouched。
-        if (condSegments.length > 0 && /class\s*=\s*\{/.test(head)) return null;
-        const classMatch: RegExpMatchArray | null = /class\s*=\s*(["'])(.*?)\1/.exec(head2);
+        // 同一タグ内の既存 class に追記する (なければ新規付与)。
+        // class="..." リテラルは文字列追記、class={...} 式は Qwik ClassList の
+        // 配列ラップで合成する (falsy/nested を正しく扱えるのは Qwik のみ)。
+        // `{...spread}` がある場合は、明示 class が全 spread より後にあれば安全
+        // (JSX は後の prop が勝つため spread 内 class は既に死んでいる)。
+        // それ以外は class 解決不能のため untouched。
+        const attrs = scanTagAttributes(head);
+        const attrs2 = scanTagAttributes(head2);
+        if (attrs === null || attrs2 === null) return null;
+        if (attrs.lastSpreadEnd >= 0) {
+          if (attrs.classStart < 0 || attrs.classStart < attrs.lastSpreadEnd) {
+            noteSkipped('spread props with css are not supported; left untouched');
+            return null;
+          }
+        }
+        const classExpr = extractClassExpr(head2, attrs2.classStart);
+        const classMatch: RegExpMatchArray | null =
+          classExpr === null && attrs2.classStart >= 0
+            ? /^class\s*=\s*(["'])(.*?)\1/.exec(head2.slice(attrs2.classStart))
+            : null;
         let newHead: string;
         if (condSegments.length > 0) {
           const staticChunk: string = [
@@ -2255,20 +2361,26 @@ export function qstyle(
             ...(staticChunk === '' ? [] : [`${JSON.stringify(`${staticChunk} `)}`]),
             ...condSegments,
           ].join(' + ');
-          const attr: string = `class={${expr === '' ? '""' : expr}}`;
-          if (classMatch !== null) {
-            const classStart: number = classMatch.index ?? 0;
+          const condAttr: string = `class={${expr === '' ? '""' : expr}}`;
+          if (classExpr !== null) {
+            // 既存 class={...} 式と合成する: class={[EXISTING, ...generated]}。
             newHead =
-              head2.slice(0, classStart) + attr + head2.slice(classStart + classMatch[0].length);
+              head2.slice(0, classExpr.start) +
+              `class={[${classExpr.expr}, ${expr === '' ? '""' : expr}]}` +
+              head2.slice(classExpr.end);
+          } else if (classMatch !== null) {
+            const classStart: number = attrs2.classStart;
+            newHead =
+              head2.slice(0, classStart) + condAttr + head2.slice(classStart + classMatch[0].length);
           } else {
-            newHead = `${head2}${attr}`;
+            newHead = `${head2}${condAttr}`;
           }
           if (styleEntries !== null && !hasStyleProp) {
             newHead = `${newHead} style={{ ${styleEntries} }}`;
           }
         } else if (classMatch !== null) {
           const quote: string = classMatch[1] as string;
-          const classStart: number = classMatch.index ?? 0;
+          const classStart: number = attrs2.classStart;
           const attr: string = `class=${quote}${`${classMatch[2]} ${ids.join(' ')}`.trim()}${quote}`;
           newHead =
             head2.slice(0, classStart) + attr + head2.slice(classStart + classMatch[0].length);
@@ -2277,6 +2389,18 @@ export function qstyle(
               newHead.slice(0, classStart + attr.length) +
               ` style={{ ${styleEntries} }}` +
               newHead.slice(classStart + attr.length);
+          }
+        } else if (classExpr !== null) {
+          // 既存 class={...} 式と合成する: class={[EXISTING, "ids"]}。
+          // ids が空の場合は既存のまま (style のみ追加)。
+          const attr: string =
+            ids.length > 0 ? `class={[${classExpr.expr}, ${JSON.stringify(ids.join(' '))}]}` : '';
+          newHead =
+            head2.slice(0, classExpr.start) +
+            (attr !== '' ? attr : head2.slice(classExpr.start, classExpr.end)) +
+            head2.slice(classExpr.end);
+          if (styleEntries !== null && !hasStyleProp) {
+            newHead = `${newHead} style={{ ${styleEntries} }}`;
           }
         } else {
           // ids が空 (全て inline 化) の場合は class 属性を出さない。
@@ -2494,7 +2618,7 @@ export function qstyle(
             continue;
           }
           if (hasBlock) ingestBlock(blockId, blockCss);
-          ingestStatic(conditional.atoms);
+          ingestAtomUnits(conditional.atoms);
           continue;
         }
         // 有限静的 ternary 値は CSS variable 化せず static branch にする (DYN-016)。
@@ -2508,10 +2632,16 @@ export function qstyle(
           noteSkipped('conflicting conditional value; left untouched');
           continue;
         }
-        const ids: string[] = [
-          ...lowered.atoms.map((a) => hashStaticAtom(a)),
-          ...parametrics.map((p) => p.id),
+        // (a) も無条件分は 1 unit 1 class に merge する (§38)。
+        const membersA: UnitMember[] = [
+          ...lowered.atoms.map((a) => ({
+            atomId: hashStaticAtom(a),
+            context: a.context,
+            decl: serializeStaticDecl(a),
+          })),
+          ...ingestParametrics(parametrics),
         ];
+        const ids: string[] = membersA.length > 0 ? [unitIdOf(membersA.map((m) => m.atomId))] : [];
         const slotEntries: string[] = parametrics.flatMap((p) =>
           p.slotIds.map((slotId, k) => `'${slotId}': ${p.slotExprs[k] ?? ''}`),
         );
@@ -2528,9 +2658,8 @@ export function qstyle(
         if (!next) {
           continue;
         }
-        ingestStatic(lowered.atoms);
-        ingestParametrics(parametrics);
-        ingestStatic(conditional.atoms);
+        if (ids.length > 0) ingestUnit(ids[0] as string, membersA);
+        ingestAtomUnits(conditional.atoms);
       }
       // (b) M3: module-scope css() handle + css={...} composition (plan.md §21)。
       // static に解決できるもののみ rewrite し、条件付き (&&/?:)・未知参照・
@@ -2684,7 +2813,7 @@ export function qstyle(
             interface PreserveCondGroup {
               readonly cond: string;
               readonly miniBlock: { id: string; css: string } | null;
-              readonly params: { id: string; cssText: string }[];
+              readonly params: NonNullable<ReturnType<typeof buildParametrics>>;
               readonly spreads: string[];
               readonly props: string[];
             }
@@ -2782,7 +2911,7 @@ export function qstyle(
               preserveCondGroups.push({
                 cond,
                 miniBlock,
-                params: condBuilt.map((b) => ({ id: b.id, cssText: b.cssText })),
+                params: condBuilt,
                 spreads: condSpreads,
                 props: condProps,
               });
@@ -2793,7 +2922,7 @@ export function qstyle(
             for (const group of preserveCondGroups) {
               const groupIds: string = [
                 ...(group.miniBlock === null ? [] : [group.miniBlock.id]),
-                ...group.params.map((p) => p.id),
+                ...group.params.map((p) => unitIdOf([p.id])),
               ].join(' ');
               preserveCondSegments.push(`(${group.cond} ? ${JSON.stringify(groupIds)} : "")`);
               if (group.spreads.length > 0) {
@@ -2840,9 +2969,13 @@ export function qstyle(
             }
             for (const group of preserveCondGroups) {
               if (group.miniBlock !== null) ingestBlock(group.miniBlock.id, group.miniBlock.css);
-              ingestParametrics(group.params);
+              for (const p of group.params) {
+                ingestUnit(unitIdOf([p.id]), [
+                  { atomId: p.id, context: p.context, decl: p.decl },
+                ]);
+              }
             }
-            ingestStatic(preserveConditional.atoms);
+            ingestAtomUnits(preserveConditional.atoms);
             continue;
           }
           if (conds.some((p) => p.handleParametrics !== undefined)) {
@@ -2944,6 +3077,7 @@ export function qstyle(
           const entryParamIds: string[] = [];
           const entrySlotEntries: string[] = [];
           const entryPropAtom = new Map<string, string>();
+          const entryMembers: UnitMember[] = [];
           let entryFailed = false;
           for (const part of paramParts) {
             const pe = part.handleParametrics;
@@ -2985,6 +3119,11 @@ export function qstyle(
               }
               entryPropAtom.set(atom.property, atomId);
               entryParamIds.push(atomId);
+              entryMembers.push({
+                atomId,
+                context: atom.context,
+                decl: serializeParametricDecl(atom),
+              });
             }
             if (entryFailed) break;
             for (const atom of pe.atoms) {
@@ -3008,7 +3147,7 @@ export function qstyle(
           interface CondGroup {
             readonly cond: string;
             readonly staticAtoms: StaticAtom[];
-            readonly params: { id: string; cssText: string }[];
+            readonly members: UnitMember[];
             readonly spreads: string[];
             readonly dynProps: string[];
           }
@@ -3112,7 +3251,18 @@ export function qstyle(
             condGroups.push({
               cond,
               staticAtoms,
-              params: built.map((b) => ({ id: b.id, cssText: b.cssText })),
+              members: [
+                ...staticAtoms.map((a) => ({
+                  atomId: hashStaticAtom(a),
+                  context: a.context,
+                  decl: serializeStaticDecl(a),
+                })),
+                ...built.map((b) => ({
+                  atomId: b.id,
+                  context: b.context,
+                  decl: b.decl,
+                })),
+              ],
               spreads,
               dynProps: [...seenParam.keys()],
             });
@@ -3121,11 +3271,9 @@ export function qstyle(
           const condSegments: string[] = [];
           const condSpreadEntries: string[] = [];
           for (const group of condGroups) {
-            const groupIds: string = [
-              ...group.staticAtoms.map((a) => hashStaticAtom(a)),
-              ...group.params.map((p) => p.id),
-            ].join(' ');
-            condSegments.push(`(${group.cond} ? ${JSON.stringify(groupIds)} : "")`);
+            // 条件付き group も 1 unit 1 class に merge する (§38)。
+            const groupId: string = unitIdOf(group.members.map((m) => m.atomId));
+            condSegments.push(`(${group.cond} ? ${JSON.stringify(groupId)} : "")`);
             if (group.spreads.length > 0) {
               condSpreadEntries.push(`...(${group.cond} && {${group.spreads.join(', ')}})`);
             }
@@ -3147,13 +3295,20 @@ export function qstyle(
             noteSkipped('conflicting conditional value; left untouched');
             continue;
           }
-          const ids: string[] = [
-            ...new Set<string>([
-              ...composed.atoms.map((a) => hashStaticAtom(a as StaticAtom)),
-              ...parametrics.map((p) => p.id),
-              ...entryParamIds,
-            ]),
+          // 無条件適用分 (static + promoted parametric + entry parametric) は
+          // 1 unit 1 class に merge する (§38)。
+          const staticMembers: UnitMember[] = [
+            ...(composed.atoms as StaticAtom[]).map((a) => ({
+              atomId: hashStaticAtom(a),
+              context: a.context,
+              decl: serializeStaticDecl(a),
+            })),
+            ...ingestParametrics(parametrics),
+            ...entryMembers,
           ];
+          const staticUnitIds: string[] =
+            staticMembers.length > 0 ? [unitIdOf(staticMembers.map((m) => m.atomId))] : [];
+          const ids: string[] = staticUnitIds;
           const slotEntries: string = parametrics
             .flatMap((p) => p.slotIds.map((slotId, k) => `'${slotId}': ${p.slotExprs[k] ?? ''}`))
             .join(', ');
@@ -3177,23 +3332,19 @@ export function qstyle(
           if (!next) {
             continue;
           }
-          ingestStatic(composed.atoms as StaticAtom[]);
-          ingestParametrics(parametrics);
-          for (const part of paramParts) {
-            const pe = part.handleParametrics;
-            if (pe === undefined) continue;
-            ingestParametrics(
-              pe.atoms.map((atom) => {
-                const atomId: string = hashParametricAtom(atom);
-                return { id: atomId, cssText: serializeParametricCss(atom, atomId) };
-              }),
-            );
+          if (staticUnitIds.length > 0) {
+            ingestUnit(staticUnitIds[0] as string, staticMembers);
           }
           for (const group of condGroups) {
-            ingestStatic(group.staticAtoms);
-            ingestParametrics(group.params);
+            ingestUnit(unitIdOf(group.members.map((m) => m.atomId)), group.members);
           }
-          ingestStatic(conditional.atoms);
+          // 独立 ternary 分岐は単一 atom unit のまま (同時適用されないため merge しない)。
+          for (const atom of conditional.atoms) {
+            const atomId: string = hashStaticAtom(atom);
+            ingestUnit(unitIdOf([atomId]), [
+              { atomId, context: atom.context, decl: serializeStaticDecl(atom) },
+            ]);
+          }
         }
       }
       if (skippedReasons.length > 0) {
@@ -3224,15 +3375,23 @@ export function qstyle(
         const devApplied = applyEditsWithMap(code, id, edits);
         return { code: devApplied.code, map: devApplied.map };
       }
-      const header: string = newAtomIds
-        .map((atomId: string): string => `import "virtual:qstyle/pack/${atomId}";`)
-        .join('\n');
-      // 全て inline 化された場合は import なしで書き換え結果のみ返す。
-      if (newAtomIds.length > 0) {
+      // prod: module の全 unit を 1 pack (実 CSS module) にする。import graph 経由で
+      // vite/qwik が bundle 単位の css asset を出すため、lazy bundle は直前読み込みに
+      // なる (plan.md §48 qwik-native)。pack id は unit set の hash で決定論的に。
+      const packUnitIds: string[] = moduleToAtoms.get(id) ?? [];
+      if (packUnitIds.length > 0) {
+        const packId: string = chunkHash([...packUnitIds].sort().join(','));
+        modulePacks.set(id, packId);
+        if (!packCss.has(packId)) {
+          packCss.set(
+            packId,
+            [...packUnitIds].sort().map((unitId) => collected.get(unitId)?.cssText ?? '').join(''),
+          );
+        }
         edits.push({
           start: 0,
           end: 0,
-          newText: `${header}\n`,
+          newText: `import "virtual:qstyle/pack/${packId}.css";\n`,
           srcLine: 0,
         });
       }
@@ -3249,19 +3408,11 @@ export function qstyle(
         id: s.id,
         bytes: s.cssText.length,
       }));
+      // CSS asset は pack css module の import graph 経由で vite/qwik が出す
+      // (§48 qwik-native。lazy bundle は css も直前読み込み)。ここでは metadata
+      // (chunk plan) のみ記録し、直接 emit しない。
       const chunkPlans: ChunkPlan[] = planChunks(graph, styles, chunkOptions);
-      for (const plan of chunkPlans) {
-        const cssText: string = plan.members
-          .map((member) => collected.get(member)?.cssText ?? '')
-          .join('');
-        const hash: string = chunkHash(cssText);
-        this.emitFile({
-          type: 'asset',
-          fileName: assetFileName('style', hash),
-          source: cssText,
-        });
-      }
-      // route -> modules の逆引きを asset list へ解決する。
+      // route -> modules の逆引きを unit list へ解決する。
       const routeToAssets = new Map<string, readonly string[]>();
       for (const route of Object.keys(options.routes ?? {})) {
         const assets = new Set<string>();
@@ -3293,6 +3444,7 @@ export function qstyle(
             backend,
             manifest,
             packs: [...collected.values()],
+            modulePacks: [...modulePacks.entries()],
             chunkPlans,
             legacy: legacyStyles,
           },

@@ -26,6 +26,16 @@ describe('atom', () => {
     expect(hashStaticAtom(base)).not.toBe(hashStaticAtom(hover));
   });
 
+  it('separates descendant context identity (DED-007)', () => {
+    const base = createStaticAtom({ property: 'display', value: 'block' });
+    const desc = createStaticAtom({
+      property: 'display',
+      value: 'block',
+      context: { descendant: 'svg' },
+    });
+    expect(hashStaticAtom(base)).not.toBe(hashStaticAtom(desc));
+  });
+
   it('canonicalizes value whitespace (TPL-002 stub)', () => {
     expect(canonicalValue('  flex   \n ')).toBe('flex');
   });

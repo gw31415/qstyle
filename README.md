@@ -25,6 +25,22 @@ export default defineConfig({
 import { css } from '@qstyle/qwik';
 ```
 
+### `css` prop の型 (consumer 側設定)
+
+`css` prop を JSX で型付けするには、app 側に 1 ファイル用意する
+(.published 版では @qstyle/qwik 側の augmentation で不要になる想定):
+
+```ts
+// src/qstyle.d.ts
+import type { CssProp } from '@qstyle/qwik';
+
+declare module '@qwik.dev/core/internal' {
+  interface HTMLElementAttrs {
+    css?: CssProp;
+  }
+}
+```
+
 ## 書き方
 
 ### `css` prop (object)
@@ -45,7 +61,8 @@ export const Card = component$((props) => (
 
 - 数値は unitless 以外 `px` 補完、`0` は単位なし。custom property (`--x`) はそのまま
 - `class` / `style` と共存可。既存 `style` には dynamic 値の代入だけ追記される
-- 安全に atomize できない selector・値は untouched (黙って書き換えない)
+- ネストキー: `&:hover` (pseudo)、`& svg` / `& .tile` (子孫セレクタ, 単純セレクタのみ)、
+  `@media` / `@supports` / `@container`。それ以外の selector は untouched (黙って書き換えない)
 
 ### `css()` と composition
 

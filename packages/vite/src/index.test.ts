@@ -8,6 +8,12 @@ import {
   serializeAtomCss,
 } from './index.js';
 
+/** 出力 code の pack import (`virtual:qstyle/pack/<id>.css`) から pack css を取る。 */
+function packCssOf(p: { load: (id: string) => string | null }, code: string): string {
+  const m: RegExpMatchArray | null = /import "virtual:qstyle\/pack\/(q_[0-9a-f]+)\.css"/.exec(code);
+  return m === null ? '' : (p.load(`virtual:qstyle/pack/${m[1]}.css`) ?? '');
+}
+
 describe('qstyle vite plugin (M0)', () => {
   it('exposes vite plugin name', () => {
     const p = qstyle({});
@@ -58,7 +64,11 @@ describe('qstyle vite plugin (M0)', () => {
     const out = p.transform(code, '/src/g.tsx');
     expect(out).not.toBeNull();
     expect(out?.code).not.toContain('css={{');
-    expect(out?.code).toMatch(/class="q_[0-9a-f]{8} q_[0-9a-f]{8}"/);
+    // §38: 適用単位で 1 class に merge される。
+    expect(out?.code).toMatch(/class="q_[0-9a-f]{8}"/);
+    expect(packCssOf(p, out?.code ?? '')).toMatch(
+      /\.q_[0-9a-f]{8}\{display:flex;gap:8px\}/,
+    );
     const registry = p.load('virtual:qstyle/registry') ?? '';
     expect(registry).toContain('display');
     expect(registry).toContain('8px');
@@ -77,6 +87,18 @@ describe('qstyle vite plugin (M0)', () => {
     expect(registry).toContain(':hover');
   });
 
+  it('emits descendant selector atoms for & svg (SEL-021)', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+      load: (id: string) => string | null;
+    };
+    const code = `export const A = () => <span css={{ '& svg': { display: 'block' } }} />;`;
+    const out = p.transform(code, '/src/desc.tsx');
+    expect(out).not.toBeNull();
+    const registry = p.load('virtual:qstyle/registry') ?? '';
+    expect(registry).toMatch(/\.q_[0-9a-f]{8} svg\{display:block\}/);
+  });
+
   it('merges with a pre-existing class attribute', () => {
     const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
@@ -86,6 +108,62 @@ describe('qstyle vite plugin (M0)', () => {
     expect(out).not.toBeNull();
     expect(out?.code).toContain('legacy q_');
     expect(out?.code).not.toContain('css={{');
+  });
+
+  it('merges into an existing class={...} expression via array wrap', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+    };
+    const out = p.transform(
+      `export const A = () => <div class={["a", cond && "b"]} css={{ display: 'flex' }} />;`,
+      '/src/cls-expr.tsx',
+    );
+    expect(out).not.toBeNull();
+    // class 属性は 1 つのまま (重複なし)。
+    expect((out?.code.match(/class=/g) ?? []).length).toBe(1);
+    expect(out?.code).toMatch(/class=\{\[\["a", cond && "b"\], "q_[0-9a-f]{8}"\]\}/);
+    expect(out?.code).not.toContain('css={{');
+  });
+
+  it('only merges css when an explicit class follows all spread props', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+    };
+    expect(
+      p.transform(
+        `export const A = (props) => <div {...props} css={{ display: 'flex' }} />;`,
+        '/src/spread.tsx',
+      ),
+    ).toBeNull();
+    expect(
+      p.transform(
+        `export const A = (props) => <div class="local" {...props} css={{ display: 'flex' }} />;`,
+        '/src/spread-after-class.tsx',
+      ),
+    ).toBeNull();
+    expect(
+      p.transform(
+        `export const A = (props) => <div {...props} title="class=" css={{ display: 'flex' }} />;`,
+        '/src/class-text-after-spread.tsx',
+      ),
+    ).toBeNull();
+
+    const out = p.transform(
+      `export const A = (props) => <div {...props} class="local" css={{ display: 'flex' }} />;`,
+      '/src/class-after-spread.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(out?.code).toMatch(/class="local q_[0-9a-f]{8}"/);
+    expect(out?.code).not.toContain('css={{');
+
+    const expressionOut = p.transform(
+      `export const A = (props) => <div {...props} class={{ ...classes }} css={{ display: 'flex' }} />;`,
+      '/src/class-expression-after-spread.tsx',
+    );
+    expect(expressionOut).not.toBeNull();
+    expect(expressionOut?.code).toMatch(
+      /class=\{\[\{ \.\.\.classes \}, "q_[0-9a-f]{8}"\]\}/,
+    );
   });
 
   it('ignores files without css prop', () => {
@@ -234,9 +312,10 @@ describe('qstyle vite plugin dynamics (M5c)', () => {
     expect(out?.code).not.toContain('css={{');
     const ids: string[] = classIds(out?.code ?? '');
     expect(ids).toHaveLength(1);
-    const pack: string | null = p.load(`virtual:qstyle/pack/${ids[0] ?? ''}`);
-    expect(pack).toContain(`.${ids[0]}{width:var(--qstyle-`);
-    expect(out?.code).toContain(`import "virtual:qstyle/pack/${ids[0] ?? ''}"`);
+    // static + parametric も同一 unit に merge される (§38)。
+    const pack: string = packCssOf(p, out?.code ?? '');
+    expect(pack).toContain(`.${ids[0]}{`);
+    expect(pack).toContain('width:var(--qstyle-');
     expect(out?.code).toMatch(/'--qstyle-[0-9a-f]{6}-0': props\.width/);
   });
 
@@ -248,16 +327,13 @@ describe('qstyle vite plugin dynamics (M5c)', () => {
     );
     expect(out).not.toBeNull();
     expect(out?.code).not.toContain('css={{');
-    // display:flex (static) + width:var (parametric) + height:10px (static)
-    expect(classIds(out?.code ?? '')).toHaveLength(3);
+    // display:flex + width:var + height:10px が 1 unit 1 class に merge される。
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
     expect(out?.code).toMatch(/'--qstyle-[0-9a-f]{6}-0': props\.w/);
     const registry: string = p.load('virtual:qstyle/registry') ?? '';
     expect(registry).toContain('display');
     expect(registry).toContain('10px');
-    const packs: string[] = classIds(out?.code ?? '').map(
-      (id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '',
-    );
-    expect(packs.join('\n')).toContain('width:var(--qstyle-');
+    expect(packCssOf(p, out?.code ?? '')).toContain('width:var(--qstyle-');
   });
 
   it('merges slot vars into an existing style prop', () => {
@@ -348,11 +424,9 @@ describe('qstyle css() handles + composition (M3)', () => {
       '/src/m3-b.tsx',
     );
     expect(out).not.toBeNull();
-    // display:flex + color:red の 2 atom。敗北した color:blue は出力されない。
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
-    const packs: string = classIds(out?.code ?? '')
-      .map((id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '')
-      .join('\n');
+    // display:flex + color:red が 1 unit に merge。敗北した color:blue は出力されない。
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
+    const packs: string = packCssOf(p, out?.code ?? '');
     expect(packs).toContain('display:flex');
     expect(packs).toContain('color:red');
     expect(packs).not.toContain('color:blue');
@@ -369,7 +443,8 @@ describe('qstyle css() handles + composition (M3)', () => {
       '/src/m3-c.tsx',
     );
     expect(out).not.toBeNull();
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
+    expect(packCssOf(p, out?.code ?? '')).toContain('gap:8px');
     expect(out?.code).not.toContain('css={');
   });
 
@@ -383,7 +458,8 @@ describe('qstyle css() handles + composition (M3)', () => {
       '/src/m3-d.tsx',
     );
     expect(out).not.toBeNull();
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
+    expect(packCssOf(p, out?.code ?? '')).toContain('display:flex;gap:8px');
     const registry: string = p.load('virtual:qstyle/registry') ?? '';
     expect(registry).toContain('8px');
   });
@@ -413,7 +489,7 @@ describe('qstyle css() handles + composition (M3)', () => {
       '/src/m3-f.tsx',
     );
     expect(out).not.toBeNull();
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
     expect(out?.code).toMatch(/'--qstyle-[0-9a-f]{6}-0': props\.width/);
   });
 
@@ -431,9 +507,7 @@ describe('qstyle css() handles + composition (M3)', () => {
     expect(out?.code).not.toContain('css={');
     // 無条件 class + 条件付き segment の合成式になる。
     expect(out?.code).toMatch(/class=\{".*?" \+ \(cond \? "q_[0-9a-f]{8}" : ""\)\}/);
-    const packs: string = (out?.code.match(/q_[0-9a-f]{8}/g) ?? [])
-      .map((id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '')
-      .join('\n');
+    const packs: string = packCssOf(p, out?.code ?? '');
     expect(packs).toContain('display:flex');
     expect(packs).toContain('color:red');
   });
@@ -494,9 +568,7 @@ describe('qstyle css() handles + composition (M3)', () => {
     // 無条件 class + 条件付き parametric class + 条件スプレッド。
     expect(out?.code).toMatch(/class=\{".*?" \+ \(cond \? "q_[0-9a-f]{8}" : ""\)\}/);
     expect(out?.code).toMatch(/style=\{\{ \.\.\.\(cond && \{'--qstyle-[0-9a-f]{6}-0': w\}\) \}\}/);
-    const packs: string = (out?.code.match(/q_[0-9a-f]{8}/g) ?? [])
-      .map((id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '')
-      .join('\n');
+    const packs: string = packCssOf(p, out?.code ?? '');
     expect(packs).toContain('display:flex');
     expect(packs).toContain('width:var(');
   });
@@ -564,7 +636,7 @@ describe('qstyle css() handles + composition (M3)', () => {
         '/src/m3-g5.tsx',
       ),
     ).toBeNull();
-    // 既存 class={...} 式との合成は未対応。
+    // 既存 class={...} 式とは配列ラップで合成する (Qwik ClassList 意味論)。
     expect(
       p.transform(
         withImport(
@@ -572,8 +644,8 @@ describe('qstyle css() handles + composition (M3)', () => {
             `export const A = () => <div class={cls} css={cond && sel} />;`,
         ),
         '/src/m3-g7.tsx',
-      ),
-    ).toBeNull();
+      )?.code,
+    ).toMatch(/class=\{\[cls, \(cond \? "q_[0-9a-f]{8}" : ""\)\]\}/);
   });
 
   it('leaves unknown identifiers and non-qwik css() untouched', () => {
@@ -669,10 +741,8 @@ describe('qstyle static template handles (M4)', () => {
     );
     expect(out).not.toBeNull();
     expect(out?.code).not.toContain('css={card}');
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
-    const packs: string = classIds(out?.code ?? '')
-      .map((id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '')
-      .join('\n');
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
+    const packs: string = packCssOf(p, out?.code ?? '');
     expect(packs).toContain('display:flex');
     expect(packs).toContain('gap:8px');
   });
@@ -699,7 +769,7 @@ describe('qstyle static template handles (M4)', () => {
     );
     expect(out).not.toBeNull();
     expect(out?.code).not.toContain('css={');
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
   });
 
   it('rewrites an inline css tag with interpolation', () => {
@@ -710,8 +780,8 @@ describe('qstyle static template handles (M4)', () => {
     );
     expect(out).not.toBeNull();
     expect(out?.code).not.toContain('css={');
-    // static 1 + parametric 1。
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
+    // static + parametric も 1 unit に merge。
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
     expect(out?.code).toMatch(/'--qstyle-[0-9a-f]{6}-0': w/);
   });
 
@@ -735,11 +805,9 @@ describe('qstyle static template handles (M4)', () => {
       '/src/m4-inline-d.tsx',
     );
     expect(out).not.toBeNull();
-    // display:flex + gap:8px + width parametric。
-    expect(classIds(out?.code ?? '')).toHaveLength(3);
-    const packs: string = classIds(out?.code ?? '')
-      .map((id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '')
-      .join('\n');
+    // display:flex + gap:8px + width parametric が 1 unit に merge。
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
+    const packs: string = packCssOf(p, out?.code ?? '');
     expect(packs).toContain('display:flex');
     expect(packs).toContain('gap:8px');
     expect(packs).toContain('width:var(');
@@ -757,10 +825,8 @@ describe('qstyle static template handles (M4)', () => {
     );
     expect(out).not.toBeNull();
     // color:black は sel に上書きされ、hover のみ残る: color:red + hover:blue。
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
-    const packs: string = classIds(out?.code ?? '')
-      .map((id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '')
-      .join('\n');
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
+    const packs: string = packCssOf(p, out?.code ?? '');
     expect(packs).toContain('color:red');
     expect(packs).toContain(':hover');
     expect(packs).not.toContain('color:black');
@@ -778,7 +844,7 @@ describe('qstyle static template handles (M4)', () => {
     expect(out).not.toBeNull();
     expect(out?.code).not.toContain('css={dyn}');
     expect(classIds(out?.code ?? '')).toHaveLength(1);
-    const pack: string = p.load(`virtual:qstyle/pack/${classIds(out?.code ?? '')[0] ?? ''}`) ?? '';
+    const pack: string = packCssOf(p, out?.code ?? '');
     expect(pack).toContain('width:var(--qstyle-');
     expect(out?.code).toMatch(/'--qstyle-[0-9a-f]{6}-0': w/);
   });
@@ -793,8 +859,8 @@ describe('qstyle static template handles (M4)', () => {
       '/src/m4-d2.tsx',
     );
     expect(out).not.toBeNull();
-    // 同一構造は同一 atom を共有する。
-    const ids: string[] = (out?.code.match(/q_[0-9a-f]{8}/g) ?? []).sort();
+    // 同一構造は同一 unit/class を共有する。
+    const ids: string[] = (out?.code.match(/class="[^"]*"/g) ?? []).sort();
     expect(new Set(ids).size).toBe(1);
   });
 
@@ -877,9 +943,7 @@ describe('qstyle finite ternary values (DYN-016)', () => {
     expect(out?.code).toMatch(/class=\{\(flag \? "q_[0-9a-f]{8}" : "q_[0-9a-f]{8}"\)\}/);
     // CSS variable 化しない (style prop を出さない)。
     expect(out?.code).not.toContain('style={{');
-    const packs: string = (out?.code.match(/q_[0-9a-f]{8}/g) ?? [])
-      .map((id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '')
-      .join('\n');
+    const packs: string = packCssOf(p, out?.code ?? '');
     expect(packs).toContain('display:flex');
     expect(packs).toContain('display:block');
   });
@@ -892,9 +956,7 @@ describe('qstyle finite ternary values (DYN-016)', () => {
     );
     expect(out).not.toBeNull();
     expect(out?.code).toMatch(/\(c \? "q_[0-9a-f]{8}" : ""\)/);
-    const packs: string = (out?.code.match(/q_[0-9a-f]{8}/g) ?? [])
-      .map((id: string): string => p.load(`virtual:qstyle/pack/${id}`) ?? '')
-      .join('\n');
+    const packs: string = packCssOf(p, out?.code ?? '');
     expect(packs).toContain('opacity:1');
     expect(packs).toContain('width:8px');
     expect(packs).toContain('width:4px');
@@ -1021,8 +1083,8 @@ describe('qstyle compound template values (§23/DYN-006)', () => {
     );
     expect(out).not.toBeNull();
     expect(out?.code).not.toContain('css={');
-    // static + parametric の 2 class。
-    expect(classIds(out?.code ?? '')).toHaveLength(2);
+    // static + parametric が 1 unit に merge。
+    expect(classIds(out?.code ?? '')).toHaveLength(1);
     expect(out?.code).toMatch(/'--qstyle-[0-9a-f]{6}-0': x/);
   });
 
@@ -1066,8 +1128,8 @@ describe('qstyle scale bounds (PERF-001/003 unit)', () => {
       expect(out).not.toBeNull();
     }
     const registry: string = p.load('virtual:qstyle/registry') ?? '';
-    // 2 atoms (display:flex + gap:8px) のみ。occurrence 比例しない。
-    expect(registry.split('\n').filter((line) => line.includes('q_'))).toHaveLength(2);
+    // 1 unit (display:flex;gap:8px) のみ。occurrence 比例しない。
+    expect(registry.split('\n').filter((line) => line.includes('q_'))).toHaveLength(1);
   });
 
   it('shares one parametric structure across 1000 dynamic widths', () => {
@@ -1468,7 +1530,7 @@ describe('qstyle options validation + diagnostics', () => {
     const ids: string[] = (out?.code.match(/class="([^"]*)"/) ?? [])[1]?.split(/\s+/) ?? [];
     expect(ids).toHaveLength(1);
     expect(ids[0]?.startsWith('p_')).toBe(true);
-    const pack: string = p.load(`virtual:qstyle/pack/${ids[0] ?? ''}`) ?? '';
+    const pack: string = packCssOf(p, out?.code ?? '');
     expect(pack).toContain(`.${ids[0]}{display:flex;gap:8px;color:red}`);
   });
 
@@ -1488,7 +1550,7 @@ describe('qstyle options validation + diagnostics', () => {
     const id2: string = (second?.code.match(/class="([^"]*)"/) ?? [])[1] ?? '';
     // 同一 block は同一 class (exact dedup)。
     expect(id1).toBe(id2);
-    const pack: string = p.load(`virtual:qstyle/pack/${id1}`) ?? '';
+    const pack: string = packCssOf(p, first?.code ?? '');
     expect(pack).toContain(`.${id1}{display:flex}`);
     expect(pack).toContain(`.${id1}:hover{color:blue}`);
   });
@@ -1508,7 +1570,7 @@ describe('qstyle options validation + diagnostics', () => {
     );
     expect(out).not.toBeNull();
     const id: string = (out?.code.match(/class="([^"]*)"/) ?? [])[1] ?? '';
-    const pack: string = p.load(`virtual:qstyle/pack/${id}`) ?? '';
+    const pack: string = packCssOf(p, out?.code ?? '');
     expect(pack).toMatch(new RegExp(`\\.${id}\\{display:flex;width:var\\(--qstyle-`));
     expect(out?.code).toMatch(/'--qstyle-[0-9a-f]{6}-0': props\.w/);
   });
@@ -1548,7 +1610,7 @@ describe('qstyle options validation + diagnostics', () => {
     );
     expect(out).not.toBeNull();
     const id: string = (out?.code.match(/class="([^"]*)"/) ?? [])[1] ?? '';
-    const pack: string = p.load(`virtual:qstyle/pack/${id}`) ?? '';
+    const pack: string = packCssOf(p, out?.code ?? '');
     expect(pack).toContain(`.${id}{display:flex;gap:8px}`);
   });
 
@@ -1578,29 +1640,37 @@ describe('qstyle options validation + diagnostics', () => {
 });
 
 describe('qstyle generateBundle wiring', () => {
-  it('emits chunk-hashed assets + route manifest deterministically (HASH-001)', () => {
+  it('emits deterministic manifests + pack css (HASH-001)', () => {
     interface Emitted {
       readonly fileName: string;
       readonly source: string;
     }
-    const runOnce = (): string[] => {
+    const runOnce = (): { emitted: string[]; packCss: string } => {
       const p = qstyle({ routes: { '/': ['/src/a.tsx'] } }) as unknown as {
         buildStart: () => void;
         transform: (code: string, id: string) => { code: string; map: null } | null;
         generateBundle: (this: { emitFile: (f: { fileName: string; source: string }) => void }) => void;
+        load: (id: string) => string | null;
       };
       const emitted: Emitted[] = [];
       p.buildStart();
-      p.transform(`export const A = () => <div css={{ display: 'flex' }} />;`, '/src/a.tsx');
+      const out = p.transform(
+        `export const A = () => <div css={{ display: 'flex' }} />;`,
+        '/src/a.tsx',
+      );
       p.generateBundle.call({ emitFile: (f) => emitted.push(f) });
-      return emitted.map((e) => `${e.fileName}:${e.source.length}`).sort();
+      const packCss: string = packCssOf(p, out?.code ?? '');
+      return { emitted: emitted.map((e) => `${e.fileName}:${e.source.length}`).sort(), packCss };
     };
-    const first: string[] = runOnce();
-    const second: string[] = runOnce();
+    const first = runOnce();
+    const second = runOnce();
     // 同一入力で byte-for-byte 同一 (HASH-001 の配線側)。
-    expect(second).toEqual(first);
-    expect(first.some((e) => e.startsWith('style.q_'))).toBe(true);
-    expect(first.some((e) => e.startsWith('qstyle.routes.json'))).toBe(true);
+    expect(second.emitted).toEqual(first.emitted);
+    expect(second.packCss).toBe(first.packCss);
+    // CSS asset は pack css module 経由で vite 側が出す (直接 emit しない)。
+    expect(first.packCss).toMatch(/\.q_[0-9a-f]{8}\{display:flex\}/);
+    expect(first.emitted.some((e) => e.startsWith('qstyle.routes.json'))).toBe(true);
+    expect(first.emitted.some((e) => e.startsWith('qstyle-manifest.json'))).toBe(true);
   });
 
   it('records provenance sources for deduped atoms across modules', async () => {
@@ -1616,13 +1686,12 @@ describe('qstyle generateBundle wiring', () => {
     const outB = p.transform(code, '/src/b.tsx');
     expect(outA).not.toBeNull();
     expect(outB).not.toBeNull();
-    const ids = (outA?.code.match(/q_[0-9a-f]{8}/g) ?? []).sort();
-    expect(ids.length).toBeGreaterThan(0);
     // ponytail: graph 経由の最小チェック。同一 atom が両 module の origins を持つ。
     const graph = p.__usageGraph as unknown as Parameters<typeof sourceSignature>[0];
-    expect(sourceSignature(graph, ids[0] as string).slice().sort()).toEqual([
-      '/src/a.tsx',
-      '/src/b.tsx',
-    ]);
+    const atomIds = [...graph.styleToComponents.keys()].filter((k) => k.startsWith('q_'));
+    expect(atomIds.length).toBeGreaterThan(0);
+    for (const atomId of atomIds) {
+      expect(sourceSignature(graph, atomId).slice().sort()).toEqual(['/src/a.tsx', '/src/b.tsx']);
+    }
   });
 });

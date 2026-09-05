@@ -40,6 +40,7 @@ export {
   hashParametricAtom,
   inferSlotType,
   serializeParametricCss,
+  serializeParametricDecl,
 } from './parametric.js';
 export type {
   CreateParametricAtomInput,

@@ -46,15 +46,26 @@ describe('M0 minimal production proof (plan.md §87)', () => {
       });
       const atomId: string = hashStaticAtom(atom);
 
-      // (b) ビルド済み JS に atom class 文字列が含まれる
+      // (b) ビルド済み JS に unit class 文字列が含まれる (1 適用単位 1 class, §38)
       const jsFiles: string[] = collectJsFiles(path.join(fixtureDir, 'dist'));
       expect(jsFiles.length).toBeGreaterThan(0);
       const allJs: string = jsFiles.map((f: string): string => fs.readFileSync(f, 'utf8')).join('\n');
-      expect(allJs).toContain(atomId);
+      const unitClass: RegExpMatchArray | null = allJs.match(/q_[0-9a-f]{8}/);
+      expect(unitClass).not.toBeNull();
 
-      // (c) virtual pack 由来の display:flex ルールがバンドルに含まれる
-      expect(allJs).toContain('display:flex');
+      // (c) pack css が実 asset として出る (import graph 経由。lazy bundle は直前読み込み)。
+      const cssFiles: string[] = fs
+        .readdirSync(path.join(fixtureDir, 'dist', 'assets'))
+        .filter((f: string): boolean => f.endsWith('.css'));
+      expect(cssFiles.length).toBeGreaterThan(0);
+      const allCss: string = cssFiles
+        .map((f: string): string =>
+          fs.readFileSync(path.join(fixtureDir, 'dist', 'assets', f), 'utf8'),
+        )
+        .join('\n');
+      expect(allCss).toContain('display:flex');
 
+      // (d) manifest の unit members に元 atom id が残る (identity は atom 単位)。
       const manifestRaw: string = fs.readFileSync(manifestPath, 'utf8');
       expect(manifestRaw).toContain(atomId);
     },

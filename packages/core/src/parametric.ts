@@ -131,6 +131,11 @@ export function hashParametricAtom(atom: ParametricAtom): string {
  * slot は `var(--id[, fallback])` 参照になる。
  */
 export function serializeParametricCss(atom: ParametricAtom, className: string): string {
+  return wrapParametricRule(className, atom.context, serializeParametricDecl(atom));
+}
+
+/** declaration 部分のみ (unit merge 用)。slot は `var(--id[, fallback])` 参照。 */
+export function serializeParametricDecl(atom: ParametricAtom): string {
   const byIndex = new Map<number, RuntimeSlotNode>();
   atom.slots.forEach((s, i) => byIndex.set(i, s));
   const value: string = atom.valueTemplate
@@ -138,24 +143,29 @@ export function serializeParametricCss(atom: ParametricAtom, className: string):
       if (p.kind === 'text') return p.text;
       const slot: RuntimeSlotNode | undefined = byIndex.get(p.slotIndex);
       if (slot === undefined) {
-        throw new Error(`serializeParametricCss: missing slot ${p.slotIndex}`);
+        throw new Error(`serializeParametricDecl: missing slot ${p.slotIndex}`);
       }
       return slot.fallback === undefined
         ? `var(${slot.id})`
         : `var(${slot.id}, ${slot.fallback})`;
     })
     .join('');
-  const decl: string = `${atom.property}:${value}${atom.important ? '!important' : ''}`;
-  const pseudos: readonly string[] = atom.context.pseudo ?? [];
-  let rule: string = `.${className}${pseudos.join('')}{${decl}}`;
-  if (atom.context.supports !== undefined) {
-    rule = `@supports ${atom.context.supports}{${rule}}`;
+  return `${atom.property}:${value}${atom.important ? '!important' : ''}`;
+}
+
+function wrapParametricRule(className: string, context: RuleContext, decl: string): string {
+  const pseudos: readonly string[] = context.pseudo ?? [];
+  const suffix: string =
+    context.descendant !== undefined ? ` ${context.descendant}` : '';
+  let rule: string = `.${className}${pseudos.join('')}${suffix}{${decl}}`;
+  if (context.supports !== undefined) {
+    rule = `@supports ${context.supports}{${rule}}`;
   }
-  if (atom.context.container !== undefined) {
-    rule = `@container ${atom.context.container}{${rule}}`;
+  if (context.container !== undefined) {
+    rule = `@container ${context.container}{${rule}}`;
   }
-  if (atom.context.media !== undefined) {
-    rule = `@media ${atom.context.media}{${rule}}`;
+  if (context.media !== undefined) {
+    rule = `@media ${context.media}{${rule}}`;
   }
   return rule;
 }

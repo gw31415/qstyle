@@ -54,11 +54,21 @@ function hasCombinator(selector: string): boolean {
 }
 
 /**
- * ネストキー (`&:hover` / `@media ...` 等) を context 差分へ変換する。
+ * ネストキー (`&:hover` / `& span.x` / `@media ...` 等) を context 差分へ変換する。
  * template literal 側 (template.ts) と共有する。対応不能なら null。
  */
 export function parseNestedKey(key: string): RuleContext | null {
   if (key.startsWith('&')) {
+    const body: string = key.slice(1);
+    // `& <simple-selector>` は子孫セレクタ。combinator / pseudo / `&` 再出現は不可。
+    // ponytail: 単純セレクタ (element / .class) のみ。`:hover` や `>` 結合は residual。
+    if (/\s/.test(body)) {
+      const selector: string = body.trim();
+      if (!/^(?:[A-Za-z][\w-]*|\.[\w-]+)(?:\.[\w-]+)*$/.test(selector) || selector.includes('&')) {
+        return null;
+      }
+      return { descendant: selector };
+    }
     const pseudo: string | null = extractPseudo(key);
     if (pseudo === null) return null;
     return { pseudo: [pseudo] };

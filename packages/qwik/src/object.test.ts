@@ -62,6 +62,21 @@ describe('lowerStyleObject', () => {
     expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
   });
 
+  it('lowers & <simple-selector> into descendant context (SEL-021)', () => {
+    const out = lowerStyleObject({ '& svg': { display: 'block' }, '& .tile': { color: 'red' } });
+    expect(out.atoms).toHaveLength(2);
+    expect(out.atoms[0]?.context.descendant).toBe('svg');
+    expect(out.atoms[1]?.context.descendant).toBe('.tile');
+  });
+
+  it('residualizes compound descendants and pseudo on descendant (SEL-022)', () => {
+    for (const key of ['& a b', '& svg:hover', '&& svg']) {
+      const out = lowerStyleObject({ [key]: { display: 'block' } });
+      expect(out.atoms).toHaveLength(0);
+      expect(out.residuals[0]?.reason).toBe('unsupported-selector');
+    }
+  });
+
   it('ignores prototype-like keys (SEC-008)', () => {
     const out = lowerStyleObject(JSON.parse('{"__proto__":{"polluted":true},"display":"flex"}'));
     expect(out.atoms).toHaveLength(1);

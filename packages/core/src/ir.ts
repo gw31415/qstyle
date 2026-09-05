@@ -7,6 +7,8 @@ export interface RuleContext {
   readonly supports?: string | undefined;
   readonly container?: string | undefined;
   readonly layer?: string | undefined;
+  /** `& span.x` 形式の子孫セレクタ (plan.md §10 selectorRelation)。単純セレクタのみ。 */
+  readonly descendant?: string | undefined;
 }
 
 export interface OrderingConstraints {
