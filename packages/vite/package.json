@@ -23,7 +23,8 @@
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@qstyle/core": "workspace:^"
+    "@qstyle/core": "workspace:^",
+    "@qstyle/qwik": "workspace:^"
   },
   "peerDependencies": {
     "vite": "^8.0.0"
