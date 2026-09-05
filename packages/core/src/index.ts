@@ -57,3 +57,5 @@ export {
   usageSignature,
 } from './usage.js';
 export type { UsageGraph } from './usage.js';
+export { DEFAULT_CHUNK_OPTIONS, planChunks } from './chunk.js';
+export type { ChunkInput, ChunkOptions, ChunkPlan } from './chunk.js';
