@@ -68,3 +68,5 @@ export {
   serializeManifest,
 } from './manifest.js';
 export type { ChunkHashInput, RouteManifestEntry, StyleManifest } from './manifest.js';
+export { MemoryCache, computeCacheKey, invalidateBySource, safeParse } from './cache.js';
+export type { ComputeCacheKeyInput } from './cache.js';
