@@ -27,12 +27,14 @@ opencode run -m zai/glm-5.3-flash --dir /home/ubuntu/qstyle "指示..."
   プロンプトはファイルに書いて stdin リダイレクトで渡す:
 
 ```bash
-claude -p --allow-dangerously-skip-permissions --add-dir /home/ubuntu/qstyle < /tmp/opencode/prompt.txt
+claude -p --dangerously-skip-permissions --add-dir /home/ubuntu/qstyle < /tmp/opencode/prompt.txt
 ```
 
 - サンドボックス/権限: 非対話 (`-p`) でファイル編集させる場合は
-  `--allow-dangerously-skip-permissions` が必要。これを付けないと権限確認で
-  停止し、そのままタイムアウトまで無出力になる (2026-09-05 に 10 分 stall を確認)。
+  `--dangerously-skip-permissions` が必要 (検証済み。
+  `--allow-dangerously-skip-permissions` では承認待ちで停止した)。
+  これを付けないと権限確認で停止し、そのままタイムアウトまで無出力になる
+  (2026-09-05 に 10 分 stall を確認)。
   `--add-dir` で作業ディレクトリを明示する。
 
 ## タイムアウトの扱い
@@ -41,7 +43,7 @@ claude -p --allow-dangerously-skip-permissions --add-dir /home/ubuntu/qstyle < /
   タイムアウト回避にはバックグラウンド実行 + ポーリングを使う:
 
 ```bash
-nohup claude -p --allow-dangerously-skip-permissions \
+nohup claude -p --dangerously-skip-permissions \
   --add-dir /home/ubuntu/qstyle < /tmp/opencode/prompt.txt \
   > /tmp/opencode/agent.log 2>&1 &
 echo $! > /tmp/opencode/agent.pid
