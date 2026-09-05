@@ -7,17 +7,33 @@ describe('qstyle vite plugin (M0)', () => {
     expect(p.name).toBe('qstyle');
   });
 
-  it('collects css prop heuristic via transform', () => {
+  it('rewrites single string-literal css prop to atom class', () => {
     const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
     const code = `export const A = () => <div css={{ display: 'flex' }} />;`;
     const out = p.transform(code, '/src/a.tsx');
-    expect(out?.code).toBe(code);
+    expect(out).not.toBeNull();
+    expect(out?.code).toContain('class="q_');
+    expect(out?.code).toContain('import "virtual:qstyle/pack/q_');
+    expect(out?.code).not.toContain('css={{');
     const registry = p.load('virtual:qstyle/registry');
     expect(registry).toContain('display');
     expect(registry).toContain('flex');
+  });
+
+  it('leaves complex css props untouched', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+    };
+    expect(
+      p.transform(`export const A = () => <div css={{ display: 'flex', color: 'red' }} />;`, '/src/c.tsx'),
+    ).toBeNull();
+    expect(
+      p.transform(`export const A = () => <div css={{ display: value }} />;`, '/src/d.tsx'),
+    ).toBeNull();
+    expect(p.transform(`export const A = () => <div css={handle} />;`, '/src/e.tsx')).toBeNull();
   });
 
   it('ignores files without css prop', () => {
