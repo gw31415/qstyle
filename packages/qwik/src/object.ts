@@ -79,8 +79,19 @@ function lowerInto(
     }
 
     if (typeof value === 'string' || typeof value === 'number') {
+      // 末尾 `!important` は value 文字列ではなく important flag に立てる
+      // (CMP-014 / CSS-008: priority を cascade 上正しく保つため)。
+      let important = false;
+      let raw: string | number = value;
+      if (typeof raw === 'string') {
+        const m: RegExpMatchArray | null = /^(.*?)\s*!important\s*$/i.exec(raw);
+        if (m !== null) {
+          raw = m[1] ?? '';
+          important = true;
+        }
+      }
       sink.atoms.push(
-        createStaticAtom({ property: key, value, context, provenance }),
+        createStaticAtom({ property: key, value: raw, important, context, provenance }),
       );
       continue;
     }

@@ -1,7 +1,22 @@
 // @qstyle/qwik — MVP authoring API surface (plan.md §19-24)。
 // Milestone 2 以降で transform 本体を実装する。現時点では型 + runtime stub。
+import type { ResidualRuleNode, StaticAtom } from '@qstyle/core';
+import { lowerStyleObject } from './object.js';
+
+export interface StyleHandle {
+  readonly __qstyleBrand: 'StyleHandle';
+  /** compile 時に確定した static 寄与 (M4 以降は template 由来も含む)。 */
+  readonly atoms: readonly StaticAtom[];
+  readonly residuals: readonly ResidualRuleNode[];
+}
 export { lowerStyleObject } from './object.js';
 export type { Diagnostic, LowerOptions, LoweredStyle } from './object.js';
+export { composeCssProp, flattenCssProp, isStyleHandle } from './compose.js';
+export type { ComposedStyle } from './compose.js';
+
+function isTemplateStringsArray(value: unknown): value is TemplateStringsArray {
+  return Array.isArray(value) && 'raw' in (value as unknown as Record<string, unknown>);
+}
 export interface StyleHandle {
   readonly __qstyleBrand: 'StyleHandle';
 }
@@ -28,8 +43,13 @@ export function css(
   arg: StyleObject | TemplateStringsArray,
   ..._values: readonly unknown[]
 ): StyleHandle {
-  void _values;
-  void arg;
-  // M0 stub: transform 前の dev fallback として空 handle を返す。
-  return { __qstyleBrand: 'StyleHandle' };
+  // tagged template literal は M4 で lowering する。M3 時点では空 handle。
+  if (isTemplateStringsArray(arg)) {
+    void _values;
+    return { __qstyleBrand: 'StyleHandle', atoms: [], residuals: [] };
+  }
+  // object syntax は eager に lowering して handle に保持する。
+  // build 時 transform が handle 参照を解決するまでの dev fallback でもある。
+  const lowered = lowerStyleObject(arg);
+  return { __qstyleBrand: 'StyleHandle', atoms: lowered.atoms, residuals: lowered.residuals };
 }
