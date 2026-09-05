@@ -83,6 +83,17 @@ export function serializeManifest(manifest: StyleManifest): string {
 }
 
 /**
+ * route が必要とする asset file names を返す。未知 route は空配列。
+ * css-asset backend の route-loader が利用する純関数 (§45)。
+ */
+export function resolveRouteAssets(manifest: StyleManifest, route: string): readonly string[] {
+  for (const entry of manifest.entries) {
+    if (entry.route === route) return [...entry.assets];
+  }
+  return [];
+}
+
+/**
  * manifest text を検証して読み込む。shape 外は null (FLB-007: corrupt cache は caller が捨てる)。
  * 読み込んだ manifest も sorted / deduped 不変を保つ。
  */

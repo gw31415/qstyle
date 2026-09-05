@@ -8,6 +8,8 @@ export interface UsageGraph {
   readonly styleToComponents: Map<string, Set<string>>;
   readonly componentToRoutes: Map<string, Set<string>>;
   readonly componentToLazyBoundaries: Map<string, Set<string>>;
+  /** style -> provenance source (module path 等)。dedup atom の全 origins 保持用 (§58)。 */
+  readonly styleToSources: Map<string, Set<string>>;
 }
 
 /** 空の usage graph を生成する。 */
@@ -16,6 +18,7 @@ export function createUsageGraph(): UsageGraph {
     styleToComponents: new Map<string, Set<string>>(),
     componentToRoutes: new Map<string, Set<string>>(),
     componentToLazyBoundaries: new Map<string, Set<string>>(),
+    styleToSources: new Map<string, Set<string>>(),
   };
 }
 
@@ -27,6 +30,16 @@ export function recordUsage(graph: UsageGraph, styleId: string, componentId: str
     graph.styleToComponents.set(styleId, components);
   }
   components.add(componentId);
+}
+
+/** styleId の provenance source (module path 等) を記録する (冪等、sorted 解決用)。 */
+export function recordSource(graph: UsageGraph, styleId: string, source: string): void {
+  let sources: Set<string> | undefined = graph.styleToSources.get(styleId);
+  if (sources === undefined) {
+    sources = new Set<string>();
+    graph.styleToSources.set(styleId, sources);
+  }
+  sources.add(source);
 }
 
 /** componentId が routeId で描画されることを記録する (冪等)。 */
@@ -56,6 +69,11 @@ export function recordComponentBoundary(
 /** styleId を使う component id の sorted list。未知なら空配列。 */
 export function usageSignature(graph: UsageGraph, styleId: string): readonly string[] {
   return sortedOf(graph.styleToComponents.get(styleId) ?? []);
+}
+
+/** styleId の provenance source の sorted list。未知なら空配列。 */
+export function sourceSignature(graph: UsageGraph, styleId: string): readonly string[] {
+  return sortedOf(graph.styleToSources.get(styleId) ?? []);
 }
 
 /** styleId を使う全 component の route の sorted union。未知 / route 未記録なら空配列。 */

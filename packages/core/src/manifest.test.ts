@@ -5,6 +5,7 @@ import {
   buildRouteManifest,
   chunkHash,
   parseManifest,
+  resolveRouteAssets,
   serializeManifest,
 } from './manifest.js';
 
@@ -157,5 +158,19 @@ describe('serializeManifest / parseManifest', () => {
     for (const value of cases) {
       expect(parseManifest(JSON.stringify(value))).toBeNull();
     }
+  });
+});
+
+describe('resolveRouteAssets', () => {
+  it('returns sorted assets for a known route and [] for unknown routes', () => {
+    const manifest = buildRouteManifest(
+      new Map<string, readonly string[]>([
+        ['/', ['base.q_aa.css']],
+        ['/settings', ['settings.q_bb.css', 'base.q_aa.css']],
+      ]),
+      { compilerVersion: 'test' },
+    );
+    expect(resolveRouteAssets(manifest, '/settings')).toEqual(['base.q_aa.css', 'settings.q_bb.css']);
+    expect(resolveRouteAssets(manifest, '/missing')).toEqual([]);
   });
 });

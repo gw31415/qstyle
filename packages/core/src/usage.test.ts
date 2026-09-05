@@ -5,8 +5,10 @@ import {
   jaccardSimilarity,
   recordComponentBoundary,
   recordComponentRoute,
+  recordSource,
   recordUsage,
   routeSignature,
+  sourceSignature,
   usageSignature,
 } from './usage.js';
 
@@ -88,5 +90,14 @@ describe('usage graph', () => {
     expect(jaccardSimilarity(new Set(['a', 'b']), new Set(['b']))).toBe(0.5);
     expect(jaccardSimilarity(new Set(), new Set())).toBe(1);
     expect(jaccardSimilarity(new Set(['a']), new Set())).toBe(0);
+  });
+
+  it('tracks provenance sources sorted and idempotently', () => {
+    const graph = createUsageGraph();
+    recordSource(graph, 's1', '/src/card.tsx');
+    recordSource(graph, 's1', '/src/button.tsx');
+    recordSource(graph, 's1', '/src/button.tsx');
+    expect(sourceSignature(graph, 's1')).toEqual(['/src/button.tsx', '/src/card.tsx']);
+    expect(sourceSignature(graph, 'nope')).toEqual([]);
   });
 });

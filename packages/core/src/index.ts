@@ -52,8 +52,10 @@ export {
   jaccardSimilarity,
   recordComponentBoundary,
   recordComponentRoute,
+  recordSource,
   recordUsage,
   routeSignature,
+  sourceSignature,
   usageSignature,
 } from './usage.js';
 export type { UsageGraph } from './usage.js';
@@ -65,6 +67,7 @@ export {
   buildRouteManifest,
   chunkHash,
   parseManifest,
+  resolveRouteAssets,
   serializeManifest,
 } from './manifest.js';
 export type { ChunkHashInput, RouteManifestEntry, StyleManifest } from './manifest.js';
