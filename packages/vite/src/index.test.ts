@@ -125,6 +125,49 @@ describe('qstyle vite plugin (M0)', () => {
     expect(out?.code).not.toContain('css={{');
   });
 
+  it('merges with a static class attribute written after the css prop', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+    };
+    const out = p.transform(
+      `export const A = () => <div css={{ display: 'flex' }} class="legacy" />;`,
+      '/src/cls-after-css.tsx',
+    );
+    expect(out).not.toBeNull();
+    // class 属性は 1 つのまま (重複キーを出さない)。
+    expect((out?.code.match(/class=/g) ?? []).length).toBe(1);
+    expect(out?.code).toMatch(/class="legacy q_[0-9a-f]{8}"/);
+    expect(out?.code).not.toContain('css={{');
+  });
+
+  it('merges with a class expression written after the css prop', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+    };
+    const out = p.transform(
+      `export const A = () => <div css={{ display: 'flex' }} class={className} />;`,
+      '/src/cls-expr-after-css.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect((out?.code.match(/class=/g) ?? []).length).toBe(1);
+    expect(out?.code).toMatch(/class=\{\[className, "q_[0-9a-f]{8}"\]\}/);
+    expect(out?.code).not.toContain('css={{');
+  });
+
+  it('keeps the tag end scan safe when a later attribute contains >', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+    };
+    const out = p.transform(
+      `export const A = () => <div css={{ display: 'flex' }} title="a>b">x</div>;`,
+      '/src/gt-in-attr.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect((out?.code.match(/class=/g) ?? []).length).toBe(1);
+    expect(out?.code).toContain('title="a>b"');
+    expect(out?.code).toMatch(/class="q_[0-9a-f]{8}"/);
+  });
+
   it('only merges css when an explicit class follows all spread props', () => {
     const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;

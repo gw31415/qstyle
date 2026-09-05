@@ -194,6 +194,9 @@ export async function loadRouteStyles(route) {
 `;
 
 function resolveQstyleId(id: string): string | null {
+  // dev の `<link href="/virtual:qstyle/...">` は先頭 '/' 付き URL としてブラウザから
+  // 直接リクエストされるため、leading slash を剥がして同一 module として解決する。
+  if (id.startsWith('/')) id = id.slice(1);
   if (id.startsWith(VIRTUAL_PREFIX)) {
     return `${RESOLVED_PREFIX}${id.slice(VIRTUAL_PREFIX.length)}`;
   }
@@ -1119,6 +1122,28 @@ function extractClassExpr(
   return { start, end: close + 1, expr: head.slice(open + 1, close) };
 }
 
+/** from 以降で開始タグを閉じる '>' の位置を返す。文字列と brace の内側は無視する。 */
+function findOpeningTagGt(code: string, from: number): number | null {
+  let depth = 0;
+  let i = from;
+  while (i < code.length) {
+    const ch: string = code[i] ?? '';
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const quote: string = ch;
+      i += 1;
+      while (i < code.length && code[i] !== quote) i += code[i] === '\\' ? 2 : 1;
+      if (i >= code.length) return null;
+      i += 1;
+      continue;
+    }
+    if (ch === '{') depth += 1;
+    else if (ch === '}') depth -= 1;
+    else if (ch === '>' && depth <= 0) return i;
+    i += 1;
+  }
+  return null;
+}
+
 /**
  * `const X = css`...`` を集める (M4/M5b)。static と interpolation 付きを統一的に扱う。
  * `${...}` は全て runtime slot 化できる場合のみ登録する (plan.md §29)。
@@ -1981,6 +2006,40 @@ export function qstyle(
       log(`optimization=${optimization} backend=${backend} mode=${config.mode} dev=${isDev}`);
     },
 
+    configureServer(server): void {
+      // <link rel="stylesheet"> からの直接リクエスト (`/virtual:qstyle/*.css`) は
+      // vite の raw css 経路に乗らない (virtual module は fs 解決できず 404 になる)。
+      // middleware で plugin の load と同じ内容を text/css として返す。
+      server.middlewares.use((req, res, next) => {
+        const url: string = (req.url ?? '').split('?')[0] ?? '';
+        if (!url.startsWith('/virtual:qstyle/') || !url.endsWith('.css')) {
+          next();
+          return;
+        }
+        const resolved = resolveQstyleId(url);
+        if (resolved === null) {
+          next();
+          return;
+        }
+        void server.pluginContainer
+          .load(resolved)
+          .then((css) => {
+            if (typeof css !== 'string') {
+              res.statusCode = 404;
+              res.end();
+              return;
+            }
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'text/css; charset=utf-8');
+            res.end(css);
+          })
+          .catch(() => {
+            res.statusCode = 500;
+            res.end();
+          });
+      });
+    },
+
     buildStart(): void {
       collected.clear();
       moduleToAtoms.clear();
@@ -2404,11 +2463,14 @@ export function qstyle(
           }
         } else {
           // ids が空 (全て inline 化) の場合は class 属性を出さない。
-          newHead =
-            `${head2}${ids.length > 0 ? `class="${ids.join(' ')}"` : ''}` +
-            (styleEntries !== null && !hasStyleProp
-              ? `${ids.length > 0 ? ' ' : ''}style={{ ${styleEntries} }}`
-              : '');
+          // head2 の末尾が attr 直後 (非空白) の場合は区切りを入れる。
+          const sep: string = /\s$/.test(head2) ? '' : ' ';
+          const classPart: string = ids.length > 0 ? `class="${ids.join(' ')}"` : '';
+          const stylePart: string =
+            styleEntries !== null && !hasStyleProp
+              ? `${classPart !== '' ? ' ' : ''}style={{ ${styleEntries} }}`
+              : '';
+          newHead = `${head2}${sep}${classPart}${stylePart}`;
         }
         return newHead;
       };
@@ -2423,15 +2485,31 @@ export function qstyle(
         condSegments: readonly string[],
       ): boolean => {
         const tagStart: number = Math.max(code.lastIndexOf('<', occStart), 0);
-        const head: string = code.slice(tagStart, occStart);
-        const newHead: string | null = spliceTag(head, ids, styleEntries, condSegments);
-        if (newHead === null) {
+        // head は開始タグ全体 ('>' 直前まで)。css prop より後ろの class / style
+        // 属性もマージ対象にするため (クラス重複の出力を防ぐ)。
+        const gt: number | null = findOpeningTagGt(code, occStart);
+        if (gt === null) {
+          noteSkipped('cannot find tag end; left untouched');
+          return false;
+        }
+        let head: string =
+          code.slice(tagStart, occStart) + code.slice(exprClose, gt);
+        // 自己閉じ '/' は attr 追記の邪魔になるため外し、最後に付け直す。
+        let selfClose = false;
+        const headTrimmed: string = head.trimEnd();
+        if (headTrimmed.endsWith('/')) {
+          selfClose = true;
+          head = headTrimmed.slice(0, -1);
+        }
+        const newHeadBody: string | null = spliceTag(head, ids, styleEntries, condSegments);
+        if (newHeadBody === null) {
           noteSkipped('cannot safely merge into existing style prop; left untouched');
           return false;
         }
+        const newHead: string = selfClose ? `${newHeadBody.trimEnd()} /` : newHeadBody;
         edits.push({
           start: tagStart,
-          end: exprClose,
+          end: gt,
           newText: newHead,
           srcLine: originalLineOf(code, occStart),
         });
