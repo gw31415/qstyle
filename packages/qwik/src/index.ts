@@ -1,5 +1,7 @@
 // @qstyle/qwik — MVP authoring API surface (plan.md §19-24)。
 // Milestone 2 以降で transform 本体を実装する。現時点では型 + runtime stub。
+export { lowerStyleObject } from './object.js';
+export type { Diagnostic, LowerOptions, LoweredStyle } from './object.js';
 export interface StyleHandle {
   readonly __qstyleBrand: 'StyleHandle';
 }

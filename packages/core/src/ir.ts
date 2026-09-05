@@ -40,6 +40,7 @@ export type StyleNode = StaticAtom | ResidualRuleNode;
 export type ResidualReason =
   | 'unsupported-selector'
   | 'unsupported-at-rule'
+  | 'unsupported-value'
   | 'shorthand-ordering'
   | 'source-order-sensitive'
   | 'unsupported-syntax'
