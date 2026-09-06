@@ -124,3 +124,75 @@ function chunkOf(manifest: StyleManifest | null, atomId: string): string | null 
   }
   return null;
 }
+
+/** chunk の route 分類 (R2)。usage graph の逆引きで 1 route → route-local / 複数 → shared。 */
+export type ChunkClassification = 'route-local' | 'shared' | 'unrouted';
+
+/** chunk report の 1 行分 (plan.md R1.8: fileName × bytes × classification × routes × members 数)。 */
+export interface ChunkReportEntry {
+  readonly fileName: string;
+  readonly bytes: number;
+  readonly classification: ChunkClassification;
+  readonly routes: readonly string[];
+  readonly members: number;
+}
+
+/** backend 種別 + chunk 表の report (R1.8)。 */
+export interface ChunkReport {
+  readonly backend: string;
+  readonly chunks: readonly ChunkReportEntry[];
+}
+
+/**
+ * `__chunkPlans` (CssAssetChunk) 等の chunk plan 一覧から report を組む。
+ * @qstyle/vite への依存を作らないよう構造的部分型で受ける。fileName 昇順で決定的に並べる。
+ */
+export function buildChunkReport(input: {
+  readonly backend: string;
+  readonly chunks: readonly {
+    readonly fileName: string;
+    readonly bytes: number;
+    readonly classification?: string | undefined;
+    readonly routes?: readonly string[] | undefined;
+    /** members は配列 (CssAssetChunk) でも件数 (事前集計) でもよい。 */
+    readonly members: readonly unknown[] | number;
+  }[];
+}): ChunkReport {
+  const chunks: ChunkReportEntry[] = input.chunks.map((chunk) => ({
+    fileName: chunk.fileName,
+    bytes: chunk.bytes,
+    classification: isClassification(chunk.classification) ? chunk.classification : 'unrouted',
+    routes: [...(chunk.routes ?? [])].sort(),
+    members: typeof chunk.members === 'number' ? chunk.members : chunk.members.length,
+  }));
+  chunks.sort((a, b) => (a.fileName < b.fileName ? -1 : a.fileName > b.fileName ? 1 : 0));
+  return { backend: input.backend, chunks };
+}
+
+/**
+ * chunk report を文字列化する (R1.8)。
+ * 例:
+ * ```
+ * chunk report (backend: css-asset, chunks: 2)
+ *   assets/qstyle.q_a1b2c3d4.css  bytes: 312  route-local  routes: /
+ *   units: 2
+ * ```
+ * 1 chunk 2 行 (属性行 + units 行) にして、長い route 列でも折返しを汚さない。
+ */
+export function formatChunkReport(report: ChunkReport): string {
+  const lines: string[] = [
+    `chunk report (backend: ${report.backend}, chunks: ${report.chunks.length})`,
+  ];
+  for (const chunk of report.chunks) {
+    const routes: string = chunk.routes.length > 0 ? chunk.routes.join(', ') : '(unrouted)';
+    lines.push(
+      `  ${chunk.fileName}  bytes: ${String(chunk.bytes)}  ${chunk.classification}  routes: ${routes}`,
+      `    units: ${String(chunk.members)}`,
+    );
+  }
+  return lines.join('\n');
+}
+
+function isClassification(value: unknown): value is ChunkClassification {
+  return value === 'route-local' || value === 'shared' || value === 'unrouted';
+}

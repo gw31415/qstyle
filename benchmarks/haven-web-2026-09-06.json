@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "dist": "/Users/ama/container_env/haven-web/dist",
+  "generatedAt": "2026-09-06T05:20:35.610Z",
+  "css": {
+    "fileCount": 4,
+    "totalBytes": 349,
+    "totalGzipBytes": 380,
+    "files": [
+      {
+        "name": "assets/qstyle.q_583460de.css",
+        "bytes": 63,
+        "gzipBytes": 83
+      },
+      {
+        "name": "assets/qstyle.q_c197c33f.css",
+        "bytes": 59,
+        "gzipBytes": 79
+      },
+      {
+        "name": "assets/qstyle.q_e3553d3d.css",
+        "bytes": 161,
+        "gzipBytes": 135
+      },
+      {
+        "name": "assets/qstyle.q_e42b0856.css",
+        "bytes": 66,
+        "gzipBytes": 83
+      }
+    ]
+  },
+  "routes": [
+    {
+      "route": "/",
+      "assetCount": 2,
+      "bytes": 224,
+      "gzipBytes": 218,
+      "assets": [
+        "assets/qstyle.q_583460de.css",
+        "assets/qstyle.q_e3553d3d.css"
+      ]
+    },
+    {
+      "route": "/settings",
+      "assetCount": 2,
+      "bytes": 227,
+      "gzipBytes": 218,
+      "assets": [
+        "assets/qstyle.q_e3553d3d.css",
+        "assets/qstyle.q_e42b0856.css"
+      ]
+    },
+    {
+      "route": "/terminal",
+      "assetCount": 2,
+      "bytes": 220,
+      "gzipBytes": 214,
+      "assets": [
+        "assets/qstyle.q_c197c33f.css",
+        "assets/qstyle.q_e3553d3d.css"
+      ]
+    }
+  ],
+  "units": {
+    "count": 4
+  },
+  "embeddedUnitIds": {
+    "unique": 4,
+    "occurrences": 8,
+    "jsFileCount": 65
+  },
+  "warnings": []
+}

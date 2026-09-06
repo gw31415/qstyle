@@ -2,9 +2,10 @@
 //
 // R1.4: `<QstyleLinks />` — 現在 route の style assets を `<link rel="stylesheet">`
 //   として SSR/SSG の HTML に焼き込む component。root layout に 1 つ置くだけでよい。
-// R1.5: `useQstyleRouteStyles()` — client navigation を監視し、遷移先 route の
-//   assets を `./client` の `ensureStylesheet` で注入する (link 注入の実体は共通)。
-// R1.7: `prefetch` prop — `./prefetch` の prefetchRouteStyles による先読み。
+// R1.5: client navigation 監視 — 遷移先 route の assets を link 注入する。
+//   `qstyleRouteBootstrap` (自己完結 sync QRL) が担う。`<QstyleLinks />` が内部で
+//   `useVisibleTaskQrl` 登録するため通常は直接使わない。
+// R1.7: `prefetch` prop — bootstrap が meta marker から戦略を読んで先読みする。
 //
 // manifest の取得は 2 経路 (§3.3 R1.4):
 // - SSG (in-process render): vite plugin (qstyle:css-asset) が generateBundle で設定する
@@ -24,11 +25,11 @@
 // prebuilt dist と同じく `componentQrl` / `useVisibleTaskQrl` + `inlinedQrl` を使い、
 // closure は inlinedQrl の capture array → fn 内で `_captures` 経由で読む。
 
-import { inlinedQrl, isDev, type Component, type JSXOutput, type TaskCtx } from '@qwik.dev/core';
-import { _captures, componentQrl, useVisibleTaskQrl } from '@qwik.dev/core/internal';
-import { useLocation, type RouteLocation } from '@qwik.dev/router';
+import { inlinedQrl, isDev, type Component, type JSXOutput } from '@qwik.dev/core';
+import { _qrlSync, componentQrl, useVisibleTaskQrl } from '@qwik.dev/core/internal';
+import { useLocation } from '@qwik.dev/router';
 import { clientBaseUrl, ensureStylesheet, resolveAssetUrl } from './client.js';
-import { prefetchRouteStyles, type RouteStylePrefetch } from './prefetch.js';
+import type { RouteStylePrefetch } from './prefetch.js';
 
 /** `qstyle.routes.json` の 1 entry (build が emit する shape。§3.2 R1.3)。 */
 export interface QstyleRouteEntry {
@@ -175,64 +176,242 @@ export async function loadRouteStyles(pathname: string): Promise<readonly string
   return hrefs;
 }
 
-/** SSR/SSG 描画用の href。server 側では絶対 URL を組めないため root 相対で組む。 */
-function assetHref(asset: string): string {
+/** build base (`/` 始まり・`/` 終わり)。SSR 焼き込みと client 解決で共有する。 */
+function assetBase(): string {
   const env: unknown = (import.meta as unknown as { env?: unknown }).env;
   const base: string =
     typeof env === 'object' && env !== null && 'BASE_URL' in env
       ? String((env as { readonly BASE_URL?: unknown }).BASE_URL ?? '/')
       : '/';
   const withLeading: string = base.startsWith('/') ? base : `/${base}`;
-  const withTrailing: string = withLeading.endsWith('/') ? withLeading : `${withLeading}/`;
-  return `${withTrailing}${asset}`;
+  return withLeading.endsWith('/') ? withLeading : `${withLeading}/`;
+}
+
+/** SSR/SSG 描画用の href。server 側では絶対 URL を組めないため root 相対で組む。 */
+function assetHref(asset: string): string {
+  return `${assetBase()}${asset}`;
+}
+
+/** bootstrap (sync QRL) への設定伝達用 meta marker の name。 */
+const PREFETCH_MARKER = 'qstyle:prefetch';
+
+/**
+ * R1.5/R1.7: client navigation 監視 + prefetch の実体。`useVisibleTaskQrl` に
+ * `_qrlSync` で登録する自己完結 bootstrap。
+ *
+ * なぜ sync QRL か: 本 package は qwik optimizer を通らず tsdown で build されるため、
+ * `inlinedQrl` タスクは chunk 解決不能で SSR/SSG シリアライズ時に Q14
+ * (qrlMissingChunk) で落ちる。sync QRL は fn source が HTML に埋め込まれて
+ * resume されるため server serializable。
+ *
+ * 自己完結の制約 (破ると client で名前解決できず crash する):
+ * - module scope の import / closure 変数を参照しない (DOM + 引数 + local のみ)。
+ *   下の source-lint test (`qstyleRouteBootstrap` の toString 検査) が保証する。
+ * - 設定 (prefetch 戦略) は `<QstyleLinks />` が描画する meta marker から読む。
+ *   (sync QRL は capture を持てないため)
+ * - manifest 取得・link 注入の規則は `./client` + `./prefetch` と同値に保つ
+ *   (data-qstyle-href 規則、失敗時 crash なし)。共通化は import になるため
+ *   あえて複製している。
+ */
+export function qstyleRouteBootstrap(): void {
+  // 設定は meta marker から読む。base は marker の data-qstyle-base
+  // (build 時 BASE_URL。document.baseURI は nested route でずれるため使わない)。
+  const marker: Element | null = document.querySelector('meta[name="qstyle:prefetch"]');
+  const getMarkerAttr = (name: string): string | null =>
+    marker !== null && typeof marker.getAttribute === 'function'
+      ? marker.getAttribute(name)
+      : null;
+  const rawBase: string | null = getMarkerAttr('data-qstyle-base');
+  const basePath: string =
+    rawBase !== null && rawBase.startsWith('/')
+      ? rawBase.endsWith('/')
+        ? rawBase
+        : `${rawBase}/`
+      : '/';
+  const origin: string = location.origin;
+  const toUrl = (file: string): string | null => {
+    try {
+      return new URL(file, origin + basePath).toString();
+    } catch {
+      return null;
+    }
+  };
+  const base: string = origin + basePath;
+  let manifestPromise: Promise<{ entries: readonly unknown[] } | null> | null = null;
+  const loadManifest = (): Promise<{ entries: readonly unknown[] } | null> => {
+    if (manifestPromise === null) {
+      manifestPromise = fetch(new URL('qstyle.routes.json', base).toString())
+        .then((res: Response): Promise<unknown> | null => (res.ok ? res.json() : null))
+        .then((value: unknown): { entries: readonly unknown[] } | null => {
+          if (typeof value !== 'object' || value === null) return null;
+          const record = value as { version?: unknown; entries?: unknown };
+          if (record.version !== 1 || !Array.isArray(record.entries)) return null;
+          return { entries: record.entries };
+        })
+        .catch((): null => null);
+    }
+    return manifestPromise;
+  };
+  /** 読み込み中の href。bootstrap と ensureModuleStyles の競合二重追加を防ぐ。 */
+  const pending = new Map<string, Promise<void>>();
+  const hasLink = (href: string): boolean => {    if (
+      document.querySelector(`link[data-qstyle-href="${href.replace(/"/g, '%22')}"]`) !== null
+    ) {
+      return true;
+    }
+    const existing: NodeListOf<HTMLLinkElement> = document.querySelectorAll(
+      'link[data-qstyle-href]',
+    );
+    for (const link of existing) {
+      const marked: string | null = link.getAttribute('data-qstyle-href');
+      if (marked === null) continue;
+      try {
+        if (new URL(marked, base).toString() === href) return true;
+      } catch {
+        // 不正 URL は比較から除外するだけ (crash しない)
+      }
+    }
+    return false;
+  };
+  const ensure = (href: string): Promise<void> => {
+    if (hasLink(href)) return Promise.resolve();
+    const ongoing: Promise<void> | undefined = pending.get(href);
+    if (ongoing !== undefined) return ongoing;
+    const load: Promise<void> = new Promise<void>((resolve: () => void) => {
+      // 二重検査: 解決待ちの間に他経路 (ensureModuleStyles 等) が追加済みの可能性。
+      if (hasLink(href)) {
+        resolve();
+        return;
+      }
+      const link: HTMLLinkElement = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.setAttribute('data-qstyle-href', href);
+      link.onload = (): void => resolve();
+      link.onerror = (): void => resolve();
+      document.head.appendChild(link);
+    });
+    pending.set(href, load);
+    void load.then((): void => {
+      pending.delete(href);
+    });
+    return load;
+  };
+  const assetsFor = (entries: readonly unknown[], pathname: string): string[] => {
+    const path: string = pathname.length === 0 ? '/' : pathname;
+    const candidates: readonly string[] =
+      path === '/'
+        ? ['/']
+        : path.endsWith('/')
+          ? [path, path.slice(0, -1)]
+          : [path, `${path}/`];
+    for (const candidate of candidates) {
+      for (const entry of entries) {
+        if (typeof entry !== 'object' || entry === null) continue;
+        const record = entry as { route?: unknown; assets?: unknown };
+        if (record.route !== candidate || !Array.isArray(record.assets)) continue;
+        return record.assets.filter(
+          (asset: unknown): asset is string => typeof asset === 'string',
+        );
+      }
+    }
+    return [];
+  };
+  const applyAssets = (assets: readonly string[]): void => {
+    const hrefs: string[] = [];
+    for (const asset of assets) {
+      const href: string | null = toUrl(asset);
+      if (href !== null && !hrefs.includes(href)) hrefs.push(href);
+    }
+    void Promise.all(hrefs.map((href: string): Promise<void> => ensure(href)));
+  };
+  const applyRoute = (pathname: string): void => {
+    void loadManifest().then((manifest): void => {
+      if (manifest === null) return;
+      applyAssets(assetsFor(manifest.entries, pathname));
+    });
+  };
+  // navigation 監視: Qwik City の client nav は history API を使う。
+  const historyRef = history;
+  const origPushState = historyRef.pushState;
+  const origReplaceState = historyRef.replaceState;
+  historyRef.pushState = function (
+    ...args: Parameters<History['pushState']>
+  ): ReturnType<History['pushState']> {
+    const result: ReturnType<History['pushState']> = origPushState.apply(this, args);
+    applyRoute(location.pathname);
+    return result;
+  };
+  historyRef.replaceState = function (
+    ...args: Parameters<History['replaceState']>
+  ): ReturnType<History['replaceState']> {
+    const result: ReturnType<History['replaceState']> = origReplaceState.apply(this, args);
+    applyRoute(location.pathname);
+    return result;
+  };
+  window.addEventListener('popstate', (): void => applyRoute(location.pathname));
+  // idle 発火時点の route を初回適用する。
+  applyRoute(location.pathname);
+  const strategy: string = getMarkerAttr('content') ?? 'none';
+  if (strategy === 'load') {
+    const schedule: (callback: () => void) => void =
+      typeof requestIdleCallback === 'function'
+        ? (callback: () => void): void => {
+            requestIdleCallback((): void => callback());
+          }
+        : (callback: () => void): void => {
+            setTimeout(callback, 200);
+          };
+    schedule((): void => {
+      void loadManifest().then((manifest): void => {
+        if (manifest === null) return;
+        const all: string[] = [];
+        for (const entry of manifest.entries) {
+          if (typeof entry !== 'object' || entry === null) continue;
+          const assets: unknown = (entry as { assets?: unknown }).assets;
+          if (!Array.isArray(assets)) continue;
+          for (const asset of assets) {
+            if (typeof asset === 'string') all.push(asset);
+          }
+        }
+        applyAssets(all);
+      });
+    });
+  } else if (strategy === 'hover') {
+    document.addEventListener('pointerover', (event: Event): void => {
+      const target: unknown = event.target;
+      if (typeof target !== 'object' || target === null) return;
+      const closest: unknown = (target as { closest?: unknown }).closest;
+      if (typeof closest !== 'function') return;
+      const anchor: unknown = (closest as (selector: string) => unknown).call(target, 'a[href]');
+      if (typeof anchor !== 'object' || anchor === null) return;
+      const href: unknown = (anchor as { getAttribute?: unknown }).getAttribute;
+      if (typeof href !== 'function') return;
+      const hrefValue: unknown = (href as (name: string) => unknown).call(anchor, 'href');
+      if (typeof hrefValue !== 'string' || hrefValue.length === 0) return;
+      let pathname: string | null = null;
+      try {
+        const url: URL = new URL(hrefValue, base);
+        if (url.origin === location.origin) pathname = url.pathname;
+      } catch {
+        return;
+      }
+      if (pathname === null) return;
+      applyRoute(pathname);
+    });
+  }
 }
 
 /**
- * R1.5: client navigation loader。`useLocation().url.pathname` の変更を監視し、
- * 変更先 route の assets を link 注入する。`<QstyleLinks />` が内部で呼ぶため
+ * R1.5: client navigation loader。`<QstyleLinks />` が内部で呼ぶため
  * 通常は直接使わない (単体で有効化したい場合のみ export)。
- * dev (import.meta.env.DEV) では per-module CSS pipeline が styles を担うため no-op。
- *
- * useVisibleTask$ の precompiled 相当 (useVisibleTaskQrl) を使う。この component は
- * 視覚要素を持たないため、既定の intersection-observer 戦略だと発火が host element
- * の可視性に依存してしまう。document-idle で発火させ (eager 不要)、発火後は track に
- * より navigation ごとに再実行される。
  */
 export function useQstyleRouteStyles(prefetch: RouteStylePrefetch = 'none'): void {
-  const loc = useLocation();
-  useVisibleTaskQrl(
-    inlinedQrl(
-      (ctx: TaskCtx): void => {
-        const captured: readonly [RouteLocation, RouteStylePrefetch] | null = _captures as
-          | readonly [RouteLocation, RouteStylePrefetch]
-          | null;
-        if (captured === null) return;
-        const [capturedLoc, strategy]: readonly [RouteLocation, RouteStylePrefetch] = captured;
-        if (isDev) return;
-        let disposed: boolean = false;
-        let dispose: (() => void) | null = null;
-        const activatePrefetch = (): void => {
-          if (strategy === 'none') return;
-          void loadRouteManifest().then((manifest: QstyleRouteManifest | null): void => {
-            if (manifest === null || disposed || typeof document === 'undefined') return;
-            dispose?.();
-            dispose = prefetchRouteStyles(document, manifest, { strategy });
-          });
-        };
-        const pathname: string = ctx.track((): string => capturedLoc.url.pathname);
-        void loadRouteStyles(pathname);
-        activatePrefetch();
-        ctx.cleanup((): void => {
-          disposed = true;
-          dispose?.();
-          dispose = null;
-        });
-      },
-      'useQstyleRouteStyles_useVisibleTask_qstyle',
-      [loc, prefetch],
-    ),
-    { strategy: 'document-idle' },
-  );
+  // Q14 対応: inlinedQrl タスクは SSR/SSG で serialize 不能のため、自己完結な
+  // sync QRL (`qstyleRouteBootstrap`) を登録する。prefetch 戦略は DOM marker
+  // (`<QstyleLinks />` が描画) 経由で bootstrap が読むため、ここでは引数を使わない。
+  void prefetch;
+  useVisibleTaskQrl(_qrlSync(qstyleRouteBootstrap), { strategy: 'document-idle' });
 }
 
 /** `<QstyleLinks />` の props (componentQrl の Record 制約のため type alias で定義)。 */
@@ -250,35 +429,87 @@ export type QstyleLinksProps = {
  * 描画する component。root layout に置く (R1.5 loader / R1.7 prefetch も内部で有効化)。
  *
  * - SSG (in-process): `globalThis.__QSTYLE_ROUTES__` から同期解決し link を焼き込む
- * - SSR runtime (非 SSG): render が同期のため globalThis がなければ何も描かず、
- *   client 側 (useQstyleRouteStyles) で補完する二段構え
- * - dev または manifest が空: 何も描画しない
+ * - SSR runtime: entry.ssr が `qstyle.routes.json` を globalThis へ復元するため、
+ *   同じく link を焼き込む。復元不能時は marker のみ描き、client bootstrap が
+ *   初回適用する二段構え
+ * - client navigation 後も SSR 焼き link を維持する: client render では manifest が
+ *   同期取得できないため、Qwik 管理下の link (`data-qstyle-vdom` 付き) のみ
+ *   描き直す。bootstrap / ensureModuleStyles 追加の orphan を描き直すと
+ *   reconciler が対応付けできず重複するため触らない (orphan は有効なまま残る)。
+ *   未使用 chunk の残留は許容する (content-hash + immutable のため再訪時は cache hit)。
+ *   client では `loc.url` を読まず route 変更を購読しない (再 render が
+ *   bootstrap 追加の marker 無し DOM と不整合して重複 link を生むため)。
+ *   navigation 後の追加は bootstrap (pushState 監視) が担う
+ * - prefetch 戦略と build base は meta marker で client に伝える
+ *   (sync QRL は capture を持てないため)
+ * - dev: 何も描画しない
  * - href は root 相対 (asset 名に build base を結合)。client 側注入の絶対 URL との
- *   二重適用は `./client` hasStylesheet の base 解決比較で排除される
+ *   二重適用は base 解決比較で排除される
  */
 export const QstyleLinks: Component<QstyleLinksProps> = componentQrl(
-  inlinedQrl(
-    (props: QstyleLinksProps): JSXOutput => {
-      const loc = useLocation();
-      useQstyleRouteStyles(props.prefetch ?? 'none');
-      if (isDev) return null;
-      const manifest: QstyleRouteManifest | null = readSyncRouteManifest();
-      if (manifest === null || manifest.entries.length === 0) return null;
-      const assets: readonly string[] = resolveRouteLinks(manifest, loc.url.pathname);
-      if (assets.length === 0) return null;
+  inlinedQrl((props: QstyleLinksProps): JSXOutput => {
+    // hook は無条件に呼ぶ (呼び出し順の安定)。loc.url の読み取りは server のみ:
+    // client で読むと route 変更の購読になり、navigation 毎に再 render される。
+    // 再 render 出力と bootstrap 追加の marker 無し DOM が reconciler で対応
+    // 付かず重複 link が増えるため、client では loc に触らない。
+    const loc = useLocation();
+    useQstyleRouteStyles(props.prefetch ?? 'none');
+    if (isDev) return null;
+    const marker = (
+      <meta
+        name={PREFETCH_MARKER}
+        content={props.prefetch ?? 'none'}
+        data-qstyle-base={assetBase()}
+      />
+    );
+    if (typeof document !== 'undefined') {
+      // client render: Qwik 管理下の link (data-qstyle-vdom 付き。SSR 焼き or
+      // 過去 render 分) のみ描き直す。bootstrap / ensureModuleStyles が追加した
+      // orphan (attr 無し) を描き直すと reconciler が対応付けできず重複するため
+      // 触らない (orphan は styles として有効なまま残る)。
+      // DOM 読みは縮小方向のみ (同一内容の再出力) のため render の純粋性を壊さない。
+      const kept: string[] = [];
+      const seen = new Set<string>();
+      for (const link of [...document.querySelectorAll('link[data-qstyle-vdom]')]) {
+        const href: string | null = link.getAttribute('data-qstyle-href');
+        if (href === null || seen.has(href)) continue;
+        seen.add(href);
+        kept.push(href);
+      }
       return (
         <>
+          {marker}
+          {kept.map((href: string) => (
+            <link
+              key={href}
+              rel="stylesheet"
+              href={href}
+              data-qstyle-href={href}
+              data-qstyle-vdom="1"
+            />
+          ))}
+        </>
+      );
+    }
+    const manifest: QstyleRouteManifest | null = readSyncRouteManifest();
+    if (manifest !== null && manifest.entries.length > 0) {
+      const assets: readonly string[] = resolveRouteLinks(manifest, loc.url.pathname);
+      return (
+        <>
+          {marker}
           {assets.map((asset: string) => (
             <link
               key={asset}
               rel="stylesheet"
               href={assetHref(asset)}
               data-qstyle-href={assetHref(asset)}
+              data-qstyle-vdom="1"
             />
           ))}
         </>
       );
-    },
-    'QstyleLinks_component_qstyle',
-  ),
+    }
+    // manifest が無い SSR (復元不能): marker のみ。client bootstrap が初回適用する。
+    return marker;
+  }, 'QstyleLinks_component_qstyle'),
 );

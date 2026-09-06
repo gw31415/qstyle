@@ -36,6 +36,7 @@ import type {
   UsageGraph,
 } from '@qstyle/core';
 import { composeCssProp, lowerStyleObject, lowerTaggedTemplate } from '@qstyle/qwik';
+import { buildChunkReport, formatChunkReport } from '@qstyle/inspector';
 import { groupDuplicateCss } from './dedup.js';
 import type { StyleHandle, StyleObject } from '@qstyle/qwik';
 
@@ -57,6 +58,10 @@ export interface QstyleOptions {
     readonly strategy?: 'usage-cluster' | undefined;
     readonly minChunkBytes?: number | undefined;
     readonly maxChunkBytes?: number | undefined;
+    /** clustering v2 (R3): merge を許す最小 jaccard similarity (default 0.3)。 */
+    readonly similarityThreshold?: number | undefined;
+    /** clustering v2 (R3): 1 request の等価 overhead bytes (default 512)。 */
+    readonly requestOverheadBytes?: number | undefined;
   } | undefined;
   /** route -> その route が描画する module path の list (§45 route manifest の逆引き元)。 */
   readonly routes?: Record<string, readonly string[]> | undefined;
@@ -76,6 +81,8 @@ export interface CollectedStyle {
  * css-asset backend の出力 chunk 1 件 (plan.md §3.4 R1.1/R1.2)。
  * `fileName` は最終 serialize (chunk 内 dedup 適用後) bytes の content hash から決まる。
  */
+export type ChunkClassification = 'route-local' | 'shared' | 'unrouted';
+
 export interface CssAssetChunk {
   /** ChunkPlan と同じ pack id (member 集合のみから導出)。 */
   readonly id: string;
@@ -87,6 +94,35 @@ export interface CssAssetChunk {
   readonly fileName: string;
   /** 最終 CSS text (§39 v1 dedup 適用済み)。emit される内容そのもの。 */
   readonly cssText: string;
+  /** R2: chunk の route 分類。users が張る route が 1 つなら route-local、複数なら shared。 */
+  readonly classification: ChunkClassification;
+  /** R2: chunk の unit を使う component 群が張る route の sorted union (未配線なら空)。 */
+  readonly routes: readonly string[];
+}
+
+/**
+ * R2: chunk (unit の集合) を route 分類する純関数。usage graph の
+ * style -> component -> route を逆順に辿り、到達する route の集合から
+ * 1 route → route-local / 複数 → shared / 0 route (routes option 未配線) → unrouted
+ * を決める。決定性のため route は常に sort する。
+ */
+export function classifyChunkUnits(
+  graph: UsageGraph,
+  members: readonly string[],
+): { classification: ChunkClassification; routes: readonly string[] } {
+  const routes: Set<string> = new Set<string>();
+  for (const unitId of members) {
+    for (const component of graph.styleToComponents.get(unitId) ?? []) {
+      for (const route of graph.componentToRoutes.get(component) ?? []) {
+        routes.add(route);
+      }
+    }
+  }
+  const sorted: readonly string[] = [...routes].sort();
+  return {
+    classification: sorted.length === 1 ? 'route-local' : sorted.length > 1 ? 'shared' : 'unrouted',
+    routes: sorted,
+  };
 }
 
 /** css-asset backend の build 計画。unit → fileName の逆引き index を持つ (§3.4 R1.3)。 */
@@ -305,7 +341,12 @@ type ParsedObjectResult = {
  * template, comment) に遭遇したら null を返す。eval は使わない。
  * 動的な値を含む nested object は静的 record から親 key ごと除外する。
  */
-function parseStyleObjectImpl(src: string, withDynamics: boolean): ParsedStyleLiteral | null {
+function parseStyleObjectImpl(
+  src: string,
+  withDynamics: boolean,
+  /** R4 diagnostics: parse 不能になった具体的な理由 (nested ternary 等) を積む。 */
+  notes?: string[] | undefined,
+): ParsedStyleLiteral | null {
   const parser: { index: number } = { index: 0 };
   const dynamics: DynamicStyleValue[] = [];
   const conditionals: ConditionalStyleValue[] = [];
@@ -426,11 +467,17 @@ function parseStyleObjectImpl(src: string, withDynamics: boolean): ParsedStyleLi
     if (q < 0) return false;
     const condSource: string = src.slice(start, q).trim();
     if (!isSafeCondition(condSource)) return false;
-    // 条件式内のネスト ternary は未対応。
-    if (findTernaryQuestion(condSource) >= 0) return false;
+    // 条件式内のネスト ternary は未対応 (R4: 理由を明示する)。
+    if (findTernaryQuestion(condSource) >= 0) {
+      notes?.push(
+        `nested ternary in condition of style '${path}' is not supported; left untouched`,
+      );
+      return false;
+    }
     parser.index = q + 1;
     const whenTrue: string | number | null | undefined = parseStaticLiteralBranch();
     if (whenTrue === undefined) {
+      noteNestedTernaryValue(src, start, q, path, notes);
       parser.index = start;
       return false;
     }
@@ -442,6 +489,7 @@ function parseStyleObjectImpl(src: string, withDynamics: boolean): ParsedStyleLi
     parser.index += 1;
     const whenFalse: string | number | null | undefined = parseStaticLiteralBranch();
     if (whenFalse === undefined) {
+      noteNestedTernaryValue(src, start, q, path, notes);
       parser.index = start;
       return false;
     }
@@ -628,9 +676,13 @@ export function parseStyleObjectLiteral(src: string): Record<string, unknown> | 
 /**
  * 静的宣言と動的な値 (identifier / member chain) を分離して抽出する (M5c)。
  * 対応不能な構文は null を返し、呼び出し側は当該出現箇所を触らない。
+ * R4: notes を渡すと parse 不能になった具体的な理由 (nested ternary 等) が積まれる。
  */
-export function parseStyleObjectLiteralWithDynamics(src: string): ParsedStyleLiteral | null {
-  return parseStyleObjectImpl(src, true);
+export function parseStyleObjectLiteralWithDynamics(
+  src: string,
+  notes?: string[] | undefined,
+): ParsedStyleLiteral | null {
+  return parseStyleObjectImpl(src, true, notes);
 }
 
 /**
@@ -1052,16 +1104,24 @@ interface CssHandleEntry {
  * 他 lib の `css()` を誤って拾わないよう `@qstyle/qwik` import がある module のみ対象。
  * dynamic 値・residual・error を含むものは登録しない (correctness first)。
  */
-function collectCssHandles(code: string): Map<string, CssHandleEntry> {
+function collectCssHandles(
+  code: string,
+  /** R4 diagnostics: 登録を見送った具体的な理由 (第2引数等) を積む。 */
+  notes?: string[] | undefined,
+): Map<string, CssHandleEntry> {
   const table = new Map<string, CssHandleEntry>();
   if (!/from\s*['"]@qstyle\/qwik['"]/.test(code)) return table;
-  collectObjectHandles(code, table);
+  collectObjectHandles(code, table, notes);
   collectTemplateHandles(code, table);
   return table;
 }
 
 /** `const X = css({ ... })` 形を集める。 */
-function collectObjectHandles(code: string, table: Map<string, CssHandleEntry>): void {
+function collectObjectHandles(
+  code: string,
+  table: Map<string, CssHandleEntry>,
+  notes?: string[] | undefined,
+): void {
   const re = /(?:export\s+)?\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*css\s*\(/g;
   let m: RegExpExecArray | null;
   for (;;) {
@@ -1078,8 +1138,13 @@ function collectObjectHandles(code: string, table: Map<string, CssHandleEntry>):
     const braceOpen: number = parenOpen + 1 + openMatch[0].length - 1;
     const braceClose: number = findMatchingBrace(code, braceOpen);
     if (braceClose < 0) continue;
-    // object literal の後に第2引数等があれば未対応。
-    if (code.slice(braceClose + 1, parenClose).trim() !== '') continue;
+    // object literal の後に第2引数等があれば未対応 (R4: 理由を明示する)。
+    if (code.slice(braceClose + 1, parenClose).trim() !== '') {
+      notes?.push(
+        `css() handle '${name}' has extra arguments; only a single object argument is supported, left untouched`,
+      );
+      continue;
+    }
     const literal: string = code.slice(braceOpen, braceClose + 1);
     const parsed: ParsedStyleLiteral | null = parseStyleObjectLiteralWithDynamics(literal);
     // module-scope handle は完全 static のみ (dynamic/conditional は利用側 scope がない)。
@@ -1395,6 +1460,54 @@ function splitTopLevelOp(text: string, op: string): string[] | null {
   return parts;
 }
 
+/**
+ * R4 diagnostics: ternary 値の parse 失敗がネスト ternary 起因かを調べ、起因なら note を積む。
+ * 値全体 (start から top-level ',' / '}' まで) のうち最初の `?` (位置 q) 以降にも
+ * top-level `?` があればネスト ternary と判定する。
+ */
+function noteNestedTernaryValue(
+  src: string,
+  start: number,
+  q: number,
+  path: string,
+  notes: string[] | undefined,
+): void {
+  if (notes === undefined) return;
+  const end: number = scanValueEnd(src, start);
+  if (end < 0 || q + 1 >= end) return;
+  if (findTernaryQuestion(src.slice(q + 1, end)) >= 0) {
+    notes.push(`nested ternary in value of style '${path}' is not supported; left untouched`);
+  }
+}
+
+/** declaration value の終端 (top-level ',' または '}') を返す。危険な字句では -1。 */
+function scanValueEnd(src: string, from: number): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = from; i < src.length; i += 1) {
+    const ch: string = src[i] ?? '';
+    if (quote !== null) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '`') return -1;
+    if (ch === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) return -1;
+    if (ch === '[' || ch === '{' || ch === '(') depth += 1;
+    else if (ch === ']' || ch === '}' || ch === ')') {
+      if (depth === 0) return ch === '}' ? i : -1;
+      depth -= 1;
+    } else if (depth === 0 && ch === ',') {
+      return i;
+    }
+  }
+  return -1;
+}
+
 /** ternary としての top-level `?` を探す (`?.` / `??` を除く)。なければ -1。 */
 function findTernaryQuestion(text: string): number {
   let depth = 0;
@@ -1515,17 +1628,24 @@ interface ResolvedPart {
   readonly cond?: string | undefined;
 }
 
-/** 単一 contribution (bare handle / inline object) を解決する。dynamic 同伴可、条件は呼び出し側で付与する。 */
+/** 単一 contribution (bare handle / inline object) を解決する。dynamic 同伴可、条件は呼び出し側で付与する。
+ * R4: notes を渡すと (条件付き適用の文脈でのみ) 拒否理由を積む。 */
 function resolveSingleStatic(
   expr: string,
   handles: ReadonlyMap<string, CssHandleEntry>,
+  notes?: string[] | undefined,
 ): ResolvedPart | null {
   const text: string = expr.trim();
   if (/^[A-Za-z_$][\w$]*$/.test(text)) {
     const entry: CssHandleEntry | undefined = handles.get(text);
     if (entry === undefined) return null;
     // parametric を含む handle の条件付き適用は style var の条件分岐が必要なため未対応。
-    if (entry.parametric !== undefined) return null;
+    if (entry.parametric !== undefined) {
+      notes?.push(
+        `conditional application of parametric css handle '${text}' is not supported; left untouched`,
+      );
+      return null;
+    }
     if (entry.record !== undefined) {
       // 空 object は寄与なし (条件式の評価だけ残すため全体を untouched にする)。
       return Object.keys(entry.record).length === 0 ? null : { record: entry.record, dynamics: [], conditionals: [], compounds: [] };
@@ -1535,9 +1655,19 @@ function resolveSingleStatic(
   }
   if (text.startsWith('{')) {
     if (findMatchingBrace(text, 0) !== text.length - 1) return null;
-    const parsed: ParsedStyleLiteral | null = parseStyleObjectLiteralWithDynamics(text);
-    // nested conditional は外側条件との組合せが複雑なため未対応。
-    if (parsed === null || parsed.conditionals.length > 0) return null;
+    const parseNotes: string[] = [];
+    const parsed: ParsedStyleLiteral | null = parseStyleObjectLiteralWithDynamics(
+      text,
+      parseNotes,
+    );
+    if (notes !== undefined) notes.push(...parseNotes);
+    // nested conditional は外側条件との組合せが複雑なため未対応 (R4: 理由を明示)。
+    if (parsed === null || parsed.conditionals.length > 0) {
+      if (parsed !== null && parsed.conditionals.length > 0) {
+        notes?.push('nested conditional in css composition is not supported; left untouched');
+      }
+      return null;
+    }
     if (Object.keys(parsed.record).length === 0 && parsed.dynamics.length === 0 && parsed.compounds.length === 0) return null;
     return { record: parsed.record, dynamics: parsed.dynamics, conditionals: [], compounds: parsed.compounds };
   }
@@ -1550,18 +1680,23 @@ function isSafeCondition(cond: string): boolean {
   return !/\/\/|\/\*/.test(cond);
 }
 
-/** `cond && X` を解決する。X は単一 static のみ。条件付きでない場合は null (fallthrough 用)。 */
+/** `cond && X` を解決する。X は単一 static のみ。条件付きでない場合は null (fallthrough 用)。
+ * R4: notes に拒否理由 (条件式内 nested ternary 等) を積む。 */
 function tryResolveConditionalAnd(
   text: string,
   handles: ReadonlyMap<string, CssHandleEntry>,
+  notes?: string[] | undefined,
 ): ResolvedPart[] | null {
   const segments: string[] | null = splitTopLevelOp(text, '&&');
   if (segments === null || segments.length < 2) return null;
   const last: string = (segments[segments.length - 1] ?? '').trim();
   const cond: string = segments.slice(0, -1).join('&&').trim();
   if (!isSafeCondition(cond) || last === '') return null;
-  if (findTernaryQuestion(cond) >= 0) return null;
-  const target: ResolvedPart | null = resolveSingleStatic(last, handles);
+  if (findTernaryQuestion(cond) >= 0) {
+    notes?.push('nested ternary in condition of css composition is not supported; left untouched');
+    return null;
+  }
+  const target: ResolvedPart | null = resolveSingleStatic(last, handles, notes);
   if (target === null) return null;
   return [{ ...target, cond }];
 }
@@ -1570,11 +1705,12 @@ function tryResolveConditionalAnd(
 function resolveBranchStatic(
   branch: string,
   handles: ReadonlyMap<string, CssHandleEntry>,
+  notes?: string[] | undefined,
 ): ResolvedPart[] | null {
   if (/^(?:false|null|undefined)$/.test(branch.trim())) return [];
-  const single: ResolvedPart | null = resolveSingleStatic(branch, handles);
+  const single: ResolvedPart | null = resolveSingleStatic(branch, handles, notes);
   if (single !== null) return [single];
-  const parts: ResolvedPart[] | null = resolveCssExprParts(branch, handles);
+  const parts: ResolvedPart[] | null = resolveCssExprParts(branch, handles, notes);
   if (parts === null) return null;
   if (
     parts.some(
@@ -1593,14 +1729,21 @@ function resolveBranchStatic(
 function tryResolveConditionalTernary(
   text: string,
   handles: ReadonlyMap<string, CssHandleEntry>,
+  notes?: string[] | undefined,
 ): ResolvedPart[] | null {
   const split = splitTopLevelTernary(text);
-  if (split === null) return null;
+  if (split === null) {
+    // ternary があるのに分割不能 = ネスト ternary (R4: 理由を明示)。
+    if (findTernaryQuestion(text) >= 0) {
+      notes?.push('nested ternary in css composition is not supported; left untouched');
+    }
+    return null;
+  }
   if (!isSafeCondition(split.cond)) return null;
   // 両枝が同一テキストなら条件は意味を持たないため無条件として解決する。
-  if (split.whenTrue === split.whenFalse) return resolveBranchStatic(split.whenTrue, handles);
-  const whenTrue: ResolvedPart[] | null = resolveBranchStatic(split.whenTrue, handles);
-  const whenFalse: ResolvedPart[] | null = resolveBranchStatic(split.whenFalse, handles);
+  if (split.whenTrue === split.whenFalse) return resolveBranchStatic(split.whenTrue, handles, notes);
+  const whenTrue: ResolvedPart[] | null = resolveBranchStatic(split.whenTrue, handles, notes);
+  const whenFalse: ResolvedPart[] | null = resolveBranchStatic(split.whenFalse, handles, notes);
   if (whenTrue === null || whenFalse === null) return null;
   // 両枝とも空なら条件評価だけが残るため untouched (評価を落とさない)。
   if (whenTrue.length === 0 && whenFalse.length === 0) return null;
@@ -1653,6 +1796,7 @@ function crossModuleHint(code: string, inner: string): string | null {
 function resolveCssExprParts(
   inner: string,
   handles: ReadonlyMap<string, CssHandleEntry>,
+  notes?: string[] | undefined,
 ): ResolvedPart[] | null {
   const text: string = inner.trim();
   if (text === '') return null;
@@ -1678,12 +1822,13 @@ function resolveCssExprParts(
   }
   // 条件付き (CMP-007): `cond && X` / `cond ? A : B`。解決できなければ
   // fallthrough し、通常の単一・配列・inline 解決を試みる (文字列内の && 等)。
+  // R4: notes には条件付き解決に固有の拒否理由が積まれる (fallthrough で成功すれば無視される)。
   if (text.includes('&&')) {
-    const cond: ResolvedPart[] | null = tryResolveConditionalAnd(text, handles);
+    const cond: ResolvedPart[] | null = tryResolveConditionalAnd(text, handles, notes);
     if (cond !== null) return cond;
   }
   if (findTernaryQuestion(text) >= 0) {
-    const cond: ResolvedPart[] | null = tryResolveConditionalTernary(text, handles);
+    const cond: ResolvedPart[] | null = tryResolveConditionalTernary(text, handles, notes);
     if (cond !== null) return cond;
   }
   if (/^[A-Za-z_$][\w$]*$/.test(text)) {
@@ -1717,7 +1862,7 @@ function resolveCssExprParts(
     for (const element of elements) {
       // trailing comma 由来の空要素は無視する。
       if (element.trim() === '') continue;
-      const part: ResolvedPart[] | null = resolveCssExprParts(element, handles);
+      const part: ResolvedPart[] | null = resolveCssExprParts(element, handles, notes);
       if (part === null) return null;
       out.push(...part);
     }
@@ -1917,6 +2062,28 @@ function validateQstyleOptions(options: QstyleOptions): void {
       `[qstyle] unknown chunking.strategy ${JSON.stringify(chunkStrategy)}; expected 'usage-cluster'.`,
     );
   }
+  const similarityThreshold: number | undefined = options.chunking?.similarityThreshold;
+  if (
+    similarityThreshold !== undefined &&
+    (!Number.isFinite(similarityThreshold) || similarityThreshold < 0 || similarityThreshold > 1)
+  ) {
+    throw new Error(
+      `[qstyle] chunking.similarityThreshold must be a finite number in [0, 1], got ${JSON.stringify(
+        similarityThreshold,
+      )}.`,
+    );
+  }
+  const requestOverheadBytes: number | undefined = options.chunking?.requestOverheadBytes;
+  if (
+    requestOverheadBytes !== undefined &&
+    (!Number.isFinite(requestOverheadBytes) || requestOverheadBytes < 0)
+  ) {
+    throw new Error(
+      `[qstyle] chunking.requestOverheadBytes must be a finite number >= 0, got ${JSON.stringify(
+        requestOverheadBytes,
+      )}.`,
+    );
+  }
 }
 
 /**
@@ -1992,15 +2159,60 @@ export function qstyle(
   // plan.md §51: buildStart で 1 instance に reset する。plugin 生成直後の
   // instance は単体テスト (buildStart を呼ばない) 用。
   let graph: UsageGraph = createUsageGraph();
+  // DIA-009: 同一 module × 同一理由の untouched warning は plugin instance の
+  // 存続期間 (同一 session) 内で 1 回だけ表示する。dev の再 transform や
+  // incremental rebuild で同じ warning が繰り返し出るのを防ぐ。build 通行ごとに
+  // reset しない — 同一 session の再変換では同一理由を再表示しないため。
+  const warnedKeys = new Set<string>();
   const chunkOptions: ChunkOptions = {
     minChunkBytes: options.chunking?.minChunkBytes ?? DEFAULT_CHUNK_OPTIONS.minChunkBytes,
     maxChunkBytes: options.chunking?.maxChunkBytes ?? DEFAULT_CHUNK_OPTIONS.maxChunkBytes,
+    ...(options.chunking?.similarityThreshold !== undefined
+      ? { similarityThreshold: options.chunking.similarityThreshold }
+      : {}),
+    ...(options.chunking?.requestOverheadBytes !== undefined
+      ? { requestOverheadBytes: options.chunking.requestOverheadBytes }
+      : {}),
   };
 
-  /** module id / route option の path を usage graph の component id (basename) へ正規化する。 */
+  /** module id / route option の path を usage graph の component id へ正規化する。
+   * config.root からの相対 path (Qwik City 規約の `about/index.tsx` 同士を区別
+   * できる)。root 不明 (unit test 等) では従来どおり basename に落ちる。 */
+  let rootDir = '';
   function moduleKey(id: string): string {
-    const slash: number = id.lastIndexOf('/');
-    return slash < 0 ? id : id.slice(slash + 1);
+    const norm: string = id.replace(/\\/g, '/');
+    if (rootDir !== '' && (norm === rootDir || norm.startsWith(`${rootDir}/`))) {
+      return norm === rootDir ? '' : norm.slice(rootDir.length + 1);
+    }
+    const slash: number = norm.lastIndexOf('/');
+    return slash < 0 ? norm : norm.slice(slash + 1);
+  }
+
+  /**
+   * route option の module path が transform module id に一致するか。
+   * root 相対の完全一致のほか、basename 指定 (従来互換。haven-web 式) と
+   * suffix 指定 (`/src/routes/about/index.tsx` が絶対 id の末尾に一致) を受ける。
+   */
+  function modulePathMatches(moduleId: string, optionPath: string): boolean {
+    const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^\.\//, '');
+    const mod: string = norm(moduleId);
+    const opt: string = norm(optionPath).replace(/^\//, '');
+    if (mod === opt) return true;
+    const key: string = moduleKey(mod);
+    if (key === opt) return true;
+    return key.endsWith(`/${opt}`) || mod.endsWith(`/${opt}`);
+  }
+
+  /**
+   * transform 前 (wireRoutes 時点) の暫定 component key。transform 後の実 key
+   * (`moduleKey`) と一致させる: root 既知なら root 相対 (leading `/` を落とす)、
+   * 未知なら basename (従来動作)。
+   */
+  function routeOptionKey(optionPath: string): string {
+    const norm: string = optionPath.replace(/\\/g, '/').replace(/^\.\//, '');
+    if (rootDir !== '') return norm.replace(/^\//, '');
+    const slash: number = norm.lastIndexOf('/');
+    return slash < 0 ? norm : norm.slice(slash + 1);
   }
 
   /**
@@ -2031,12 +2243,16 @@ export function qstyle(
       // §39 v1 を chunk 内 (hash 計算前) に適用する — 出力 bytes と hash を一致させる。
       const finalText: string = groupDuplicateCss(joined, meta);
       const fileName: string = `assets/${assetFileName('qstyle', chunkHash(finalText))}`;
+      // R2: usage graph から chunk の route 分類 (route-local / shared / unrouted) を導出。
+      const { classification, routes } = classifyChunkUnits(graph, plan.members);
       chunks.push({
         id: plan.id,
         members: plan.members,
         bytes: plan.bytes,
         fileName,
         cssText: finalText,
+        classification,
+        routes,
       });
       for (const unitId of plan.members) unitToFile.set(unitId, fileName);
     }
@@ -2060,9 +2276,8 @@ export function qstyle(
     for (const route of Object.keys(options.routes ?? {})) {
       const assets = new Set<string>();
       for (const modulePath of options.routes?.[route] ?? []) {
-        const key: string = moduleKey(modulePath);
         for (const [mod, atoms] of moduleToAtoms) {
-          if (moduleKey(mod) === key) {
+          if (modulePathMatches(mod, modulePath)) {
             for (const atom of atoms) assets.add(atom);
           }
         }
@@ -2082,12 +2297,23 @@ export function qstyle(
     return routeManifestCache;
   };
 
-  /** options.routes (route -> module paths) を component -> route の逆引きへ張る (冪等)。 */
+  /** options.routes (route -> module paths) を component -> route の逆引きへ張る (冪等)。
+   * moduleToAtoms の実 id と suffix 照合するため、buildStart 時点 (transform 前) は
+   * option path を暫定 key として張り、transform 時に実 id でも張り直す。 */
   function wireRoutes(target: UsageGraph): void {
     for (const route of Object.keys(options.routes ?? {})) {
       const modules: readonly string[] = options.routes?.[route] ?? [];
       for (const modulePath of modules) {
-        recordComponentRoute(target, moduleKey(modulePath), route);
+        let matched = false;
+        for (const mod of moduleToAtoms.keys()) {
+          if (modulePathMatches(mod, modulePath)) {
+            recordComponentRoute(target, moduleKey(mod), route);
+            matched = true;
+          }
+        }
+        if (!matched) {
+          recordComponentRoute(target, routeOptionKey(modulePath), route);
+        }
       }
     }
   }
@@ -2138,6 +2364,8 @@ export function qstyle(
     configResolved(config: ResolvedConfig): void {
       // serve mode では dev パイプラインを使う (per-module CSS + CSS HMR)。
       isDev = config.command === 'serve';
+      // moduleKey の root 相対化用 (同名 basename の区別。未設定なら basename 動作)。
+      rootDir = (config.root ?? '').replace(/\\/g, '/').replace(/\/$/, '');
       // §45: route -> module の逆引きを usage graph へ張る (routes option がなければ何もしない)。
       wireRoutes(graph);
       log(`optimization=${optimization} backend=${backend} mode=${config.mode} dev=${isDev}`);
@@ -2267,7 +2495,9 @@ export function qstyle(
         }
       }
       if (!code.includes('css')) return null;
-      const handles: ReadonlyMap<string, CssHandleEntry> = collectCssHandles(code);
+      // R4: handle 登録を見送った理由 (css() 第2引数等) も user visible にする。
+      const handleNotes: string[] = [];
+      const handles: ReadonlyMap<string, CssHandleEntry> = collectCssHandles(code, handleNotes);
       // cost-based 用の構造カウント。always では不要。
       // 同一 module 内容からは常に同一判定になり、traversal 順に依存しない (HASH-002)。
       const structCounts: Map<string, number> | null =
@@ -2299,6 +2529,9 @@ export function qstyle(
       const provenanceSource: string = id;
       const newUnitIds: string[] = [];
       const seen = new Set<string>();
+      // ponytail: 行頭表は module 毎に 1 回だけ作る。occurrence 毎に作ると O(n^2)
+      // (PERF-002/DED-014: 10k occurrences で 16s → 0.3s)。
+      const origStarts: readonly number[] = lineStarts(code);
       // 置換は original 座標の edits として集め、最後に一括適用する (source map 用)。
       // (a)/(b) の occurrence 検出はどちらも original code 基準 (互いの span は重ならない)。
       const edits: CodeEdit[] = [];
@@ -2311,6 +2544,7 @@ export function qstyle(
         }
         if (diagnosticsMode === 'warning') skippedReasons.push(reason);
       };
+      for (const note of handleNotes) noteSkipped(note);
 
       /**
        * delivery unit を収集する (plan.md §38: 適用単位で 1 class / 1 rule に merge)。
@@ -2659,7 +2893,7 @@ export function qstyle(
           start: tagStart,
           end: gt,
           newText: newHead,
-          srcLine: originalLineOf(code, occStart),
+          srcLine: lineAt(origStarts, occStart),
         });
         return true;
       };
@@ -2669,9 +2903,14 @@ export function qstyle(
       for (let k: number = occurrences.length - 1; k >= 0; k -= 1) {
         const occ: CssPropOccurrence = occurrences[k] as CssPropOccurrence;
         const literal: string = code.slice(occ.braceOpen, occ.braceClose);
-        const parsed: ParsedStyleLiteral | null = parseStyleObjectLiteralWithDynamics(literal);
+        // R4: parse 不能時も具体的な理由 (nested ternary 等) を diagnostic に出す。
+        const parseNotes: string[] = [];
+        const parsed: ParsedStyleLiteral | null = parseStyleObjectLiteralWithDynamics(
+          literal,
+          parseNotes,
+        );
         if (parsed === null) {
-          noteSkipped('cannot parse css object literal; left untouched');
+          noteSkipped(parseNotes[0] ?? 'cannot parse css object literal; left untouched');
           continue;
         }
         const { record, dynamics, conditionals, compounds } = parsed;
@@ -2899,10 +3138,14 @@ export function qstyle(
         for (let k: number = exprOccurrences.length - 1; k >= 0; k -= 1) {
           const occ: CssExprOccurrence = exprOccurrences[k] as CssExprOccurrence;
           const inner: string = code.slice(occ.exprOpen + 1, occ.exprClose - 1);
-          const parts: ResolvedPart[] | null = resolveCssExprParts(inner, handles);
+          // R4: 条件付き解決に固有の拒否理由 (nested ternary / parametric handle の
+          // 条件付き適用 / nested conditional) を具体的な warning に出す。
+          const cssNotes: string[] = [];
+          const parts: ResolvedPart[] | null = resolveCssExprParts(inner, handles, cssNotes);
           if (parts === null) {
             noteSkipped(
-              crossModuleHint(code, inner) ??
+              cssNotes[0] ??
+                crossModuleHint(code, inner) ??
                 'cannot statically resolve css composition; left untouched',
             );
             continue;
@@ -3656,6 +3899,9 @@ export function qstyle(
       // vite/qwik が出す (§48。lazy bundle は css も直前読み込み)。ここでは metadata
       // (chunk plan) のみ記録し、直接 emit しない。
       const assetPlan: CssAssetPlan | null = backend === 'css-asset' ? buildCssAssetPlan() : null;
+      // R2: 両 backend とも chunkPlans に classification / routes を記録する。
+      // css-asset は CssAssetChunk に含まれる値をそのまま、qwik-native は planChunks の
+      // 結果に usage graph 由来の分類を付与する。
       const chunkPlans: readonly (ChunkPlan | CssAssetChunk)[] =
         assetPlan !== null
           ? assetPlan.chunks.map(({ cssText: _cssText, ...meta }) => meta)
@@ -3663,7 +3909,7 @@ export function qstyle(
               graph,
               [...collected.values()].map((s) => ({ id: s.id, bytes: s.cssText.length })),
               chunkOptions,
-            );
+            ).map((plan) => ({ ...plan, ...classifyChunkUnits(graph, plan.members) }));
       const styleManifest: StyleManifest = buildRouteStyleManifest();
       const ctx = this as unknown as { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void };
       ctx.emitFile({
@@ -3765,6 +4011,10 @@ export function qstyle(
         });
         log(`css-asset chunk ${chunk.id} -> ${chunk.fileName} (${chunk.members.length} units)`);
       }
+      // R1.8: backend 種別 + chunk plan (members × bytes × fileName × 分類) の report 表示。
+      log(
+        `\n${formatChunkReport(buildChunkReport({ backend, chunks: plan.chunks }))}`,
+      );
       // unit id → fileName index (R1.6 案 B)。key は sort して決定性を保つ。
       const units: Record<string, readonly string[]> = {};
       for (const unitId of [...plan.unitToFile.keys()].sort()) {

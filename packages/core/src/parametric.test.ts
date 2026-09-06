@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createStaticAtom } from './atom.js';
+import type { ParametricAtom } from './ir.js';
 import {
   createParametricAtom,
   hashParametricAtom,
@@ -37,6 +38,39 @@ describe('parametric atom', () => {
       slots: [{ valueType: 'length' }],
     });
     expect(hashParametricAtom(w)).not.toBe(hashParametricAtom(h));
+  });
+
+  it('dedupes to one ParametricAtom across different runtime slot values (DED-010)', () => {
+    // runtime 構造が同じで値だけ違う宣言群 (width: 1px / 42px) は同一
+    // ParametricAtom になる。slot 値 (fallback) は semantic hash に含まれず、
+    // serialize された要素側 (var() 参照) にのみ現れる。
+    const make = (fallback: string | undefined): ParametricAtom =>
+      createParametricAtom({
+        property: 'width',
+        parts: [{ kind: 'slot', slotIndex: 0 }, { kind: 'text', text: 'px' }],
+        slots: [
+          {
+            valueType: 'integer',
+            ...(fallback === undefined ? {} : { fallback }),
+          },
+        ],
+      });
+    const one: ParametricAtom = make('1');
+    const two: ParametricAtom = make('42');
+    const fallbackless: ParametricAtom = make(undefined);
+    // 値違い (fallback の有無も含む) で hash は同一 = 単一 atom に dedup される。
+    expect(hashParametricAtom(one)).toBe(hashParametricAtom(two));
+    expect(hashParametricAtom(one)).toBe(hashParametricAtom(fallbackless));
+    // slot id も構造 hash 由来のため同一。
+    expect(one.slots[0]?.id).toBe(two.slots[0]?.id);
+    expect(one.slots[0]?.id).toBe(fallbackless.slots[0]?.id);
+    // 値は要素側: serialize された CSS text の var() 第 2 引数にのみ現れる。
+    expect(serializeParametricDecl(one)).toBe(`width:var(${one.slots[0]?.id}, 1)px`);
+    expect(serializeParametricDecl(two)).toBe(`width:var(${two.slots[0]?.id}, 42)px`);
+    // 値を除いて比較すれば宣言構造は完全に同一。
+    expect(serializeParametricDecl(one).replace(', 1)', ')')).toBe(
+      serializeParametricDecl(fallbackless),
+    );
   });
 
   it('serializes compound values with var() refs (DYN-006/007)', () => {

@@ -91,10 +91,13 @@ describe('planChunks', () => {
     recordUsage(graph, 'a', 'Button');
     recordUsage(graph, 'b', 'Button');
     recordUsage(graph, 'b', 'Card');
+    // clustering v2: cost model (requestOverheadBytes) が merge を許す設定で
+    // v1 と同じ「min 到達まで merge」を固定する (600 bytes pack は既定 512 では
+    // 無駄配信 bytes が overhead を超えるため merge しない)。
     const plans = planChunks(
       graph,
       [input('a', 600), input('b', 600)],
-      { minChunkBytes: 1024, maxChunkBytes: 4096 },
+      { minChunkBytes: 1024, maxChunkBytes: 4096, requestOverheadBytes: 1024 },
     );
     expect(plans).toHaveLength(1);
     expect(plans[0]!.members).toEqual(['a', 'b']);
@@ -138,6 +141,12 @@ describe('planChunks', () => {
     expect(() => planChunks(graph, [], { minChunkBytes: -1, maxChunkBytes: 100 })).toThrow(
       /minChunkBytes/,
     );
+    expect(() =>
+      planChunks(graph, [], { minChunkBytes: 0, maxChunkBytes: 100, similarityThreshold: 1.5 }),
+    ).toThrow(/similarityThreshold/);
+    expect(() =>
+      planChunks(graph, [], { minChunkBytes: 0, maxChunkBytes: 100, requestOverheadBytes: -1 }),
+    ).toThrow(/requestOverheadBytes/);
   });
 
   it('keeps a large identical-usage set in a single pack (PERF-006)', () => {
@@ -265,5 +274,66 @@ describe('planChunks CHUNK suite (plan.md §5.3)', () => {
     // unit を落とさない。
     expect(first.reduce((count, plan) => count + plan.members.length, 0)).toBe(1000);
     for (const plan of first) expect(plan.bytes).toBeLessThanOrEqual(4096);
+  });
+
+  // clustering v2 (R3) 共通 fixture: route A local unit (小) + 両 route 共有 unit (小)。
+  // local の users は home.tsx のみ、shared の users は 4 module → jaccard = 1/5 = 0.2
+  // (v1 は similarity > 0 で merge していた。RTE-001 違反候補)。
+  function routeLocalSharedGraph() {
+    const graph = createUsageGraph();
+    recordUsage(graph, 'u-local', 'home.tsx');
+    recordUsage(graph, 'u-shared', 'home.tsx');
+    recordUsage(graph, 'u-shared', 'nav.tsx');
+    recordUsage(graph, 'u-shared', 'foot.tsx');
+    recordUsage(graph, 'u-shared', 'about.tsx');
+    recordComponentRoute(graph, 'home.tsx', '/');
+    recordComponentRoute(graph, 'about.tsx', '/about');
+    return graph;
+  }
+
+  it('CHUNK-007: does not merge a route-local pack into a shared pack below similarityThreshold (RTE-001)', () => {
+    const graph = routeLocalSharedGraph();
+    const styles = [input('u-local', 100), input('u-shared', 600)];
+    const plans = planChunks(graph, styles, DEFAULT_CHUNK_OPTIONS);
+    // similarity 0.2 < 0.3 → merge 拒否。route-local unit は自 route の chunk に留まる。
+    expect(memberSets(plans)).toEqual([['u-local'], ['u-shared']]);
+    expect(routeSignature(graph, 'u-local')).toEqual(['/']);
+    expect(routeSignature(graph, 'u-shared')).toEqual(['/', '/about']);
+    // DEFAULT_CHUNK_OPTIONS には v2 既定値が入っている。
+    expect(DEFAULT_CHUNK_OPTIONS.similarityThreshold).toBe(0.3);
+    expect(DEFAULT_CHUNK_OPTIONS.requestOverheadBytes).toBe(512);
+  });
+
+  it('CHUNK-008: similarityThreshold 0 restores v1 behavior (merge on similarity > 0)', () => {
+    const graph = routeLocalSharedGraph();
+    const styles = [input('u-local', 100), input('u-shared', 600)];
+    // threshold 0 かつ cost 許容 (min(100,600)=100 < 512) → v1 どおり merge する。
+    const plans = planChunks(graph, styles, {
+      ...DEFAULT_CHUNK_OPTIONS,
+      similarityThreshold: 0,
+    });
+    expect(plans).toHaveLength(1);
+    expect(plans[0]!.members).toEqual(['u-local', 'u-shared']);
+    expect(plans[0]!.bytes).toBe(700);
+  });
+
+  it('CHUNK-009: a larger requestOverheadBytes makes cost-blocked merges pass', () => {
+    const graph = createUsageGraph();
+    // jaccard({home}, {home, extra}) = 0.5 >= 0.3 だが、小 pack 700 bytes の
+    // 無駄配信が既定 overhead 512 を超えるため cost で拒否される。
+    recordUsage(graph, 'u-a', 'home.tsx');
+    recordUsage(graph, 'u-b', 'home.tsx');
+    recordUsage(graph, 'u-b', 'extra.tsx');
+    const styles = [input('u-a', 700), input('u-b', 700)];
+    expect(memberSets(planChunks(graph, styles, DEFAULT_CHUNK_OPTIONS))).toEqual([
+      ['u-a'],
+      ['u-b'],
+    ]);
+    const plans = planChunks(graph, styles, {
+      ...DEFAULT_CHUNK_OPTIONS,
+      requestOverheadBytes: 2048,
+    });
+    expect(plans).toHaveLength(1);
+    expect(plans[0]!.members).toEqual(['u-a', 'u-b']);
   });
 });

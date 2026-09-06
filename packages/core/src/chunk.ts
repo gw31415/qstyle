@@ -27,11 +27,28 @@ export interface ChunkOptions {
   readonly minChunkBytes: number;
   /** これを超える pack は分割する。 */
   readonly maxChunkBytes: number;
+  /**
+   * clustering v2 (§39 / R3): jaccard similarity がこの値未満の partner とは
+   * merge しない (default 0.3)。0 は v1 挙動 (similarity > 0 で merge) に戻す。
+   */
+  readonly similarityThreshold?: number;
+  /**
+   * clustering v2 (§40 cost model / R3): 1 request 追加の等価 overhead bytes。
+   * merge で無駄配信される bytes (unusedPenalty = merge 後 bytes - max(各々 bytes))
+   * がこれ以上なら merge しない (default 512)。
+   */
+  readonly requestOverheadBytes?: number;
 }
+
+/** v2 の既定値。module 定数にして DEFAULT_CHUNK_OPTIONS と mergePacks で共有する。 */
+const DEFAULT_SIMILARITY_THRESHOLD = 0.3;
+const DEFAULT_REQUEST_OVERHEAD_BYTES = 512;
 
 export const DEFAULT_CHUNK_OPTIONS: ChunkOptions = {
   minChunkBytes: 1024,
   maxChunkBytes: 32 * 1024,
+  similarityThreshold: DEFAULT_SIMILARITY_THRESHOLD,
+  requestOverheadBytes: DEFAULT_REQUEST_OVERHEAD_BYTES,
 };
 
 export interface ChunkPlan {
@@ -56,9 +73,11 @@ interface Pack {
  * - `maxChunkBytes` を超える group は member を (bytes desc, id asc) 順で first-fit する。
  *   単体で max を超える member は単独 pack になり、そこへは追い詰め追加しない。
  * - `minChunkBytes` 未満の pack は、最も類似 (jaccardSimilarity) した partner へ
- *   smallest-first で merge する。similarity が 0 の partner とは merge しない。
- *   merge しても `min` に届かない pack はそのまま残す — request 爆発は pack 粒度で、
- *   unused CSS は warning で扱い、ここで無理に統合しない。
+ *   smallest-first で merge する (clustering v2)。similarity が similarityThreshold
+ *   未満、または cost model (§40: requestOverheadBytes vs 無駄配信 bytes) が
+ *   合わない partner とは merge しない。merge しても `min` に届かない pack は
+ *   そのまま残す — request 爆発は pack 粒度で、unused CSS は warning で扱い、
+ *   ここで無理に統合しない。
  */
 export function planChunks(
   graph: UsageGraph,
@@ -114,6 +133,23 @@ function validateOptions(opts: ChunkOptions): void {
       )}); a pack could never satisfy both.`,
     );
   }
+  const threshold: number = opts.similarityThreshold ?? DEFAULT_SIMILARITY_THRESHOLD;
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    throw new Error(
+      `similarityThreshold must be a finite number in [0, 1], got ${String(
+        opts.similarityThreshold,
+      )}.`,
+    );
+  }
+  const requestOverheadBytes: number =
+    opts.requestOverheadBytes ?? DEFAULT_REQUEST_OVERHEAD_BYTES;
+  if (!Number.isFinite(requestOverheadBytes) || requestOverheadBytes < 0) {
+    throw new Error(
+      `requestOverheadBytes must be a finite number >= 0, got ${String(
+        opts.requestOverheadBytes,
+      )}.`,
+    );
+  }
 }
 
 /** max を超える group を first-fit descending で分割する。 */
@@ -151,10 +187,20 @@ function splitPack(pack: Pack, maxChunkBytes: number, bytesOf: Map<string, numbe
 }
 
 /**
- * min 未満の pack を類似 partner へ merge する。
- * merge 後に max を超えるならその partner は候補から外す (max は hard 制約)。
+ * min 未満の pack を類似 partner へ merge する (clustering v2 / R3)。
+ * - similarity (jaccard) が similarityThreshold 未満の partner とは merge しない。
+ *   (v1 互換の similarity > 0 条件は threshold 0 で再現される)
+ * - cost model (§40): merge により相手 route に無駄配信される bytes
+ *   (unusedPenalty = merge 後 bytes - max(各々 bytes) = 小さい方の bytes) が
+ *   requestOverheadBytes 以上なら saving <= 0 として merge しない。
+ *   RTE-001: route-local pack (users が単一 route に張る) は similarity が
+ *   threshold を超えない限り shared pack に merge されない (CHUNK-007 で固定)。
+ * - merge 後に max を超えるならその partner は候補から外す (max は hard 制約)。
  */
 function mergePacks(packs: Pack[], opts: ChunkOptions): Pack[] {
+  const threshold: number = opts.similarityThreshold ?? DEFAULT_SIMILARITY_THRESHOLD;
+  const requestOverheadBytes: number =
+    opts.requestOverheadBytes ?? DEFAULT_REQUEST_OVERHEAD_BYTES;
   const working: Pack[] = packs.slice();
   // partner が見つからず詰みになった pack。選択対象から外して停止させる。
   const stuck: Set<string> = new Set<string>();
@@ -168,8 +214,15 @@ function mergePacks(packs: Pack[], opts: ChunkOptions): Pack[] {
     for (const candidate of [...working].sort((a, b) => compare(packKey(a.members), packKey(b.members)))) {
       if (candidate === current) continue;
       const similarity: number = jaccardSimilarity(current.users, candidate.users);
+      // v1 の「similarity 0 とは merge しない」は threshold 0 でも維持される。
       if (similarity <= 0) continue;
+      if (similarity < threshold) continue;
       if (current.bytes + candidate.bytes > opts.maxChunkBytes) continue;
+      // §40 cost model: 1 request 減の利益 (requestOverheadBytes) が無駄配信 bytes
+      // (unusedPenalty) を上回らなければ merge しない。
+      const unusedPenalty: number =
+        current.bytes + candidate.bytes - Math.max(current.bytes, candidate.bytes);
+      if (requestOverheadBytes - unusedPenalty <= 0) continue;
       if (similarity <= bestSimilarity) continue;
       best = candidate;
       bestSimilarity = similarity;
@@ -220,7 +273,7 @@ function packId(members: readonly string[]): string {
 }
 
 function packKey(members: readonly string[]): string {
-  return [...members].sort().join(' ');
+  return [...members].sort().join('\u0000');
 }
 
 function sumBytes(members: readonly string[], bytesOf: Map<string, number>): number {

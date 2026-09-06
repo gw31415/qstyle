@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@qstyle/core": "workspace:^",
+    "@qstyle/inspector": "workspace:^",
     "@qstyle/qwik": "workspace:^"
   },
   "peerDependencies": {

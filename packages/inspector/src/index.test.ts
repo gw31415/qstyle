@@ -7,8 +7,18 @@ import {
   recordComponentRoute,
   recordSource,
   recordUsage,
+  routeSignature,
 } from '@qstyle/core';
-import { buildAtomReport, formatAtomReport, formatLegacyReport, formatResidualReport, summarizeManifest, summarizeResiduals } from './index.js';
+import {
+  buildAtomReport,
+  buildChunkReport,
+  formatAtomReport,
+  formatChunkReport,
+  formatLegacyReport,
+  formatResidualReport,
+  summarizeManifest,
+  summarizeResiduals,
+} from './index.js';
 
 describe('inspector', () => {
   it('formats atom report', () => {
@@ -164,5 +174,108 @@ describe('inspector', () => {
         '  /src/b.tsx: scoped(legacy) <- ./b.css?inline',
       ].join('\n'),
     );
+  });
+
+  describe('chunk report (R1.8 / R2)', () => {
+    /** css-asset backend の __chunkPlans 相当 (fileName × bytes × classification × routes × members)。 */
+    const planLike = [
+      {
+        id: 'pack_000001',
+        members: ['q_a', 'q_b'],
+        bytes: 312,
+        fileName: 'assets/qstyle.q_a1b2c3d4.css',
+        cssText: '...',
+        classification: 'route-local' as const,
+        routes: ['/'],
+      },
+      {
+        id: 'pack_000002',
+        members: ['q_c', 'q_d', 'q_e'],
+        bytes: 768,
+        fileName: 'assets/qstyle.q_e5f6a7b8.css',
+        cssText: '...',
+        classification: 'shared' as const,
+        routes: ['/about', '/'],
+      },
+    ];
+
+    it('builds a sorted chunk report with backend, classification, routes and member counts', () => {
+      const report = buildChunkReport({ backend: 'css-asset', chunks: planLike });
+      expect(report.backend).toBe('css-asset');
+      expect(report.chunks).toHaveLength(2);
+      // fileName 昇順で決定的に並ぶ。routes は sort 済み。
+      expect(report.chunks.map((c) => c.fileName)).toEqual([
+        'assets/qstyle.q_a1b2c3d4.css',
+        'assets/qstyle.q_e5f6a7b8.css',
+      ]);
+      const shared = report.chunks[1];
+      expect(shared?.classification).toBe('shared');
+      expect(shared?.routes).toEqual(['/', '/about']);
+      expect(shared?.members).toBe(3);
+      const local = report.chunks[0];
+      expect(local?.classification).toBe('route-local');
+      expect(local?.members).toBe(2);
+    });
+
+    it('normalizes missing classification/routes and numeric member counts', () => {
+      const report = buildChunkReport({
+        backend: 'qwik-native',
+        chunks: [{ fileName: 'x.css', bytes: 10, members: 7 }],
+      });
+      expect(report.chunks[0]?.classification).toBe('unrouted');
+      expect(report.chunks[0]?.routes).toEqual([]);
+      expect(report.chunks[0]?.members).toBe(7);
+    });
+
+    it('formats the report as a readable table (backend 種別 + chunk 表)', () => {
+      const out = formatChunkReport(buildChunkReport({ backend: 'css-asset', chunks: planLike }));
+      const lines = out.split('\n');
+      expect(lines[0]).toBe('chunk report (backend: css-asset, chunks: 2)');
+      expect(out).toContain('assets/qstyle.q_a1b2c3d4.css');
+      expect(out).toContain('bytes: 312');
+      expect(out).toContain('route-local');
+      expect(out).toContain('routes: /');
+      expect(out).toContain('shared');
+      expect(out).toContain('routes: /, /about');
+      expect(out).toContain('units: 3');
+    });
+
+    it('formats an empty plan without chunk rows', () => {
+      const out = formatChunkReport(buildChunkReport({ backend: 'css-asset', chunks: [] }));
+      expect(out).toBe('chunk report (backend: css-asset, chunks: 0)');
+    });
+
+    it('classifies units from the usage graph consistently with the planner wiring (R2)', () => {
+      // vite plugin の classifyChunkUnits と同じ逆引きが graph から組めることの inspector 側証明:
+      // report の routes は core の routeSignature (sorted union) と一致する。
+      const graph = createUsageGraph();
+      recordUsage(graph, 'q_a', 'home.tsx');
+      recordUsage(graph, 'q_b', 'shared.tsx');
+      recordUsage(graph, 'q_c', 'shared.tsx');
+      recordComponentRoute(graph, 'home.tsx', '/');
+      recordComponentRoute(graph, 'shared.tsx', '/');
+      recordComponentRoute(graph, 'shared.tsx', '/about');
+      const report = buildChunkReport({
+        backend: 'css-asset',
+        chunks: [
+          {
+            fileName: 'assets/qstyle.q_local.css',
+            bytes: 40,
+            classification: 'route-local',
+            routes: routeSignature(graph, 'q_a'),
+            members: ['q_a'],
+          },
+          {
+            fileName: 'assets/qstyle.q_shared.css',
+            bytes: 80,
+            classification: 'shared',
+            routes: routeSignature(graph, 'q_b'),
+            members: ['q_b', 'q_c'],
+          },
+        ],
+      });
+      expect(report.chunks[0]?.routes).toEqual(['/']);
+      expect(report.chunks[1]?.routes).toEqual(['/', '/about']);
+    });
   });
 });

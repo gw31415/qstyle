@@ -22,8 +22,8 @@
       "require": "./dist/client.cjs"
     },
     "./links": {
-      "import": "./dist/links.mjs",
-      "require": "./dist/links.cjs"
+      "import": "./dist/links.qwik.mjs",
+      "require": "./dist/links.qwik.cjs"
     },
     "./prefetch": {
       "import": "./dist/prefetch.mjs",
@@ -49,6 +49,7 @@
     "@qwik.dev/core": "^2.0.0-beta.43",
     "@qwik.dev/router": "^2.0.0-beta.43",
     "@types/node": "^26.4.1",
+    "fast-check": "^4.9.0",
     "publint": "^0.3.24",
     "tsdown": "catalog:",
     "typescript": "catalog:",

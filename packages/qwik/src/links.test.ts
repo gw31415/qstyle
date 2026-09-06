@@ -269,6 +269,135 @@ describe('QstyleLinks component (R1.4 module 境界)', () => {
     const links = await freshLinks();
     expect(links.QstyleLinks).toBeTypeOf('function');
     expect(links.useQstyleRouteStyles).toBeTypeOf('function');
+    expect(links.qstyleRouteBootstrap).toBeTypeOf('function');
+  });
+
+  it('qstyleRouteBootstrap is self-contained (Q14 guard: no module-scope references)', async (): Promise<void> => {
+    // sync QRL は fn source が HTML に埋め込まれて resume される。module scope の
+    // import / closure を参照すると client で名前解決できず crash する。
+    const links = await freshLinks();
+    const source: string = links.qstyleRouteBootstrap.toString();
+    // marker 名の一致 (rename 時の silent break 防止。bootstrap は module const を
+    // 参照できないため literal を持つ)。
+    expect(source).toContain('qstyle:prefetch');
+    for (const forbidden of [
+      '_captures',
+      'loadRouteStyles',
+      'loadRouteManifest',
+      'ensureStylesheet',
+      'resolveAssetUrl',
+      'prefetchRouteStyles',
+      'clientBaseUrl',
+      'parseRouteManifest',
+      'resolveRouteLinks',
+      'require(',
+      'import(',
+      'process.',
+      '__QSTYLE_ROUTES__',
+    ]) {
+      expect(source, `forbidden reference: ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it('qstyleRouteBootstrap injects current route styles and follows pushState navigation', async (): Promise<void> => {
+    const links = await freshLinks();
+    interface StubLink {
+      rel: string;
+      href: string;
+      onload: (() => void) | null;
+      onerror: (() => void) | null;
+      setAttribute: (name: string, value: string) => void;
+      getAttribute: (name: string) => string | null;
+    }
+    const injected: StubLink[] = [];
+    const makeLink = (): StubLink => {
+      const attrs = new Map<string, string>();
+      return {
+        rel: '',
+        href: '',
+        onload: null,
+        onerror: null,
+        setAttribute: (name: string, value: string): void => {
+          attrs.set(name, value);
+        },
+        getAttribute: (name: string): string | null => attrs.get(name) ?? null,
+      };
+    };
+    const metaStub = {
+      getAttribute: (name: string): string | null => {
+        if (name === 'content') return 'none';
+        if (name === 'data-qstyle-base') return '/app/';
+        return null;
+      },
+    };
+    vi.stubGlobal('document', {
+      baseURI: 'https://example.test/app/',
+      querySelector: (selector: string): unknown => {
+        if (selector.startsWith('meta[')) return metaStub;
+        const m: RegExpMatchArray | null = /data-qstyle-href="([^"]*)"/.exec(selector);
+        if (m === null) return null;
+        const href: string = (m[1] ?? '').replace(/%22/g, '"');
+        return (
+          injected.find(
+            (l) => l.href === href || l.getAttribute('data-qstyle-href') === href,
+          ) ?? null
+        );
+      },
+      querySelectorAll: (_selector: string): StubLink[] => injected,
+      createElement: (): StubLink => makeLink(),
+      head: {
+        appendChild: (link: StubLink): StubLink => {
+          injected.push(link);
+          queueMicrotask((): void => {
+            link.onload?.();
+          });
+          return link;
+        },
+      },
+      addEventListener: (): void => undefined,
+    });
+    let pathname = '/';
+    vi.stubGlobal('location', {
+      get pathname(): string {
+        return pathname;
+      },
+      origin: 'https://example.test',
+    });
+    const historyStub = {
+      pushState: (_data: unknown, _unused: string, url?: string): void => {
+        if (typeof url === 'string') pathname = new URL(url, 'https://example.test').pathname;
+      },
+      replaceState: (_data: unknown, _unused: string, _url?: string): void => undefined,
+    };
+    vi.stubGlobal('history', historyStub);
+    vi.stubGlobal('window', { addEventListener: (): void => undefined });
+    installRoutesManifest(MANIFEST_A);
+    links.qstyleRouteBootstrap();
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, 0);
+    });
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, 0);
+    });
+    // 初回適用: '/' の asset 1 件。
+    expect(injected.map((l) => l.href)).toEqual([
+      'https://example.test/app/assets/qstyle.root.css',
+    ]);
+    // pushState navigation で '/a' の assets が追加される (共有 chunk の重複なし)。
+    historyStub.pushState({}, '', '/a');
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, 0);
+    });
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, 0);
+    });
+    expect(injected.map((l) => l.href).sort()).toEqual(
+      [
+        'https://example.test/app/assets/qstyle.root.css',
+        'https://example.test/app/assets/qstyle.a.css',
+        'https://example.test/app/assets/qstyle.shared.css',
+      ].sort(),
+    );
   });
 });
 

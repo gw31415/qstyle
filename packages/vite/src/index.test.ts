@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { hashStaticAtom } from '@qstyle/core';
 import { lowerStyleObject } from '@qstyle/qwik';
 import {
@@ -1999,6 +1999,23 @@ describe('qstyle css-asset backend (plan.md §3.4 R1.1-R1.3/R1.6)', () => {
       expect(plan.id).toMatch(/^pack_[0-9a-f]{6}$/);
       expect(plan.members.length).toBeGreaterThan(0);
       expect(plan.fileName).toMatch(/^assets\/qstyle\.q_[0-9a-f]+\.css$/);
+    }
+  });
+
+  it('logs backend + chunk plan report on generateBundle when debug (R1.8 report 表示)', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      buildOnce(
+        { backend: 'css-asset', debug: true },
+        [{ id: '/src/ca-report.tsx', code: `export const A = () => <div css={{ display: 'flex' }} />;` }],
+      );
+      const logged: string = spy.mock.calls
+        .map((args) => args.map((a) => String(a)).join(' '))
+        .join('\n');
+      expect(logged).toContain('chunk report (backend: css-asset');
+      expect(logged).toMatch(/assets\/qstyle\.q_[0-9a-f]+\.css/);
+    } finally {
+      spy.mockRestore();
     }
   });
 
