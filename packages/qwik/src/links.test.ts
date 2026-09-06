@@ -335,7 +335,6 @@ describe('QstyleLinks component (R1.4 module 境界)', () => {
       fetchCalls.push(String(input));
       return Promise.reject(new Error('should not fetch'));
     });
-    let patched = false;
     vi.stubGlobal('document', {
       baseURI: 'https://example.test/app/',
       querySelector: (selector: string): null => {

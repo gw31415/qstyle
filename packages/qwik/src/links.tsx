@@ -246,10 +246,9 @@ export function qstyleRouteBootstrap(): void {
   // 何もせず抜ける (routes.json は存在しないため fetch すると 404 になる)。
   const marker: Element | null = document.querySelector('meta[name="qstyle:prefetch"]');
   if (marker === null) return;
+  // 以降 marker は非 null (上の early return で保証)。
   const getMarkerAttr = (name: string): string | null =>
-    marker !== null && typeof marker.getAttribute === 'function'
-      ? marker.getAttribute(name)
-      : null;
+    typeof marker.getAttribute === 'function' ? marker.getAttribute(name) : null;
   const rawBase: string | null = getMarkerAttr('data-qstyle-base');
   const basePath: string =
     rawBase !== null && rawBase.startsWith('/')

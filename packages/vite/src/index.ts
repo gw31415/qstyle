@@ -2506,22 +2506,27 @@ export function qstyle(
       // qwik dev が css module の `mod.file` (virtual module は `\0` 付き id) を
       // server.watcher.add へ渡し、Node の path 検証 (null byte 禁止) で即 throw →
       // dev server が落ちる実バグの回避。virtual module は disk に存在しないため
-      // 監視対象から除外して問題ない。
+      // 監視対象から除外して問題ない。二重 patch 防止の flag 付き
+      // (configureServer が複数 instance から呼ばれる構成でも安全)。
       const watcher = server.watcher as unknown as {
         add: (paths: unknown, ...rest: unknown[]) => unknown;
+        __qstyleWatchPatched?: boolean;
       };
-      const originalAdd = watcher.add.bind(watcher);
-      const drop = (p: unknown): boolean => typeof p === 'string' && p.includes('\0');
-      watcher.add = (paths: unknown, ...rest: unknown[]): unknown => {
-        if (typeof paths === 'string') {
-          if (drop(paths)) return watcher;
-        } else if (Array.isArray(paths)) {
-          const filtered: string[] = (paths as string[]).filter((p) => !drop(p));
-          if (filtered.length === 0) return watcher;
-          paths = filtered.length === 1 ? filtered[0] : filtered;
-        }
-        return originalAdd(paths, ...rest);
-      };
+      if (watcher.__qstyleWatchPatched !== true) {
+        watcher.__qstyleWatchPatched = true;
+        const originalAdd = watcher.add.bind(watcher);
+        const drop = (p: unknown): boolean => typeof p === 'string' && p.includes('\0');
+        watcher.add = (paths: unknown, ...rest: unknown[]): unknown => {
+          if (typeof paths === 'string') {
+            if (drop(paths)) return watcher;
+          } else if (Array.isArray(paths)) {
+            const filtered: string[] = (paths as string[]).filter((p) => !drop(p));
+            if (filtered.length === 0) return watcher;
+            paths = filtered.length === 1 ? filtered[0] : filtered;
+          }
+          return originalAdd(paths, ...rest);
+        };
+      }
       // <link rel="stylesheet"> からの直接リクエスト (`/virtual:qstyle/*.css`) は
       // vite の raw css 経路に乗らない (virtual module は fs 解決できず 404 になる)。
       // middleware で plugin の load と同じ内容を text/css として返す。
