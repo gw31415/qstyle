@@ -2586,6 +2586,18 @@ export function qstyle(
       if (mod !== undefined) {
         void server.moduleGraph.invalidateModule(mod);
       }
+      // qwik dev は初期表示で route module を browser が読まないため、その
+      // module への client HMR 更新対象が存在しない。SSR 側の invalidation は
+      // browser に届かない (vite 8 の SSR channel full-reload は browser の
+      // channel に流れない)。browser 未読の module 変更時は確実な反映のため
+      // full reload を送る。browser が読んでいる場合は vite/qwik の通常 HMR
+      // (virtual css の invalidation を含む) に任せる。
+      // NOTE: server.moduleGraph は SSR の module も含むため、browser 読込の
+      // 判定には client environment の graph を使う。
+      const clientGraph = server.environments?.client?.moduleGraph;
+      if (clientGraph?.getModuleById(file) === undefined) {
+        server.ws?.send({ type: 'full-reload', path: '*' });
+      }
     },
 
     resolveId(id: string): string | null {

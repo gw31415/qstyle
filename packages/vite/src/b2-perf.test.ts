@@ -21,6 +21,14 @@ interface DevPlugin extends Transformable {
         getModuleById: (id: string) => { id: string } | undefined;
         invalidateModule: (mod: unknown) => void;
       };
+      environments?: {
+        client?: {
+          moduleGraph: {
+            getModuleById: (id: string) => { id: string } | undefined;
+          };
+        };
+      };
+      ws?: { send: (payload: unknown) => void };
     };
   }) => void;
 }
@@ -147,8 +155,11 @@ describe('qstyle PERF 系 (vite transform level)', () => {
     expect(a2).not.toBeNull();
     expect(devCssOf(a2?.code ?? '')).toContain('display:block');
     // hot update は A の virtual css のみ無効化する。
+    // browser が A を読んでいる (client graph にある) 場合は通常 HMR に任せ、
+    // full reload は送らない。
     const requested: string[] = [];
     const invalidated: unknown[] = [];
+    const sent: unknown[] = [];
     p.handleHotUpdate({
       file: '/src/perf007-a.tsx',
       server: {
@@ -161,12 +172,21 @@ describe('qstyle PERF 系 (vite transform level)', () => {
             invalidated.push(mod);
           },
         },
+        environments: {
+          client: {
+            moduleGraph: {
+              getModuleById: (id: string): { id: string } | undefined => ({ id }),
+            },
+          },
+        },
+        ws: { send: (payload: unknown): void => { sent.push(payload); } },
       },
     });
     expect(requested).toHaveLength(1);
     // canonical dev id (`\0` 付き正規形)。
     expect(requested[0]?.startsWith('\0virtual:qstyle/dev/')).toBe(true);
     expect(invalidated).toHaveLength(1);
+    expect(sent).toEqual([]);
     // B の devCss は無効化されず同一内容のまま。
     expect(devCssOf(b?.code ?? '')).toBe(cssB1);
   });

@@ -1456,6 +1456,14 @@ describe('qstyle dev mode + CSS HMR', () => {
           getModuleById: (id: string) => { id: string } | undefined;
           invalidateModule: (mod: unknown) => void;
         };
+        environments?: {
+          client?: {
+            moduleGraph: {
+              getModuleById: (id: string) => { id: string } | undefined;
+            };
+          };
+        };
+        ws?: { send: (payload: unknown) => void };
       };
     }) => void;
   }
@@ -1523,6 +1531,7 @@ describe('qstyle dev mode + CSS HMR', () => {
     expect(out).not.toBeNull();
     const invalidated: unknown[] = [];
     const requested: string[] = [];
+    const sent: unknown[] = [];
     const server = {
       moduleGraph: {
         getModuleById: (id: string): { id: string } | undefined => {
@@ -1533,12 +1542,57 @@ describe('qstyle dev mode + CSS HMR', () => {
           invalidated.push(mod);
         },
       },
+      // browser が読んでいる場合は通常 HMR に任せ、full reload は送らない。
+      environments: {
+        client: {
+          moduleGraph: {
+            getModuleById: (id: string): { id: string } | undefined => ({ id }),
+          },
+        },
+      },
+      ws: { send: (payload: unknown): void => { sent.push(payload); } },
     };
     p.handleHotUpdate({ file: '/src/dev-d.tsx', server });
     expect(requested.length).toBe(1);
     expect(requested[0]?.startsWith('\0virtual:qstyle/dev/')).toBe(true);
     expect(requested[0]?.endsWith('.css')).toBe(true);
     expect(invalidated.length).toBe(1);
+    expect(sent).toEqual([]);
+  });
+
+  it('sends full-reload when the edited module is unread by the browser', () => {
+    // qwik dev は初期表示で route module を browser が読まないため、その
+    // module への client HMR 更新対象が存在しない。SSR 側の invalidation は
+    // browser に届かないため full reload で確実に反映する。
+    const p = devPlugin();
+    const out = p.transform(
+      `export const A = () => <div css={{ display: 'flex' }} />;`,
+      '/src/dev-e.tsx',
+    );
+    expect(out).not.toBeNull();
+    const invalidated: unknown[] = [];
+    const sent: unknown[] = [];
+    const server = {
+      moduleGraph: {
+        getModuleById: (id: string): { id: string } | undefined =>
+          // browser 未読: virtual css のみ graph にあり、tsx 自身は無い。
+          id.startsWith('\0virtual:qstyle/dev/') ? { id } : undefined,
+        invalidateModule: (mod: unknown): void => {
+          invalidated.push(mod);
+        },
+      },
+      environments: {
+        client: {
+          moduleGraph: {
+            getModuleById: (_id: string): { id: string } | undefined => undefined,
+          },
+        },
+      },
+      ws: { send: (payload: unknown): void => { sent.push(payload); } },
+    };
+    p.handleHotUpdate({ file: '/src/dev-e.tsx', server });
+    expect(invalidated).toHaveLength(1);
+    expect(sent).toEqual([{ type: 'full-reload', path: '*' }]);
   });
 
   it('ignores unrelated files in handleHotUpdate', () => {
