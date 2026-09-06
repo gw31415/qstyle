@@ -1,0 +1,43 @@
+/* baseline global (gen-baseline.mjs). qstyle OFF 時の意味的等価物。 */
+.qb-0 {
+  background-color: honeydew;
+  padding: 4px;
+}
+.qb-1 {
+  outline: 3px dashed tomato;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.qb-2 {
+  background-color: lavender;
+  padding: 12px;
+  min-height: 24px;
+}
+.qb-3 {
+  border: 2px solid cornflowerblue;
+  padding: 8px;
+  border-radius: 4px;
+}
+.qb-4 {
+  font-size: 18px;
+  color: darkmagenta;
+}
+.qb-5 {
+  font-size: 20px;
+  color: seagreen;
+}
+.qb-6 {
+  margin: 6px;
+}
+.qb-7 {
+  margin: 6px;
+}
+.qb-8 {
+  color: sienna;
+  padding: 4px;
+}
+.qb-9 {
+  display: flex;
+  gap: 12px;
+  padding: 8px;
+}

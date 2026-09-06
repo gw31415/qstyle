@@ -12,14 +12,21 @@ const fixtureRoot: string = path.resolve(here, '..');
 
 export default defineConfig({
   testDir: here,
-  testMatch: ['c0-smoke.spec.ts', 'ssg-bake.spec.ts', 'qwk-matrix.spec.ts', 'dyn-matrix.spec.ts', 'rte-matrix.spec.ts', 'fouc.spec.ts'],
+  testMatch: [
+    'c0-smoke.spec.ts',
+    'qwk-matrix.spec.ts',
+    'dyn-matrix.spec.ts',
+    'rte-matrix.spec.ts',
+    'fouc.spec.ts',
+  ],
   fullyParallel: false,
   retries: 0,
   use: {
     baseURL: 'http://127.0.0.1:4173',
   },
   webServer: {
-    command: 'node server/entry.node-server.js',
+    // serve-live: SSG HTML を消してから起動し、live SSR を保証する。
+    command: 'node scripts/serve-live.mjs',
     cwd: fixtureRoot,
     port: 4173,
     reuseExistingServer: true,

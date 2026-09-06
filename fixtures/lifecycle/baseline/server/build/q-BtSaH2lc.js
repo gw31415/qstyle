@@ -1,0 +1,1 @@
+import{L as e,q as t,r as n}from"./q-D8NUa7-I.js";import{t as r}from"./q-DOToAaM3.js";import{r as i}from"./q-DenNJaZ6.js";var a=t(`s_qDa8lS9d0XE`);a.s(()=>e(`main`,null,null,[e(`h1`,null,{"data-testid":`about-title`,class:`qb-4`},`about`,3,null),e(r,null,{label:`about`},null,3,`nU_0`),e(i,null,null,null,3,`nU_1`)],1,`nU_2`));var o=n(a);export{o as default};
