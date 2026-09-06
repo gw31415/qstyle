@@ -16,7 +16,9 @@
     "changeset-status": "echo \"no changesets yet\""
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.4.1",
+    "fast-check": "^4.9.0",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
