@@ -2222,8 +2222,9 @@ function validateQstyleOptions(options: QstyleOptions): void {
  * - virtual modules: registry / pack/<id> / manifest / residuals / route-loader,
  *   dev/<hash>.css (serve 時のみ)
  * - serve (dev): 同一 lowering を per-module CSS としてそのまま適用する
- *   (global dedup・chunking・manifest なし)。virtual css 経由で Vite の CSS HMR が効く。
- *   ファイル変更時は handleHotUpdate で該当 virtual css を無効化する。
+  *   (global dedup・chunking・manifest なし)。virtual css 経由で Vite の CSS HMR が効く。
+  *   ファイル変更時は handleHotUpdate で先行 re-transform 後に該当 virtual css を
+  *   無効化し `css-update` を送る (出力が変わった場合のみ client へ reload)。
  * - transform: .tsx/.jsx 内の css={{ ... }} を balanced-brace scan で抽出し、
  *   安全に parse できる object literal のみ @qstyle/qwik の lowerStyleObject
  *   で atom 化→hash→ class へ rewrite し、モジュール先頭へ side-effect
@@ -2285,6 +2286,8 @@ export function qstyle(
   const devKeys = new Map<string, string>();
   /** dev で transform した module (HMR 無効化の対象判定用)。 */
   const devTransformed = new Set<string>();
+  /** dev の直近 transform 出力 (HMR の構造変化判定用。buildStart で reset)。 */
+  const devCode = new Map<string, string>();
   /** serve mode では dev パイプライン (per-module CSS + HMR) を使う。 */
   let isDev = false;
   // plan.md §51: buildStart で 1 instance に reset する。plugin 生成直後の
@@ -2472,6 +2475,102 @@ export function qstyle(
     }
   };
 
+  /**
+   * dev CSS の HMR 更新 (原則 full reload なし)。
+   * - 新内容 (`ctx.read()`) で先行 re-transform し `devCss` を最新化する。
+   *   client の refetch (link / JS import) との race を消すため。transform は
+   *   module 単位で冪等に作り直すため、後の通常 refetch 時の再適用も安全。
+   * - virtual css を各 env graph で無効化し、client へ `css-update` を送る。
+   *   browser の `<link href="/virtual:qstyle/dev/...">` がリロードなしで差し替わる。
+   * - dev の class 名は occurrence 固定の alias (`qd_...`) のため、宣言の増減・
+   *   値変更だけでは出力が変わらず css-update のみで反映される。出力が変わった
+   *   場合 (occurrence 構造の変化・style prop の変化・css の増減) は DOM 側の
+   *   更新が要るため client channel へ `full-reload` を送る (re-transform 完了
+   *   後のため reload 中断は起きない。default HMR の SSR-channel 消失の代替)。
+   * - 無関係ファイルには干渉しない (HMR-008)。
+   */
+  const refreshDevCss = async (ctx: HmrContext): Promise<void> => {
+    const { file, server } = ctx;
+    if (!file.endsWith('.tsx') && !file.endsWith('.jsx')) return;
+    const read = (ctx as unknown as { read?: () => string | Promise<string> }).read;
+    let code: string | null = null;
+    if (typeof read === 'function') {
+      try {
+        code = await read();
+      } catch {
+        code = null;
+      }
+    }
+    const wasManaged: boolean = devTransformed.has(file);
+    if (code !== null) {
+      if (!code.includes('css') && !wasManaged) return;
+    } else if (!wasManaged) {
+      return;
+    }
+    // 先行 re-transform (transform 自身が devCode を維持する)。
+    // ponytail: transform 本体は動かさず plugin 自身の hook を直接呼ぶ
+    // (transform は `this` を使わないため unbound call で安全)。
+    const prev: string | undefined = devCode.get(file);
+    let out: { code: string } | null = null;
+    if (code !== null) {
+      try {
+        const rerun = mainPlugin.transform as unknown as
+          | ((code: string, id: string) => { code: string } | null)
+          | undefined;
+        if (typeof rerun === 'function') out = rerun(code, file);
+      } catch {
+        // strict 等の diagnostics throw 時は default HMR に任せる (以下は続行)。
+      }
+    }
+    if (out === null && !wasManaged) return;
+    // 出力が変わった = DOM 側の更新が要る。変わらない = link 差し替えのみで足りる。
+    const next: string | undefined = devCode.get(file);
+    const structurallyChanged: boolean = out === null || !wasManaged || prev !== next;
+    // virtual css を全部の env graph で無効化する (best effort)。
+    const vid: string = devModuleId(file);
+    const graphs: readonly unknown[] = [
+      (server as unknown as { moduleGraph?: unknown }).moduleGraph,
+      ...Object.values(
+        (server as unknown as { environments?: Record<string, { moduleGraph?: unknown }> })
+          .environments ?? {},
+      ).map((env) => env?.moduleGraph),
+    ];
+    for (const graph of graphs) {
+      try {
+        const g = graph as {
+          getModuleById?: (id: string) => { id: string } | undefined;
+          invalidateModule?: (mod: unknown) => unknown;
+        };
+        const mod = g?.getModuleById?.(vid);
+        if (mod !== undefined) await g?.invalidateModule?.(mod);
+      } catch {
+        // best effort のため無視する。
+      }
+    }
+    try {
+      const s = server as unknown as {
+        hot?: { send?: (payload: unknown) => void };
+        ws?: { send?: (payload: unknown) => void };
+        environments?: Record<string, { hot?: { send?: (payload: unknown) => void } }>;
+      };
+      // client channel 優先 (SSR channel には browser がいない)。
+      const sender = s.hot ?? s.environments?.['client']?.hot ?? s.ws;
+      const url: string = `/virtual:qstyle/dev/${devKeyFor(file)}`;
+      const timestamp: number =
+        typeof ctx.timestamp === 'number' ? ctx.timestamp : Date.now();
+      // `<link>` の差し替えを client に通知する (reload の有無にかかわらず無害)。
+      sender?.send?.({
+        type: 'update',
+        updates: [{ type: 'css-update', path: url, acceptedPath: url, timestamp }],
+      });
+      if (structurallyChanged) {
+        sender?.send?.({ type: 'full-reload' });
+      }
+    } catch {
+      // best effort のため無視する。
+    }
+  };
+
   const mainPlugin: Plugin & {
     readonly __usageGraph: UsageGraph;
     readonly __residuals: readonly ResidualRuleNode[];
@@ -2570,6 +2669,7 @@ export function qstyle(
       devCss.clear();
       devKeys.clear();
       devTransformed.clear();
+      devCode.clear();
       unitTagNames.clear();
       condUnitIds.clear();
       cssAssetPlanCache = null;
@@ -2578,26 +2678,8 @@ export function qstyle(
       wireRoutes(graph);
     },
 
-    handleHotUpdate({ file, server }: HmrContext): void {
-      // dev で transform した module の変更だけ virtual CSS を無効化する。
-      // 無関係ファイルには干渉しない (HMR-008)。tsx 側の通常 HMR は継続させる。
-      if (!devTransformed.has(file)) return;
-      const mod = server.moduleGraph.getModuleById(devModuleId(file));
-      if (mod !== undefined) {
-        void server.moduleGraph.invalidateModule(mod);
-      }
-      // qwik dev は初期表示で route module を browser が読まないため、その
-      // module への client HMR 更新対象が存在しない。SSR 側の invalidation は
-      // browser に届かない (vite 8 の SSR channel full-reload は browser の
-      // channel に流れない)。browser 未読の module 変更時は確実な反映のため
-      // full reload を送る。browser が読んでいる場合は vite/qwik の通常 HMR
-      // (virtual css の invalidation を含む) に任せる。
-      // NOTE: server.moduleGraph は SSR の module も含むため、browser 読込の
-      // 判定には client environment の graph を使う。
-      const clientGraph = server.environments?.client?.moduleGraph;
-      if (clientGraph?.getModuleById(file) === undefined) {
-        server.ws?.send({ type: 'full-reload', path: '*' });
-      }
+    handleHotUpdate(ctx: HmrContext): Promise<void> {
+      return refreshDevCss(ctx);
     },
 
     resolveId(id: string): string | null {
@@ -2647,6 +2729,7 @@ export function qstyle(
       // module 単位で作り直す (再 transform 時の stale 混入を防ぐ。dev HMR で必須)。
       moduleToAtoms.delete(id);
       devCss.delete(id);
+      devCode.delete(id);
       legacyStyles = legacyStyles.filter((entry) => entry.module !== id);
       // §24: legacy hooks は rewrite せず provenance のみ追跡する (scoped 解除しない)。
       if (code.includes('useStyles$') || code.includes('useStylesScoped$')) {
@@ -2694,6 +2777,29 @@ export function qstyle(
         return (structCounts?.get(inlineStructKey(propPath, compoundSkeleton(segments))) ?? 0) >= 2;
       };
       const provenanceSource: string = id;
+      // dev HMR 用の安定 class 名。content hash (`q_...`) は値の変更で変わるため、
+      // browser に JS 更新が届かない SSR-only module では DOM が stale class のまま
+      // rule を失い、css が消えたように見える。dev では (file, occurrence, role)
+      // 固定の alias (`qd_<file>_<path>_<slot>_<n>`) を class に使い、宣言の
+      // 増減・値変更は css-update の link 差し替えだけで反映させる。
+      // prod は content hash のまま (mapId は恒等写像)。
+      const devFileHash: string = fnv1aHex(id).slice(0, 8);
+      const makeDevSlot = (
+        prefix: string,
+        slot: number,
+      ): ((contentId: string) => string) => {
+        const memo = new Map<string, string>();
+        let ordinal = 0;
+        return (contentId: string): string => {
+          if (contentId === '' || !isDev) return contentId;
+          const hit: string | undefined = memo.get(contentId);
+          if (hit !== undefined) return hit;
+          const alias: string = `qd_${devFileHash}${prefix}_${slot}_${ordinal}`;
+          ordinal += 1;
+          memo.set(contentId, alias);
+          return alias;
+        };
+      };
       const newUnitIds: string[] = [];
       const seen = new Set<string>();
       // ponytail: 行頭表は module 毎に 1 回だけ作る。occurrence 毎に作ると O(n^2)
@@ -2718,7 +2824,9 @@ export function qstyle(
        * identity (dedup/provenance/usage graph) は atom 単位のまま記録する。
        */
       const ingestUnit = (unitId: string, members: readonly UnitMember[]): void => {
-        if (!collected.has(unitId)) {
+        // dev では同一 alias に新しい cssText を上書きする (alias は編集をまたいで
+        // 安定なため。prod は初回確定のまま)。
+        if (!collected.has(unitId) || isDev) {
           collected.set(unitId, {
             id: unitId,
             cssText: serializeUnitCss(unitId, members),
@@ -2749,10 +2857,13 @@ export function qstyle(
       };
 
       /** 独立 ternary 分岐の atoms を単一 member unit として収集する。 */
-      const ingestAtomUnits = (atoms: readonly StaticAtom[]): void => {
+      const ingestAtomUnits = (
+        atoms: readonly StaticAtom[],
+        mapId: (contentId: string) => string = (contentId) => contentId,
+      ): void => {
         for (const atom of atoms) {
           const atomId: string = hashStaticAtom(atom);
-          ingestUnit(unitIdOf([atomId]), [
+          ingestUnit(mapId(unitIdOf([atomId])), [
             { atomId, context: atom.context, decl: serializeStaticDecl(atom) },
           ]);
         }
@@ -2843,6 +2954,7 @@ export function qstyle(
       const buildConditional = (
         conditionals: readonly ConditionalStyleValue[],
         takenProps: ReadonlySet<string>,
+        mapId: (contentId: string) => string = (contentId) => contentId,
       ): { segments: string[]; atoms: StaticAtom[] } | null => {
         const seen = new Set<string>();
         const segments: string[] = [];
@@ -2866,7 +2978,7 @@ export function qstyle(
             if (atom === undefined) return null;
             atoms.push(atom);
             // 単一 atom の unit (独立 ternary 分岐は他と同時適用されないため merge しない)。
-            return unitIdOf([hashStaticAtom(atom)]);
+            return mapId(unitIdOf([hashStaticAtom(atom)]));
           };
           const trueId: string | null = branchId(c.whenTrue);
           const falseId: string | null = branchId(c.whenFalse);
@@ -2891,7 +3003,8 @@ export function qstyle(
 
       /** preserve block 1 件を収集する (exact rule dedup は id で自然に成立する)。 */
       const ingestBlock = (blockId: string, cssText: string): void => {
-        if (!collected.has(blockId)) {
+        // dev では同一 alias に上書きする (ingestUnit と同じ理由)。
+        if (!collected.has(blockId) || isDev) {
           collected.set(blockId, { id: blockId, cssText, sourceId: id });
         }
         const list: string[] = moduleToAtoms.get(id) ?? [];
@@ -3074,6 +3187,7 @@ export function qstyle(
       // 後方から置換して offset ずれを避ける。
       for (let k: number = occurrences.length - 1; k >= 0; k -= 1) {
         const occ: CssPropOccurrence = occurrences[k] as CssPropOccurrence;
+        const devId = makeDevSlot('a', k);
         const literal: string = code.slice(occ.braceOpen, occ.braceClose);
         // R4: parse 不能時も具体的な理由 (nested ternary 等) を diagnostic に出す。
         const parseNotes: string[] = [];
@@ -3221,7 +3335,7 @@ export function qstyle(
               context: {} as RuleContext,
             })),
           ];
-          const blockId: string = preserveBlockId(blockDecls);
+          const blockId: string = devId(preserveBlockId(blockDecls));
           const blockCss: string = serializePreserveBlock(blockId, blockDecls);
           // 有限静的 ternary 値は block とは別 class のまま展開する (単一 class 化不能のため)。
           const takenProps = new Set<string>([
@@ -3229,7 +3343,7 @@ export function qstyle(
             ...dynamics.map((d) => canonicalProperty(d.propPath)),
             ...compounds.map((c) => canonicalProperty(c.propPath)),
           ]);
-          const conditional = buildConditional(conditionals, takenProps);
+          const conditional = buildConditional(conditionals, takenProps, devId);
           if (conditional === null) {
             noteSkipped('conflicting conditional value; left untouched');
             continue;
@@ -3255,7 +3369,7 @@ export function qstyle(
             continue;
           }
           if (hasBlock) ingestBlock(blockId, blockCss);
-          ingestAtomUnits(conditional.atoms);
+          ingestAtomUnits(conditional.atoms, devId);
           continue;
         }
         // 有限静的 ternary 値は CSS variable 化せず static branch にする (DYN-016)。
@@ -3264,7 +3378,7 @@ export function qstyle(
           ...dynamics.map((d) => canonicalProperty(d.propPath)),
           ...compounds.map((c) => canonicalProperty(c.propPath)),
         ]);
-        const conditional = buildConditional(conditionals, takenProps);
+        const conditional = buildConditional(conditionals, takenProps, devId);
         if (conditional === null) {
           noteSkipped('conflicting conditional value; left untouched');
           continue;
@@ -3278,7 +3392,8 @@ export function qstyle(
           })),
           ...ingestParametrics(parametrics),
         ];
-        const ids: string[] = membersA.length > 0 ? [unitIdOf(membersA.map((m) => m.atomId))] : [];
+        const ids: string[] =
+          membersA.length > 0 ? [devId(unitIdOf(membersA.map((m) => m.atomId)))] : [];
         const slotEntries: string[] = parametrics.flatMap((p) =>
           p.slotIds.map((slotId, k) => `'${slotId}': ${p.slotExprs[k] ?? ''}`),
         );
@@ -3296,7 +3411,7 @@ export function qstyle(
           continue;
         }
         if (ids.length > 0) ingestUnit(ids[0] as string, membersA);
-        ingestAtomUnits(conditional.atoms);
+        ingestAtomUnits(conditional.atoms, devId);
       }
       // (b) M3: module-scope css() handle + css={...} composition (plan.md §21)。
       // static に解決できるもののみ rewrite し、条件付き (&&/?:)・未知参照・
@@ -3309,6 +3424,7 @@ export function qstyle(
       if (exprOccurrences.length > 0) {
         for (let k: number = exprOccurrences.length - 1; k >= 0; k -= 1) {
           const occ: CssExprOccurrence = exprOccurrences[k] as CssExprOccurrence;
+          const devId = makeDevSlot('b', k);
           const inner: string = code.slice(occ.exprOpen + 1, occ.exprClose - 1);
           // R4: 条件付き解決に固有の拒否理由 (nested ternary / parametric handle の
           // 条件付き適用 / nested conditional) を具体的な warning に出す。
@@ -3546,7 +3662,7 @@ export function qstyle(
               ];
               let miniBlock: { id: string; css: string } | null = null;
               if (miniDecls.length > 0) {
-                const miniId: string = preserveBlockId(miniDecls);
+                const miniId: string = devId(preserveBlockId(miniDecls));
                 miniBlock = { id: miniId, css: serializePreserveBlock(miniId, miniDecls) };
               }
               preserveCondGroups.push({
@@ -3563,7 +3679,7 @@ export function qstyle(
             for (const group of preserveCondGroups) {
               const groupIds: string = [
                 ...(group.miniBlock === null ? [] : [group.miniBlock.id]),
-                ...group.params.map((p) => unitIdOf([p.id])),
+                ...group.params.map((p) => devId(unitIdOf([p.id]))),
               ].join(' ');
               preserveCondSegments.push(`(${group.cond} ? ${JSON.stringify(groupIds)} : "")`);
               if (group.spreads.length > 0) {
@@ -3575,13 +3691,13 @@ export function qstyle(
               ...blockDecls.map((d) => d.property),
               ...preserveCondGroups.flatMap((g) => g.props),
             ]);
-            const preserveConditional = buildConditional(preserveConditionals, preserveTaken);
+            const preserveConditional = buildConditional(preserveConditionals, preserveTaken, devId);
             if (preserveConditional === null) {
               noteSkipped('conflicting conditional value; left untouched');
               continue;
             }
             const hasBlock: boolean = blockDecls.length > 0;
-            const preserveBlockIdValue: string = hasBlock ? preserveBlockId(blockDecls) : '';
+            const preserveBlockIdValue: string = hasBlock ? devId(preserveBlockId(blockDecls)) : '';
             const preserveIds: string[] = hasBlock ? [preserveBlockIdValue] : [];
             const preserveEntries: string = [
               preserveSlotEntries.join(', '),
@@ -3611,12 +3727,12 @@ export function qstyle(
             for (const group of preserveCondGroups) {
               if (group.miniBlock !== null) ingestBlock(group.miniBlock.id, group.miniBlock.css);
               for (const p of group.params) {
-                ingestUnit(unitIdOf([p.id]), [
+                ingestUnit(devId(unitIdOf([p.id])), [
                   { atomId: p.id, context: p.context, decl: p.decl },
                 ]);
               }
             }
-            ingestAtomUnits(preserveConditional.atoms);
+            ingestAtomUnits(preserveConditional.atoms, devId);
             continue;
           }
           if (conds.some((p) => p.handleParametrics !== undefined)) {
@@ -3913,7 +4029,7 @@ export function qstyle(
           const condSpreadEntries: string[] = [];
           for (const group of condGroups) {
             // 条件付き group も 1 unit 1 class に merge する (§38)。
-            const groupId: string = unitIdOf(group.members.map((m) => m.atomId));
+            const groupId: string = devId(unitIdOf(group.members.map((m) => m.atomId)));
             condUnitIds.add(groupId);
             condSegments.push(`(${group.cond} ? ${JSON.stringify(groupId)} : "")`);
             if (group.spreads.length > 0) {
@@ -3932,7 +4048,7 @@ export function qstyle(
             ]),
             ...entryPropAtom.keys(),
           ]);
-          const conditional = buildConditional(conditionals, takenProps);
+          const conditional = buildConditional(conditionals, takenProps, devId);
           if (conditional === null) {
             noteSkipped('conflicting conditional value; left untouched');
             continue;
@@ -3949,7 +4065,7 @@ export function qstyle(
             ...entryMembers,
           ];
           const staticUnitIds: string[] =
-            staticMembers.length > 0 ? [unitIdOf(staticMembers.map((m) => m.atomId))] : [];
+            staticMembers.length > 0 ? [devId(unitIdOf(staticMembers.map((m) => m.atomId)))] : [];
           const ids: string[] = staticUnitIds;
           const slotEntries: string = parametrics
             .flatMap((p) => p.slotIds.map((slotId, k) => `'${slotId}': ${p.slotExprs[k] ?? ''}`))
@@ -3978,12 +4094,12 @@ export function qstyle(
             ingestUnit(staticUnitIds[0] as string, staticMembers);
           }
           for (const group of condGroups) {
-            ingestUnit(unitIdOf(group.members.map((m) => m.atomId)), group.members);
+            ingestUnit(devId(unitIdOf(group.members.map((m) => m.atomId))), group.members);
           }
           // 独立 ternary 分岐は単一 atom unit のまま (同時適用されないため merge しない)。
           for (const atom of conditional.atoms) {
             const atomId: string = hashStaticAtom(atom);
-            const condAtomUnitId: string = unitIdOf([atomId]);
+            const condAtomUnitId: string = devId(unitIdOf([atomId]));
             condUnitIds.add(condAtomUnitId);
             ingestUnit(condAtomUnitId, [
               { atomId, context: atom.context, decl: serializeStaticDecl(atom) },
@@ -4022,6 +4138,7 @@ export function qstyle(
           srcLine: 0,
         });
         const devApplied = applyEditsWithMap(code, id, edits);
+        devCode.set(id, devApplied.code);
         return { code: devApplied.code, map: devApplied.map };
       }
       // prod: module の全 unit を配信へ繋ぐ。backend で経路が分かれる (§3.4 R1.1)。

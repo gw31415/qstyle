@@ -1451,6 +1451,8 @@ describe('qstyle dev mode + CSS HMR', () => {
     configResolved: (config: { command: string; mode: string }) => void;
     handleHotUpdate: (ctx: {
       file: string;
+      timestamp?: number;
+      read?: () => string | Promise<string>;
       server: {
         moduleGraph: {
           getModuleById: (id: string) => { id: string } | undefined;
@@ -1464,8 +1466,9 @@ describe('qstyle dev mode + CSS HMR', () => {
           };
         };
         ws?: { send: (payload: unknown) => void };
+        hot?: { send: (payload: unknown) => void };
       };
-    }) => void;
+    }) => Promise<void> | void;
   }
   const devPlugin = (): DevPlugin => {
     const p = qstyle({ diagnostics: 'silent' }) as unknown as DevPlugin;
@@ -1522,13 +1525,16 @@ describe('qstyle dev mode + CSS HMR', () => {
     expect(css.indexOf('color:red')).toBeLessThan(css.indexOf('color:blue'));
   });
 
-  it('invalidates the virtual css module on hot update of transformed files', () => {
+  it('refreshes dev css eagerly and notifies css-update without full reload', async () => {
     const p = devPlugin();
     const out = p.transform(
       `export const A = () => <div css={{ display: 'flex' }} />;`,
       '/src/dev-d.tsx',
     );
     expect(out).not.toBeNull();
+    const key: string = (out?.code.match(/virtual:qstyle\/dev\/([\w.]+)/) ?? [])[1] ?? '';
+    expect(key).not.toBe('');
+    const edited = `export const A = () => <div css={{ display: 'block' }} />;`;
     const invalidated: unknown[] = [];
     const requested: string[] = [];
     const sent: unknown[] = [];
@@ -1542,34 +1548,39 @@ describe('qstyle dev mode + CSS HMR', () => {
           invalidated.push(mod);
         },
       },
-      // browser が読んでいる場合は通常 HMR に任せ、full reload は送らない。
-      environments: {
-        client: {
-          moduleGraph: {
-            getModuleById: (id: string): { id: string } | undefined => ({ id }),
-          },
-        },
-      },
       ws: { send: (payload: unknown): void => { sent.push(payload); } },
     };
-    p.handleHotUpdate({ file: '/src/dev-d.tsx', server });
+    await p.handleHotUpdate({
+      file: '/src/dev-d.tsx',
+      timestamp: 1234,
+      read: async () => edited,
+      server,
+    });
+    // 先行 re-transform で devCss が最新化されている (client refetch 前)。
+    expect(p.load(`virtual:qstyle/dev/${key}`)).toContain('display:block');
+    expect(p.load(`virtual:qstyle/dev/${key}`)).not.toContain('display:flex');
     expect(requested.length).toBe(1);
     expect(requested[0]?.startsWith('\0virtual:qstyle/dev/')).toBe(true);
     expect(requested[0]?.endsWith('.css')).toBe(true);
     expect(invalidated.length).toBe(1);
-    expect(sent).toEqual([]);
+    // full reload なし。`<link>` 差し替えの css-update のみ。
+    expect(sent).toHaveLength(1);
+    const update = sent[0] as {
+      type: string;
+      updates: { type: string; path: string; acceptedPath: string; timestamp: number }[];
+    };
+    expect(update.type).toBe('update');
+    expect(update.updates).toHaveLength(1);
+    expect(update.updates[0]?.type).toBe('css-update');
+    expect(update.updates[0]?.path).toBe(`/virtual:qstyle/dev/${key}`);
+    expect(update.updates[0]?.timestamp).toBe(1234);
   });
 
-  it('sends full-reload when the edited module is unread by the browser', () => {
-    // qwik dev は初期表示で route module を browser が読まないため、その
-    // module への client HMR 更新対象が存在しない。SSR 側の invalidation は
-    // browser に届かないため full reload で確実に反映する。
+  it('reloads once for newly added css (link must enter the HTML)', async () => {
+    // css attribute を持たなかった component への追加では出力が変わるため、
+    // css-update に加えて client channel へ full-reload を送る
+    // (新 link の付与に DOM 更新が要る。re-transform 完了後のため中断しない)。
     const p = devPlugin();
-    const out = p.transform(
-      `export const A = () => <div css={{ display: 'flex' }} />;`,
-      '/src/dev-e.tsx',
-    );
-    expect(out).not.toBeNull();
     const invalidated: unknown[] = [];
     const sent: unknown[] = [];
     const server = {
@@ -1590,12 +1601,92 @@ describe('qstyle dev mode + CSS HMR', () => {
       },
       ws: { send: (payload: unknown): void => { sent.push(payload); } },
     };
-    p.handleHotUpdate({ file: '/src/dev-e.tsx', server });
+    const added = `export const E = () => <div css={{ display: 'flex' }} />;`;
+    await p.handleHotUpdate({
+      file: '/src/dev-e.tsx',
+      timestamp: 42,
+      read: async () => added,
+      server,
+    });
     expect(invalidated).toHaveLength(1);
-    expect(sent).toEqual([{ type: 'full-reload', path: '*' }]);
+    // css-update の後に full-reload (どちらも client channel)。
+    expect(sent).toHaveLength(2);
+    expect((sent[0] as { type: string }).type).toBe('update');
+    expect((sent[1] as { type: string }).type).toBe('full-reload');
+    // devCss が登録済み (link が付いた後の refetch が即座に CSS を返す)。
+    const out = p.transform(added, '/src/dev-e.tsx');
+    const key: string = (out?.code.match(/virtual:qstyle\/dev\/([\w.]+)/) ?? [])[1] ?? '';
+    expect(key).not.toBe('');
+    expect(p.load(`virtual:qstyle/dev/${key}`)).toContain('display:flex');
   });
 
-  it('ignores unrelated files in handleHotUpdate', () => {
+  it('keeps dev class names stable across value and declaration edits', () => {
+    // dev の class は occurrence 固定の alias のため、値変更・宣言追加では変わらない。
+    // (content hash のままだと DOM が stale class のまま rule を失う)。
+    const p = devPlugin();
+    const file = '/src/dev-stable.tsx';
+    const classesOf = (code: string): string[] =>
+      [...code.matchAll(/class="([^"]*)"/g)].flatMap((m) =>
+        (m[1] ?? '').split(/\s+/).filter(Boolean),
+      );
+    const v1 = p.transform(
+      `export const A = () => <div css={{ animation: "ping-halo 1.2s infinite" }} />;`,
+      file,
+    );
+    expect(v1).not.toBeNull();
+    const cls1: string[] = classesOf(v1?.code ?? '');
+    expect(cls1).toHaveLength(1);
+    expect(cls1[0]?.startsWith('qd_')).toBe(true);
+    expect(v1?.code).not.toContain('class="q_');
+    const v2 = p.transform(
+      `export const A = () => <div css={{ animation: "ping-halo 1.9s infinite" }} />;`,
+      file,
+    );
+    expect(classesOf(v2?.code ?? '')).toEqual(cls1);
+    const v3 = p.transform(
+      `export const A = () => <div css={{ animation: "ping-halo 1.9s infinite", backgroundColor: "red" }} />;`,
+      file,
+    );
+    expect(classesOf(v3?.code ?? '')).toEqual(cls1);
+    const css: string = devCssOf(p, v3?.code ?? '');
+    expect(css).toContain('1.9s');
+    expect(css).toContain('background-color:red');
+  });
+
+  it('applies an added declaration without reload', async () => {
+    // ユーザー報告の再現: 既存 css への宣言追加は出力不変 → css-update のみ。
+    const p = devPlugin();
+    const file = '/src/dev-adddecl.tsx';
+    const v1 = p.transform(
+      `export const A = () => <div css={{ animation: "ping-halo 1.2s infinite" }} />;`,
+      file,
+    );
+    expect(v1).not.toBeNull();
+    const edited = `export const A = () => <div css={{ animation: "ping-halo 1.2s infinite", backgroundColor: "red" }} />;`;
+    const sent: unknown[] = [];
+    const invalidated: unknown[] = [];
+    const server = {
+      moduleGraph: {
+        getModuleById: (id: string): { id: string } | undefined => ({ id }),
+        invalidateModule: (mod: unknown): void => {
+          invalidated.push(mod);
+        },
+      },
+      ws: { send: (payload: unknown): void => { sent.push(payload); } },
+    };
+    await p.handleHotUpdate({ file, timestamp: 5, read: async () => edited, server });
+    expect(invalidated).toHaveLength(1);
+    // reload なし。css-update の link 差し替えだけで DOM の既存 class に適用される。
+    expect(sent).toHaveLength(1);
+    expect((sent[0] as { type: string }).type).toBe('update');
+    const key: string = (v1?.code.match(/virtual:qstyle\/dev\/([\w.]+)/) ?? [])[1] ?? '';
+    expect(key).not.toBe('');
+    const css: string = p.load(`virtual:qstyle/dev/${key}`) ?? '';
+    expect(css).toContain('background-color:red');
+    expect(css).toContain('1.2s');
+  });
+
+  it('ignores unrelated files in handleHotUpdate', async () => {
     const p = devPlugin();
     let requested = 0;
     const server = {
@@ -1607,7 +1698,7 @@ describe('qstyle dev mode + CSS HMR', () => {
         invalidateModule: (): void => {},
       },
     };
-    p.handleHotUpdate({ file: '/src/unrelated.ts', server });
+    await p.handleHotUpdate({ file: '/src/unrelated.ts', server });
     expect(requested).toBe(0);
   });
 });
