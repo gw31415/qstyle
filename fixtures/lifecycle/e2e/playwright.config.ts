@@ -33,5 +33,9 @@ export default defineConfig({
     stdout: 'pipe',
     stderr: 'pipe',
   },
-  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium' } },
+    { name: 'webkit', use: { browserName: 'webkit' } },
+    { name: 'firefox', use: { browserName: 'firefox' } },
+  ],
 });

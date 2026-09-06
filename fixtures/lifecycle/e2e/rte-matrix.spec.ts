@@ -13,22 +13,35 @@ async function qstyleHrefs(page: import('@playwright/test').Page): Promise<strin
 test('RTE-005: lazy (client-only) styles are absent initially, applied on demand', async ({
   page,
 }) => {
-  const fetched: string[] = [];
-  page.on('request', (request): void => {
-    if (request.url().includes('qstyle') && request.url().endsWith('.css')) {
-      fetched.push(request.url());
-    }
-  });
   await page.goto('/');
-  const initial: string[] = [...fetched];
-  // lazy-panel の chunk は初期 fetch に含まれない。
+  // QWK-005: 初期表示に lazy の DOM が無い。
+  await expect(page.getByTestId('lazy-panel')).toHaveCount(0);
+  // 出現と同時に styled (lavender)。
   await page.getByTestId('lazy-toggle').click();
-  await expect(page.getByTestId('lazy-panel')).toBeVisible();
-  expect(fetched.length).toBeGreaterThan(initial.length);
   const panel = page.getByTestId('lazy-panel');
+  await expect(panel).toBeVisible();
   expect(await panel.evaluate((el): string => getComputedStyle(el).backgroundColor)).toBe(
     'rgb(230, 230, 250)',
   );
+  // lazy unit の chunk は route manifest (初期 CSS) に含まれない
+  // (client-only: 必要時に ensureModuleStyles が読む)。
+  // NOTE: 小 chunk は Qwik が SSR HTML に inline するため fetch 観測では判定しない。
+  const className: string =
+    (await panel.getAttribute('class'))?.split(/\s+/).find((c) => c.startsWith('q_')) ?? '';
+  expect(className).toMatch(/^q_[0-9a-f]{8}$/);
+  const units = (await (await page.request.get('/qstyle.units.json')).json()) as {
+    units: Record<string, string[]>;
+  };
+  const chunkFiles: string[] = units.units[className] ?? [];
+  expect(chunkFiles.length).toBeGreaterThan(0);
+  const routes = (await (await page.request.get('/qstyle.routes.json')).json()) as {
+    entries: { route: string; assets: string[] }[];
+  };
+  const homeAssets: string[] =
+    routes.entries.find((entry) => entry.route === '/')?.assets ?? [];
+  for (const file of chunkFiles) {
+    expect(homeAssets).not.toContain(file);
+  }
 });
 
 test('RTE-006: cached route assets are not refetched on revisit', async ({ page }) => {
