@@ -6,18 +6,42 @@
 // - DYN 系: DynBox
 // - QWK-010..012: legacy hooks (useStyles$ / useStylesScoped$ x2)
 import { component$, useSignal } from '@qwik.dev/core';
+import { css } from '@qstyle/qwik';
 import { Shared } from '../components/shared';
 import { DynBox } from '../components/dyn-box';
 import { LazyPanel } from '../components/lazy-panel';
 import { LegacyGlobal, LegacyScopedA, LegacyScopedB } from '../components/legacy';
 
+// API examples 1〜4 (README の authoring 対応。MVP completion criterion 用)。
+const exBase = css({ display: 'grid', gap: 4 });
+const exHot = css({ color: 'crimson' });
+const exTpl = css`
+  border: 3px dotted darkorange;
+  padding: 6px;
+`;
+
 export default component$(() => {
   const showLazy = useSignal(false);
+  const picked = useSignal(false);
   return (
     <main>
       <h1 data-testid="home-title" css={{ fontSize: 20, color: 'seagreen' }}>
         home
       </h1>
+
+      {/* ex2: css() composition / ex3: tagged template / ex4: ternary class 選択 */}
+      <div data-testid="ex-compose" css={[exBase, picked.value && exHot]}>
+        compose
+      </div>
+      <div data-testid="ex-tpl" css={exTpl}>
+        template
+      </div>
+      <div data-testid="ex-ternary" css={{ color: picked.value ? 'crimson' : 'slategray' }}>
+        ternary
+      </div>
+      <button data-testid="ex-toggle" onClick$={() => (picked.value = !picked.value)}>
+        pick
+      </button>
 
       <Shared label="one" />
       <Shared label="two" />

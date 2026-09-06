@@ -100,4 +100,18 @@ describe('usage graph', () => {
     expect(sourceSignature(graph, 's1')).toEqual(['/src/button.tsx', '/src/card.tsx']);
     expect(sourceSignature(graph, 'nope')).toEqual([]);
   });
+
+  it('DIA-006/007: composed and deduped atoms keep all source origins', () => {
+    // 同一 atom が複数 module (composition 含む) から来ても origins を全保持する。
+    // inspector の provenance 表示と vite の §58 provenance 記録の基盤。
+    const graph = createUsageGraph();
+    recordSource(graph, 'atom-shared', '/src/a.tsx');
+    recordSource(graph, 'atom-shared', '/src/b.tsx');
+    recordSource(graph, 'atom-shared', '/src/c.tsx');
+    expect(sourceSignature(graph, 'atom-shared')).toEqual([
+      '/src/a.tsx',
+      '/src/b.tsx',
+      '/src/c.tsx',
+    ]);
+  });
 });

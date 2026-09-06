@@ -31,6 +31,9 @@ const OBSERVED: readonly (readonly [
       ['g-var', ['padding-top']],
       ['g-logical', ['margin-left', 'padding-bottom']],
       ['g-direction', ['direction']],
+      ['ex-compose', ['display', 'color']],
+      ['ex-tpl', ['border-top-color', 'padding-top']],
+      ['ex-ternary', ['color']],
     ],
   ],
   [
@@ -88,8 +91,7 @@ for (const [route, cases] of OBSERVED) {
   });
 }
 
-test('differential dynamic: signal-driven width matches', async ({ browser }) => {
-  const widths: string[] = [];
+test('differential dynamic: signal-driven width matches', async ({ browser }) => {  const widths: string[] = [];
   for (const base of [OFF, ON]) {
     const page = await browser.newPage();
     await page.goto(`${base}/`);
@@ -108,4 +110,25 @@ test('differential dynamic: signal-driven width matches', async ({ browser }) =>
   expect(widths[2]).toBe('100px');
   expect(widths[1]).toBe('101px');
   expect(widths[3]).toBe('101px');
+});
+
+test('differential examples: conditional classes match after toggle', async ({ browser }) => {
+  // ex-compose (array + &&) / ex-ternary (ternary value) の切替後の一致。
+  const colors: string[][] = [];
+  for (const base of [OFF, ON]) {
+    const page = await browser.newPage();
+    await page.goto(`${base}/`);
+    await page.getByTestId('ex-toggle').dispatchEvent('click');
+    await page.waitForTimeout(300);
+    const pair: string[] = [];
+    for (const id of ['ex-compose', 'ex-ternary']) {
+      pair.push(
+        await page.getByTestId(id).evaluate((el): string => getComputedStyle(el).color),
+      );
+    }
+    colors.push(pair);
+    await page.close();
+  }
+  expect(colors[1]).toEqual(colors[0]);
+  expect(colors[0]).toEqual(['rgb(220, 20, 60)', 'rgb(220, 20, 60)']); // crimson
 });

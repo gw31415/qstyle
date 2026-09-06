@@ -240,6 +240,9 @@ importers:
       '@qstyle/qwik':
         specifier: workspace:^
         version: link:../qwik
+      '@qwik.dev/core':
+        specifier: ^2.0.0-beta.43
+        version: 2.0.0-beta.43(vite@8.2.2(@types/node@26.4.1)(yaml@2.9.0))(vitest@5.0.0(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(yaml@2.9.0)))
     devDependencies:
       '@types/node':
         specifier: ^26.4.1

@@ -1702,6 +1702,84 @@ describe('qstyle options validation + diagnostics', () => {
       silent.transform(`export const A = () => <div css={{ ...base }} />;`, '/src/e2.tsx'),
     ).toBeNull();
   });
+
+  it('warns once per module × reason across re-transforms (DIA-009)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
+        transform: (code: string, id: string) => { code: string; map: null } | null;
+      };
+      const code = `export const A = () => <div css={{ ...base }} />;`;
+      expect(p.transform(code, '/src/dia009.tsx')).toBeNull();
+      expect(p.transform(code, '/src/dia009.tsx')).toBeNull();
+      // 同一 module × 同一理由は 1 回だけ。
+      expect(spy).toHaveBeenCalledTimes(1);
+      // 別 module は別途警告される。
+      expect(p.transform(code, '/src/dia009b.tsx')).toBeNull();
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('unsupported dynamic property names a reason (DIA-001)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
+        transform: (code: string, id: string) => { code: string; map: null } | null;
+      };
+      expect(
+        p.transform(
+          `export const A = () => <div css={{ 'not a prop!': dynamicValue }} />;`,
+          '/src/dia001.tsx',
+        ),
+      ).toBeNull();
+      expect(spy).toHaveBeenCalledTimes(1);
+      const message: string = String(spy.mock.calls[0]?.[0] ?? '');
+      expect(message).toContain('/src/dia001.tsx');
+      expect(message).toContain('unsupported dynamic property');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('unsupported selectors name a reason (DIA-002)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
+        transform: (code: string, id: string) => { code: string; map: null } | null;
+      };
+      expect(
+        p.transform(
+          `export const A = () => <div css={{ '& > div': { color: 'red' } }} />;`,
+          '/src/dia002.tsx',
+        ),
+      ).toBeNull();
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(String(spy.mock.calls[0]?.[0] ?? '')).toContain('/src/dia002.tsx');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('malformed template CSS names a reason (DIA-004)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
+        transform: (code: string, id: string) => { code: string; map: null } | null;
+      };
+      expect(
+        p.transform(
+          `import { css } from '@qstyle/qwik';\nconst broken = css\`color: red; { oops\`;\nexport const A = () => <div css={broken} />;`,
+          '/src/dia004.tsx',
+        ),
+      ).toBeNull();
+      expect(spy.mock.calls.length).toBeGreaterThan(0);
+      expect(String(spy.mock.calls[0]?.[0] ?? '')).toContain('/src/dia004.tsx');
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe('qstyle generateBundle wiring', () => {

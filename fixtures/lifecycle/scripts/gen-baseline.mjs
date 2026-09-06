@@ -53,9 +53,11 @@ function cssValue(prop, value) {
   if (/^-?\d+(\.\d+)?$/.test(text)) {
     return UNITLESS.has(prop) ? text : `${text}px`;
   }
-  // var() 等の関数形は verbatim (interpolation 混じりは別途 fail)。
-  if (/^[a-zA-Z-]+\(.*\)$/.test(text)) {
-    if (text.includes('${')) fail(`interpolation in ${text}`);
+  // var() 等の関数形・空白混じり bare 値・単位付き数値は verbatim (isStaticValue 済み)。
+  if (/^[a-zA-Z-]+\(.*\)$/.test(text) || /\s/.test(text)) {
+    return text;
+  }
+  if (/^-?\d+(\.\d+)?[a-zA-Z%]+$/.test(text)) {
     return text;
   }
   fail(`unsupported value ${text} for ${prop}`);
@@ -158,11 +160,19 @@ function expandNestedKey(cls, key) {
   return `.${cls}${key.slice(1)}`;
 }
 
-/** static scalar / var() 等の関数値か (dynamic 判定用)。 */
+/** static scalar / var() 等の関数値か (dynamic 判定用)。
+ * 空白を含む bare 値 (`3px dotted darkorange`) は CSS 値とみなす
+ * (JS 識別子・member 式に空白は無い)。`${`・ternary・`&&`/`||` 混じりは dynamic。 */
 function isStaticValue(value) {
   const text = value.trim();
+  if (text.includes('${')) return false;
+  const bare = text.replace(/(["'])(?:\\\1|.)*?\1/g, '');
+  if (/\?|&&|\|\|/.test(bare)) return false;
+  if (/\s/.test(text)) return true;
   if (/^(['"].*['"]|-?\d+(\.\d+)?)$/.test(text)) return true;
-  return /^[a-zA-Z-]+\(.*\)$/.test(text) && !text.includes('${');
+  // 単位付き数値 (`6px`, `13px`) は static。
+  if (/^-?\d+(\.\d+)?[a-zA-Z%]+$/.test(text)) return true;
+  return /^[a-zA-Z-]+\(.*\)$/.test(text);
 }
 
 function listTsx(dir) {
@@ -179,38 +189,211 @@ const rules = [];
 let classCounter = 0;
 const newClass = () => `qb-${classCounter++}`;
 
-/** shared.tsx の `css({...})` literal を抜く。 */
-function resolveSharedBox() {
-  const shared = fs.readFileSync(path.join(srcDir, 'components', 'shared.tsx'), 'utf8');
-  const m = /const sharedBox = css\(\{/.exec(shared);
-  if (m === null) fail('sharedBox definition not found');
-  const open = m.index + m[0].length - 1;
-  const close = matchBrace(shared, open);
-  if (close < 0) fail('sharedBox literal unbalanced');
-  return shared.slice(open + 1, close - 1);
+/** top-level comma split (brace/quote aware)。 */
+function splitTopLevel(text) {
+  const parts = [];
+  let depth = 0;
+  let quote = null;
+  let current = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote !== null) {
+      current += ch;
+      if (ch === '\\') {
+        current += text[i + 1] ?? '';
+        i++;
+      } else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === '{' || ch === '[' || ch === '(') depth++;
+    else if (ch === '}' || ch === ']' || ch === ')') depth--;
+    if (ch === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim() !== '') parts.push(current);
+  return parts;
 }
 
-const sharedBody = resolveSharedBox();
+/** `(...)` の balanced scan。open は `(` の位置。閉じの exclusive index を返す。 */function matchParen(src, open) {
+  let depth = 0;
+  let quote = null;
+  for (let i = open; i < src.length; i++) {
+    const ch = src[i];
+    if (quote !== null) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') depth++;
+    else if (ch === ')') {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+/** module-scope の `css({...})` / `` css`...` `` handle 定義を集めて除去する。 */
+function collectHandles(src) {
+  const handles = new Map();
+  for (;;) {
+    const m = /(?:export\s+)?\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*css\s*(\(|`)/.exec(src);
+    if (m === null) break;
+    const name = m[1];
+    const opener = m[0][m[0].length - 1];
+    const open = m.index + m[0].length - 1;
+    if (opener === '(') {
+      const close = matchParen(src, open);
+      if (close < 0) fail(`handle ${name} unbalanced`);
+      const inner = src.slice(open + 1, close - 1).trim();
+      if (!inner.startsWith('{') || !inner.endsWith('}')) fail(`non-object handle ${name}`);
+      handles.set(name, { kind: 'object', body: inner.slice(1, -1) });
+      src = `${src.slice(0, m.index)}${src.slice(close).replace(/^;/, '')}`;
+    } else {
+      const end = src.indexOf('`', open + 1);
+      if (end < 0) fail(`template handle ${name} unterminated`);
+      handles.set(name, { kind: 'template', text: src.slice(open + 1, end) });
+      src = `${src.slice(0, m.index)}${src.slice(end + 1).replace(/^;/, '')}`;
+    }
+  }
+  return { src, handles };
+}
+
+/** template literal 本体を [prop, value] 列にする (static のみ)。 */
+function parseTemplateBody(text) {
+  const entries = [];
+  for (const decl of text.split(';')) {
+    if (decl.trim() === '') continue;
+    const colon = decl.indexOf(':');
+    if (colon < 0) fail(`cannot parse template declaration ${decl.trim()}`);
+    const prop = decl.slice(0, colon).trim();
+    const value = decl.slice(colon + 1).trim();
+    if (prop === '' || value === '') fail(`empty template declaration ${decl.trim()}`);
+    if (value.includes('${')) fail(`interpolation in baseline template ${value}`);
+    entries.push([prop, value]);
+  }
+  return entries;
+}
+
+/** handle (object/template) を rule 化して class を返す。 */
+function registerHandle(handles, name) {
+  const handle = handles.get(name);
+  if (handle === undefined) fail(`unknown handle ${name}`);
+  const cls = newClass();
+  const entries =
+    handle.kind === 'object' ? parseFlatObject(handle.body) : parseTemplateBody(handle.text);
+  const nested = [];
+  const flat = [];
+  for (const [prop, value] of entries) {
+    if (value.trim().startsWith('{')) {
+      const inner = value.trim();
+      for (const [iprop, ivalue] of parseFlatObject(inner.slice(1, inner.lastIndexOf('}')))) {
+        if (!isStaticValue(ivalue)) fail(`nested dynamic ${ivalue}`);
+        nested.push([prop, iprop, ivalue]);
+      }
+    } else {
+      if (!isStaticValue(value)) fail(`handle dynamic ${value} in ${name}`);
+      flat.push([prop, value]);
+    }
+  }
+  rules.push([cls, flat, nested]);
+  return cls;
+}
 
 function convertFile(relPath) {
   let src = fs.readFileSync(path.join(srcDir, relPath), 'utf8');
-  // shared.tsx: handle 定義と css import を消す (利用側は class 化する)。
-  if (relPath === path.join('components', 'shared.tsx')) {
-    src = src.replace(/import \{ css \} from '@qstyle\/qwik';\n/, '');
-    const m = /export const sharedBox = css\(\{/.exec(src);
-    if (m === null) fail('sharedBox export not found');
-    const open = m.index + m[0].length - 1;
-    const close = matchBrace(src, open);
-    if (close < 0) fail('sharedBox export unbalanced');
-    // `export const sharedBox = css({...});` 全体を消す (末尾 `;` まで)。
-    const semi = src.indexOf(';', close);
-    src = src.slice(0, m.index) + src.slice(semi < 0 ? close : semi + 1);
+  // module-scope handle 定義を集めて除去する。
+  const collected = collectHandles(src);
+  src = collected.src;
+  const handles = collected.handles;
+  // `import { css }` が不要になれば消す。
+  if (!/\bcss\s*[\(\`]/.test(src)) {
+    src = src.replace(/import \{([^}]*)\} from '@qstyle\/qwik';\n/, (line, names) => {
+      const rest = names
+        .split(',')
+        .map((n) => n.trim())
+        .filter((n) => n !== '' && n !== 'css');
+      return rest.length === 0 ? '' : `import { ${rest.join(', ')} } from '@qstyle/qwik';\n`;
+    });
   }
-  // `css={sharedBox}` → class。
-  if (src.includes('css={sharedBox}')) {
-    const cls = newClass();
-    rules.push([cls, parseFlatObject(sharedBody), []]);
-    src = src.replaceAll('css={sharedBox}', `class="${cls}"`);
+  // `css={ident}` (handle 参照) → class。
+  for (;;) {
+    const m = /css=\{([A-Za-z_$][\w$]*)\}/.exec(src);
+    if (m === null) break;
+    const cls = registerHandle(handles, m[1]);
+    src = `${src.slice(0, m.index)}class="${cls}"${src.slice(m.index + m[0].length)}`;
+  }
+  // `css={[...]}` (composition) → class (+ 条件付きは class ternary)。
+  for (;;) {
+    const marker = 'css={[';
+    const at = src.indexOf(marker);
+    if (at < 0) break;
+    const open = at + 'css={'.length;
+    // `[` に対応する `]` を探す (brace ではなく bracket で数える)。
+    let depth = 0;
+    let quote = null;
+    let close = -1;
+    for (let i = open; i < src.length; i++) {
+      const ch = src[i];
+      if (quote !== null) {
+        if (ch === '\\') i++;
+        else if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        continue;
+      }
+      if (ch === '[') depth++;
+      else if (ch === ']') {
+        depth--;
+        if (depth === 0) {
+          close = i + 1;
+          break;
+        }
+      }
+    }
+    if (close < 0) fail(`css array unbalanced in ${relPath}`);
+    const elements = splitTopLevel(src.slice(open + 1, close - 1));
+    const statics = [];
+    let conditional = null;
+    for (const element of elements) {
+      const trimmed = element.trim();
+      if (trimmed === '' || trimmed === 'false' || trimmed === 'null' || trimmed === 'undefined') {
+        continue;
+      }
+      const condMatch = /^(.+?)&&\s*([A-Za-z_$][\w$]*)$/.exec(trimmed);
+      if (condMatch !== null) {
+        if (conditional !== null) fail(`multiple conditionals in ${relPath}`);
+        conditional = { cond: condMatch[1].trim(), cls: registerHandle(handles, condMatch[2]) };
+        continue;
+      }
+      if (!/^[A-Za-z_$][\w$]*$/.test(trimmed)) fail(`unsupported array element ${trimmed}`);
+      statics.push(registerHandle(handles, trimmed));
+    }
+    let replacement;
+    if (conditional === null) {
+      replacement = `class="${[...statics].join(' ')}"`;
+    } else {
+      const base = [...statics].join(' ');
+      const withHot = [...statics, conditional.cls].join(' ');
+      replacement = `class={${conditional.cond} ? "${withHot}" : "${base}"}`;
+    }
+    // `close` は `]` の直後。JSX 式を閉じる `}` が `close` にあるため +1 まで削除。
+    src = src.slice(0, at) + replacement + src.slice(close + 1);
   }
   // `css={{...}}` → class (+ dyn-box の width は inline style)。
   for (;;) {
@@ -236,8 +419,11 @@ function convertFile(relPath) {
     if (nested.length > 0 && dynamic !== undefined) {
       fail(`nested + dynamic mix in ${relPath}`);
     }
+    // statics は nested と dynamic を除外した残り (nested は別 rule に出す)。
+    const nestedKeys = new Set(nested.map(([p]) => p));
     const statics = entries.filter(
-      ([p]) => dynamic === undefined || p !== dynamic[0],
+      ([p]) =>
+        !nestedKeys.has(p) && (dynamic === undefined || p !== dynamic[0]),
     );
     const nestedStatics = [];
     for (const [key, value] of nested) {
@@ -252,11 +438,12 @@ function convertFile(relPath) {
     rules.push([cls, statics, nestedStatics]);
     let stylePart = '';
     if (dynamic !== undefined) {
-      // member 式のみ inline style に落とす (fixture は width.value のみ)。
-      if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(dynamic[1].trim())) {
+      // 非 static 値は inline style に落とす (member 式・ternary 等。brace/`;` 混じりは不可)。
+      const raw = dynamic[1].trim();
+      if (/[{;}]/.test(raw)) {
         fail(`unsupported dynamic ${dynamic[1]} in ${relPath}`);
       }
-      stylePart = ` style={{ ${dynamic[0]}: ${dynamic[1].trim()} }}`;
+      stylePart = ` style={{ ${dynamic[0]}: ${raw} }}`;
     }
     if (classAttr !== null) {
       // 既存 class がある場合は merge する。css span 削除を先に行い

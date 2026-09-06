@@ -637,6 +637,95 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
       .map((e) => e.fileName)
       .sort();
 
+  it('HASH-007: route A local change keeps route B chunk hash stable', () => {
+    // 用法が重ならない 3 unit (home-local / about-local / shared) は merge されず
+    // 3 chunk になる (similarity 0)。A の宣言変更は A の chunk のみ変える。
+    const options = {
+      backend: 'css-asset',
+      routes: {
+        '/': ['/src/home-a.tsx', '/src/home-b.tsx', '/src/home-c.tsx'],
+        '/about': ['/src/about-a.tsx', '/src/about-b.tsx', '/src/about-c.tsx'],
+      },
+    } as const;
+    const shared = `<div css={{ outline: '2px solid black' }} />;`;
+    const modulesV1 = [
+      { id: '/src/home-a.tsx', code: `export const A = () => <div css={{ color: 'red' }} />;` },
+      { id: '/src/home-b.tsx', code: `export const B = () => ${shared}` },
+      { id: '/src/home-c.tsx', code: `export const C = () => ${shared}` },
+      { id: '/src/about-a.tsx', code: `export const D = () => <div css={{ color: 'green' }} />;` },
+      { id: '/src/about-b.tsx', code: `export const E = () => ${shared}` },
+      { id: '/src/about-c.tsx', code: `export const F = () => ${shared}` },
+    ];
+    const modulesV2 = modulesV1.map((mod) =>
+      mod.id === '/src/home-a.tsx'
+        ? { ...mod, code: `export const A = () => <div css={{ color: 'blue' }} />;` }
+        : mod,
+    );
+    const first = buildOnce({ ...options }, modulesV1);
+    const second = buildOnce({ ...options }, modulesV2);
+    const namesOf = (run: { emitted: Emitted[] }): string[] => cssFileNamesOf(run);
+    expect(namesOf(first)).toHaveLength(3);
+    expect(namesOf(second)).toHaveLength(3);
+    // 共有・about の chunk は不変、home-local のみ変わる。
+    const same = (file: string): boolean => namesOf(second).includes(file);
+    const homeV1: string[] = namesOf(first).filter((file) => !same(file));
+    expect(homeV1).toHaveLength(1);
+    for (const file of namesOf(first)) {
+      if (file !== homeV1[0]) expect(namesOf(second)).toContain(file);
+    }
+    // 変わった chunk の中身は blue。
+    const changed: Emitted | undefined = second.emitted.find(
+      (e) => e.fileName === namesOf(second).find((f) => f !== homeV1[0] && !namesOf(first).includes(f)),
+    );
+    expect(changed?.source).toContain('color:blue');
+  });
+
+  it('HASH-008: shared atom change invalidates only the shared chunk', () => {
+    const options = {
+      backend: 'css-asset',
+      routes: {
+        '/': ['/src/home-a.tsx', '/src/home-b.tsx'],
+        '/about': ['/src/about-a.tsx', '/src/about-b.tsx'],
+      },
+    } as const;
+    const modulesV1 = [
+      { id: '/src/home-a.tsx', code: `export const A = () => <div css={{ color: 'red' }} />;` },
+      {
+        id: '/src/home-b.tsx',
+        code: `export const B = () => <div css={{ outline: '2px solid black' }} />;`,
+      },
+      { id: '/src/about-a.tsx', code: `export const D = () => <div css={{ color: 'green' }} />;` },
+      {
+        id: '/src/about-b.tsx',
+        code: `export const E = () => <div css={{ outline: '2px solid black' }} />;`,
+      },
+    ];
+    const modulesV2 = modulesV1.map((mod) =>
+      mod.id.endsWith('-b.tsx')
+        ? {
+            ...mod,
+            code: mod.code.replace('2px solid black', '3px dotted gray'),
+          }
+        : mod,
+    );
+    const first = buildOnce({ ...options }, modulesV1);
+    const second = buildOnce({ ...options }, modulesV2);
+    expect(cssFileNamesOf(first)).toHaveLength(3);
+    expect(cssFileNamesOf(second)).toHaveLength(3);
+    // route-local (red/green) の chunk は不変、shared のみ変わる。
+    const kept: string[] = cssFileNamesOf(first).filter((file) =>
+      cssFileNamesOf(second).includes(file),
+    );
+    expect(kept).toHaveLength(2);
+    const changedFile: string | undefined = cssFileNamesOf(second).find(
+      (file) => !cssFileNamesOf(first).includes(file),
+    );
+    const changed: Emitted | undefined = second.emitted.find(
+      (e) => e.fileName === changedFile,
+    );
+    expect(changed?.source).toContain('dotted');
+  });
+
   it('HASH-009: identical module content at different paths yields identical css asset names', () => {
     const code = `export const A = () => <div css={{ display: 'flex', gap: 8 }} />;`;
     // 同一内容を別 directory に置いた build どうしで css asset hash は同一。
@@ -859,5 +948,27 @@ describe('qstyle B-2 CSS semantics preservation (CSS-004/005/011/015/016/017/018
     // serialize 結果も同一 (canonical order)。
     expect(packCssOf(p, a?.code ?? '')).toBe(packCssOf(p, b?.code ?? ''));
     expect(unitCount(p)).toBe(1);
+  });
+
+  it('FLB-008/009: peer version guard (pure checker matrix)', async (): Promise<void> => {
+    const { checkPeerVersions, peerMajor } = await import('./index.js');
+    // 対応 version は問題なし。
+    expect(checkPeerVersions({ qwik: '2.0.0-beta.43', vite: '8.2.2' })).toEqual([]);
+    expect(checkPeerVersions({ qwik: 'v2.1.0', vite: 'v8.0.0' })).toEqual([]);
+    // major 不一致は明示問題になる (silent miscompile にしない)。
+    expect(checkPeerVersions({ qwik: '1.0.0', vite: '8.2.2' })).toHaveLength(1);
+    expect(checkPeerVersions({ qwik: '2.0.0-beta.43', vite: '7.0.0' })).toHaveLength(1);
+    expect(checkPeerVersions({ qwik: '3.0.0', vite: '9.0.0' })).toHaveLength(2);
+    // 不正・欠落も問題になる。
+    expect(checkPeerVersions({ qwik: 'bogus', vite: '8.2.2' })).toHaveLength(1);
+    expect(checkPeerVersions({})).toHaveLength(2);
+    expect(peerMajor('2.0.0-beta.43')).toBe(2);
+    expect(peerMajor('v8.2.2')).toBe(8);
+    expect(peerMajor('bogus')).toBeNull();
+  });
+
+  it('FLB-008/009: plugin constructs cleanly on supported peers', () => {
+    // 実環境の version で問題がなければ何も起きない (warning も throw もなし)。
+    expect(() => qstyleFactory({ diagnostics: 'error' })).not.toThrow();
   });
 });

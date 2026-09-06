@@ -1,5 +1,6 @@
 import type { HmrContext, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createRequire } from 'node:module';
 import {
   DEFAULT_CHUNK_OPTIONS,
   VERSION,
@@ -42,6 +43,55 @@ import type { StyleHandle, StyleObject } from '@qstyle/qwik';
 
 export type OptimizationLevel = 'preserve' | 'safe' | 'strict';
 export type BackendKind = 'qwik-native' | 'css-asset';
+
+/**
+ * FLB-008/009: サポートする peer major。範囲外は diagnostics に従い警告/throw
+ * (silent miscompile ではなく明示 error。Qwik β/vite 8 前提の glue を守る)。
+ */
+export const SUPPORTED_QWIK_MAJOR = 2;
+export const SUPPORTED_VITE_MAJOR = 8;
+
+/** `2.0.0-beta.43` / `v8.2.2` 等から major を取る。取れなければ null。 */
+export function peerMajor(version: string): number | null {
+  const match: RegExpMatchArray | null = /^v?(\d+)\./.exec(version.trim());
+  if (match === null) return null;
+  const major: number = Number(match[1]);
+  return Number.isInteger(major) ? major : null;
+}
+
+/**
+ * FLB-008/009: peer version の検査 (純関数)。問題が無ければ空配列。
+ * version 不明 (解決不能) も問題として返す (黙って通さない)。
+ */
+export function checkPeerVersions(versions: {
+  readonly qwik?: string | undefined;
+  readonly vite?: string | undefined;
+}): string[] {
+  const problems: string[] = [];
+  const qwikMajor: number | null =
+    versions.qwik === undefined ? null : peerMajor(versions.qwik);
+  if (qwikMajor === null) {
+    problems.push(
+      `cannot determine @qwik.dev/core version${versions.qwik === undefined ? '' : ` (${versions.qwik})`}; qstyle requires v${SUPPORTED_QWIK_MAJOR}`,
+    );
+  } else if (qwikMajor !== SUPPORTED_QWIK_MAJOR) {
+    problems.push(
+      `unsupported @qwik.dev/core ${versions.qwik} (qstyle supports v${SUPPORTED_QWIK_MAJOR})`,
+    );
+  }
+  const viteMajor: number | null =
+    versions.vite === undefined ? null : peerMajor(versions.vite);
+  if (viteMajor === null) {
+    problems.push(
+      `cannot determine vite version${versions.vite === undefined ? '' : ` (${versions.vite})`}; qstyle requires v${SUPPORTED_VITE_MAJOR}`,
+    );
+  } else if (viteMajor !== SUPPORTED_VITE_MAJOR) {
+    problems.push(
+      `unsupported vite ${versions.vite} (qstyle supports v${SUPPORTED_VITE_MAJOR})`,
+    );
+  }
+  return problems;
+}
 
 export interface QstyleOptions {
   readonly optimization?: OptimizationLevel | undefined;
@@ -98,6 +148,40 @@ export interface CssAssetChunk {
   readonly classification: ChunkClassification;
   /** R2: chunk の unit を使う component 群が張る route の sorted union (未配線なら空)。 */
   readonly routes: readonly string[];
+}
+
+/**
+ * FLB-008/009 の配線。peer (`@qwik.dev/core`, `vite`) の package.json から
+ * version を読んで検査する。解決不能も含めて `checkPeerVersions` が判定する。
+ * - 'error': 即 throw
+ * - 'warning': 同一内容は process 内で 1 回だけ警告
+ * - 'silent': 何もしない
+ */
+const warnedPeerVersions = new Set<string>();
+
+function peerVersionOf(packageName: string): string | undefined {
+  try {
+    const require = createRequire(import.meta.url);
+    const pkg = require(`${packageName}/package.json`) as { version?: unknown };
+    return typeof pkg.version === 'string' ? pkg.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function checkPeerVersionsOrThrow(diagnosticsMode: 'silent' | 'warning' | 'error'): void {
+  if (diagnosticsMode === 'silent') return;
+  const problems: string[] = checkPeerVersions({
+    qwik: peerVersionOf('@qwik.dev/core'),
+    vite: peerVersionOf('vite'),
+  });
+  if (problems.length === 0) return;
+  const message: string = problems.map((problem) => `[qstyle] ${problem}`).join('\n');
+  if (diagnosticsMode === 'error') throw new Error(message);
+  if (!warnedPeerVersions.has(message)) {
+    warnedPeerVersions.add(message);
+    console.warn(message);
+  }
 }
 
 /**
@@ -2165,6 +2249,7 @@ export function qstyle(
   const optimization: OptimizationLevel = options.optimization ?? 'safe';
   const backend: BackendKind = options.backend ?? 'qwik-native';
   const diagnosticsMode: 'silent' | 'warning' | 'error' = options.diagnostics ?? 'warning';
+  checkPeerVersionsOrThrow(diagnosticsMode);
   const strict: boolean = optimization === 'strict';
   // Level 0: parse・minify・exact rule dedup のみで atomic 化しない (§16)。
   const preserve: boolean = optimization === 'preserve';
@@ -3861,9 +3946,14 @@ export function qstyle(
         }
       }
       if (skippedReasons.length > 0) {
-        console.warn(
-          `[qstyle] ${id}: left ${skippedReasons.length} css occurrence(s) untouched (${skippedReasons[0]}${skippedReasons.length > 1 ? ', ...' : ''})`,
-        );
+        // DIA-009: 同一 module × 同一理由は session 内で 1 回だけ表示する。
+        const warnKey: string = `${id}::${skippedReasons[0] ?? ''}`;
+        if (!warnedKeys.has(warnKey)) {
+          warnedKeys.add(warnKey);
+          console.warn(
+            `[qstyle] ${id}: left ${skippedReasons.length} css occurrence(s) untouched (${skippedReasons[0]}${skippedReasons.length > 1 ? ', ...' : ''})`,
+          );
+        }
       }
       if (edits.length === 0) return null;
       // dev: per-module CSS を virtual css に出す (評価・再配列なし。そのまま適用)。
