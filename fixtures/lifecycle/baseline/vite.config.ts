@@ -7,19 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { qwikVite } from '@qwik.dev/core/optimizer';
 import { qwikCity } from '@qwik.dev/router/vite';
-import { ssgAdapter } from '@qwik.dev/router/adapters/ssg/vite';
 
 const here: string = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [
-    qwikCity(),
-    qwikVite(),
-    ssgAdapter({
-      origin: 'http://127.0.0.1:4174',
-      ...(process.env.QSTYLE_SSG === '0' ? { ssg: { include: [] as string[] } } : {}),
-    }),
-  ],
+  // baseline は live SSR のみ配信するため SSG adapter は入れない
+  // (SSG render は differential に不要。../vite.config.ts の対応物)。
+  plugins: [qwikCity(), qwikVite()],
   resolve: {
     alias: {
       '@qstyle/qwik/client': path.resolve(

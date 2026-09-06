@@ -24,6 +24,13 @@ const OBSERVED: readonly (readonly [
       ['legacy-a', ['color']],
       ['legacy-b', ['color']],
       ['dyn-box', ['background-color', 'padding-top']],
+      ['g-inherit-c', ['color']],
+      ['g-noninh-c', ['margin-top']],
+      ['g-where', ['color']],
+      ['g-current', ['color']],
+      ['g-var', ['padding-top']],
+      ['g-logical', ['margin-left', 'padding-bottom']],
+      ['g-direction', ['direction']],
     ],
   ],
   [

@@ -1216,8 +1216,7 @@ function scanTagAttributes(head: string): { classStart: number; lastSpreadEnd: n
     if (
       classStart < 0 &&
       /\s/.test(head[i - 1] ?? '') &&
-      head.startsWith('class', i) &&
-      /^\s*=/.test(head.slice(i + 5))
+      /^class(?:Name)?\s*=/.test(head.slice(i))
     ) {
       classStart = i;
     }
@@ -1226,18 +1225,23 @@ function scanTagAttributes(head: string): { classStart: number; lastSpreadEnd: n
   return { classStart, lastSpreadEnd };
 }
 
-/** tag head 内の `class={...}` 式を抽出する。なければ null。 */
+/** tag head 内の `class={...}` / `className={...}` 式を抽出する。なければ null。 */
 function extractClassExpr(
   head: string,
   start: number,
-): { start: number; end: number; expr: string } | null {
+): { start: number; end: number; expr: string; keyword: string } | null {
   if (start < 0) return null;
-  const m: RegExpMatchArray | null = /^class\s*=\s*\{/.exec(head.slice(start));
+  const m: RegExpMatchArray | null = /^class(Name)?\s*=\s*\{/.exec(head.slice(start));
   if (m === null) return null;
   const open: number = start + m[0].length - 1;
   const close: number = findMatchingBrace(head, open);
   if (close < 0) return null;
-  return { start, end: close + 1, expr: head.slice(open + 1, close) };
+  return {
+    start,
+    end: close + 1,
+    expr: head.slice(open + 1, close),
+    keyword: `class${m[1] ?? ''}`,
+  };
 }
 
 /** from 以降で開始タグを閉じる '>' の位置を返す。文字列・comment と brace の内側は無視する。 */
@@ -2820,24 +2824,27 @@ export function qstyle(
         const classExpr = extractClassExpr(head2, attrs2.classStart);
         const classMatch: RegExpMatchArray | null =
           classExpr === null && attrs2.classStart >= 0
-            ? /^class\s*=\s*(["'])(.*?)\1/.exec(head2.slice(attrs2.classStart))
+            ? /^class(Name)?\s*=\s*(["'])(.*?)\2/.exec(head2.slice(attrs2.classStart))
             : null;
+        // 既存属性の keyword (class / className) を維持して追記する。
+        const classKeyword: string =
+          classExpr !== null ? classExpr.keyword : `class${classMatch?.[1] ?? ''}`;
         let newHead: string;
         if (condSegments.length > 0) {
           const staticChunk: string = [
-            ...(classMatch?.[2] ? [classMatch[2] as string] : []),
+            ...(classMatch?.[3] ? [classMatch[3] as string] : []),
             ...ids,
           ].join(' ');
           const expr: string = [
             ...(staticChunk === '' ? [] : [`${JSON.stringify(`${staticChunk} `)}`]),
             ...condSegments,
           ].join(' + ');
-          const condAttr: string = `class={${expr === '' ? '""' : expr}}`;
+          const condAttr: string = `${classKeyword}={${expr === '' ? '""' : expr}}`;
           if (classExpr !== null) {
             // 既存 class={...} 式と合成する: class={[EXISTING, ...generated]}。
             newHead =
               head2.slice(0, classExpr.start) +
-              `class={[${classExpr.expr}, ${expr === '' ? '""' : expr}]}` +
+              `${classKeyword}={[${classExpr.expr}, ${expr === '' ? '""' : expr}]}` +
               head2.slice(classExpr.end);
           } else if (classMatch !== null) {
             const classStart: number = attrs2.classStart;
@@ -2850,9 +2857,9 @@ export function qstyle(
             newHead = `${newHead} style={{ ${styleEntries} }}`;
           }
         } else if (classMatch !== null) {
-          const quote: string = classMatch[1] as string;
+          const quote: string = classMatch[2] as string;
           const classStart: number = attrs2.classStart;
-          const attr: string = `class=${quote}${`${classMatch[2]} ${ids.join(' ')}`.trim()}${quote}`;
+          const attr: string = `${classKeyword}=${quote}${`${classMatch[3]} ${ids.join(' ')}`.trim()}${quote}`;
           newHead =
             head2.slice(0, classStart) + attr + head2.slice(classStart + classMatch[0].length);
           if (styleEntries !== null && !hasStyleProp) {
@@ -2865,7 +2872,9 @@ export function qstyle(
           // 既存 class={...} 式と合成する: class={[EXISTING, "ids"]}。
           // ids が空の場合は既存のまま (style のみ追加)。
           const attr: string =
-            ids.length > 0 ? `class={[${classExpr.expr}, ${JSON.stringify(ids.join(' '))}]}` : '';
+            ids.length > 0
+              ? `${classKeyword}={[${classExpr.expr}, ${JSON.stringify(ids.join(' '))}]}`
+              : '';
           newHead =
             head2.slice(0, classExpr.start) +
             (attr !== '' ? attr : head2.slice(classExpr.start, classExpr.end)) +

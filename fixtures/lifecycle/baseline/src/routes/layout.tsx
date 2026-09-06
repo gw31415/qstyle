@@ -6,7 +6,7 @@ import { Link } from '@qwik.dev/router';
 
 export default component$(() => (
   <>
-    <nav data-testid="nav" class="qb-9">
+    <nav data-testid="nav" class="qb-16">
       <Link data-testid="nav-home" href="/">
         Home
       </Link>

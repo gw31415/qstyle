@@ -42,6 +42,32 @@ export default component$(() => {
 
       <DynBox />
 
+      {/* CSS semantics gallery (CSS-004/005/011/015/016/017/018 differential 用)。
+        baseline 生成器は flat static + 1 段 nested + 既存 class merge に対応する。 */}
+      <div data-testid="g-inherit-p" css={{ color: 'olive' }}>
+        <span data-testid="g-inherit-c">inherit</span>
+      </div>
+      <div data-testid="g-noninh-p" css={{ marginTop: '21px' }}>
+        <span data-testid="g-noninh-c">no-inherit</span>
+      </div>
+      <p data-testid="g-where" className="g-on" css={{ '&:where(.g-on)': { color: 'teal' } }}>
+        where
+      </p>
+      <div style={{ color: 'orange' }}>
+        <p data-testid="g-current" css={{ color: 'currentColor' }}>
+          current
+        </p>
+      </div>
+      <p data-testid="g-var" css={{ padding: 'var(--gsec-missing, 9px)' }}>
+        var
+      </p>
+      <p data-testid="g-logical" css={{ marginInlineStart: '13px', paddingBlockEnd: '7px' }}>
+        logical
+      </p>
+      <p data-testid="g-direction" css={{ direction: 'rtl' }}>
+        direction
+      </p>
+
       <LegacyGlobal />
       <LegacyScopedA />
       <LegacyScopedB />

@@ -12,7 +12,7 @@ export default component$(() => {
   const loc = useLocation();
   return (
     <main>
-      <h1 data-testid="item-title" class="qb-8">
+      <h1 data-testid="item-title" class="qb-15">
         item {loc.params.id}
       </h1>
       <Shared label={`item-${loc.params.id}`} />

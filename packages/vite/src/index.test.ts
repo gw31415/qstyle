@@ -118,6 +118,20 @@ describe('qstyle vite plugin (M0)', () => {
     expect(out?.code).not.toContain('css={{');
   });
 
+  it('merges into a pre-existing className attribute without dropping it', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+    };
+    // className 値を落とすと :where(.g-on) 等の既存 class 依存が壊れる (実バグ回帰)。
+    const out = p.transform(
+      `export const A = () => <p className="g-on" css={{ '&:where(.g-on)': { color: 'teal' } }} />;`,
+      '/src/clsname.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(out?.code).toMatch(/className="g-on q_[0-9a-f]{8}"/);
+    expect(out?.code).not.toContain('css={{');
+  });
+
   it('merges into an existing class={...} expression via array wrap', () => {
     const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;

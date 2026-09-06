@@ -772,6 +772,77 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
     expect(p.__residuals.some((r) => r.reason === 'unsupported-at-rule')).toBe(true);
   });
 
+  it('CSS-012: @layer order is residual, not miscompiled', () => {
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    // layer 順序は transform が解釈せず untouched (+理由記録)。黙って書き換えない。
+    expect(
+      p.transform(
+        `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,
+        '/src/css012.tsx',
+      ),
+    ).toBeNull();
+    expect(p.__residuals.some((r) => r.reason === 'unsupported-at-rule')).toBe(true);
+    expect(unitCount(p)).toBe(0);
+  });
+
+describe('qstyle B-2 CSS semantics preservation (CSS-004/005/011/015/016/017/018)', () => {
+  const check = (
+    label: string,
+    code: string,
+    expectedInCss: readonly string[],
+  ): void => {
+    const p = plugin();
+    const out = p.transform(code, `/src/${label}.tsx`);
+    expect(out, label).not.toBeNull();
+    const pack: string = packCssOf(p, out?.code ?? '');
+    for (const snippet of expectedInCss) {
+      expect(pack, `${label}: ${snippet}`).toContain(snippet);
+    }
+  };
+
+  it('CSS-004/005: inherited and non-inherited values pass through', () => {
+    check('css004', `export const A = () => <div css={{ color: 'olive' }} />;`, [
+      'color:olive',
+    ]);
+    check('css005', `export const A = () => <div css={{ marginTop: '21px' }} />;`, [
+      'margin-top:21px',
+    ]);
+  });
+
+  it('CSS-011: :where() kept verbatim (zero-specificity semantics)', () => {
+    check(
+      'css011',
+      `export const A = () => <div css={{ '&:where(.g-on)': { color: 'teal' } }} />;`,
+      [':where(.g-on)', 'color:teal'],
+    );
+  });
+
+  it('CSS-015: currentColor kept verbatim', () => {
+    check('css015', `export const A = () => <div css={{ color: 'currentColor' }} />;`, [
+      'color:currentColor',
+    ]);
+  });
+
+  it('CSS-016: invalid-at-computed custom property kept verbatim', () => {
+    check(
+      'css016',
+      `export const A = () => <div css={{ '--gsec': 'red', padding: 'var(--gsec, 9px)' }} />;`,
+      ['--gsec:red', 'padding:var(--gsec, 9px)'],
+    );
+  });
+
+  it('CSS-017/018: logical properties and direction kept', () => {
+    check(
+      'css017',
+      `export const A = () => <div css={{ marginInlineStart: '13px', paddingBlockEnd: '7px' }} />;`,
+      ['margin-inline-start:13px', 'padding-block-end:7px'],
+    );
+    check('css018', `export const A = () => <div css={{ direction: 'rtl' }} />;`, [
+      'direction:rtl',
+    ]);
+  });
+});
+
   it('DED-012: declaration order of independent properties does not change unit id', () => {
     const p = plugin();
     const a = p.transform(

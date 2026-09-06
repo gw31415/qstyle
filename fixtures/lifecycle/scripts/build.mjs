@@ -88,7 +88,16 @@ const serverBuilder = await createBuilder({
   mode: 'production',
   configFile: path.resolve(fixtureRoot, 'adapters/node-server/vite.config.ts'),
 });
-await serverBuilder.buildApp();
+// QSTYLE_SSG=0 (baseline 等の live SSR 専用): ssr 環境のみ build し SSG は走らせない
+// (adapter の buildApp は必ず SSG render を伴うため)。既定は buildApp 全体
+// (client 重複 + ssr + SSG render。QWK-002 の bake 用)。
+if (process.env.QSTYLE_SSG === '0') {
+  const ssrEnv = serverBuilder.environments.ssr;
+  if (ssrEnv === undefined) throw new Error('ssr environment not found');
+  await serverBuilder.build(ssrEnv);
+} else {
+  await serverBuilder.buildApp();
+}
 // adapter build の ssr env では main plugin の generateBundle 成果物
 // (qstyle.routes.json 等) が出ないため、base build の決定論的同一内容を配る。
 // entry.ssr.tsx が server bundle 脇の manifest を読んで SSG/SSR の link 焼きに使う。

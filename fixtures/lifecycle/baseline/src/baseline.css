@@ -33,10 +33,34 @@
   margin: 6px;
 }
 .qb-8 {
+  color: olive;
+}
+.qb-9 {
+  margin-top: 21px;
+}
+.qb-10 {
+}
+.qb-10:where(.g-on) {
+  color: teal;
+}
+.qb-11 {
+  color: currentColor;
+}
+.qb-12 {
+  padding: var(--gsec-missing, 9px);
+}
+.qb-13 {
+  margin-inline-start: 13px;
+  padding-block-end: 7px;
+}
+.qb-14 {
+  direction: rtl;
+}
+.qb-15 {
   color: sienna;
   padding: 4px;
 }
-.qb-9 {
+.qb-16 {
   display: flex;
   gap: 12px;
   padding: 8px;

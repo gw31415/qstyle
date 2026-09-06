@@ -1,0 +1,1 @@
+import{$ as e,L as t,q as n,r}from"./q-Cf3-siM5.js";var i=n(`s_wYiv5AJZFIM`);i.s(n=>t(`div`,{"data-testid":`shared-${n.label}`},{class:`qb-3`},[`shared `,e(n,`label`)],1,`nl_0`));var a=r(i);export{a as t};

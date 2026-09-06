@@ -55,21 +55,15 @@ export default defineConfig({
           }),
         ]),
     qwikVite(),
-    // SSG。QSTYLE_SSG=0 では render 対象を空にし (beta.43 の SSG は Link の QRL
-    // 解決で Q14 になる。qstyle とは無関係)、SSR server 用の build のみ行う。
-    // SSG bake (QWK-002) は framework 側の修正待ち。
-    ssgAdapter({
-      origin: 'http://127.0.0.1:4173',
-      ...(process.env.QSTYLE_SSG === '0' ? { ssg: { include: [] as string[] } } : {}),
-    }),
+    // SSG (QWK-002 link bake 用。QSTYLE_OFF=1 の対照 build でも render する)。
+    ssgAdapter({ origin: 'http://127.0.0.1:4173' }),
   ],
   resolve: {
     alias: {
       // workspace root に @qstyle が link されていないため packages/qwik を直参照する。
-      // links は qwik optimizer 向けの precompiled pattern (componentQrl/inlinedQrl) で
-      // 書かれているため、source tsx を optimizer に通すと不正な変換になる
-      // (s_qstyle is not defined)。build 済み dist を指す (= 通常の consumer と同じ
-      // 扱い)。client / prefetch も dist に揃えて runtime copy を 1 系列に保つ。
+      // links は `.qwik.mjs` で指す (app build の optimizer が transform して
+      // QRL symbol を q-manifest に登録する。素の `.mjs` では SSR/SSG で Q14)。
+      // client / prefetch も dist に揃えて runtime copy を 1 系列に保つ。
       '@qstyle/qwik/client': path.resolve(here, '../../packages/qwik/dist/client.mjs'),
       '@qstyle/qwik/links': path.resolve(here, '../../packages/qwik/dist/links.qwik.mjs'),
       '@qstyle/qwik/prefetch': path.resolve(here, '../../packages/qwik/dist/prefetch.mjs'),

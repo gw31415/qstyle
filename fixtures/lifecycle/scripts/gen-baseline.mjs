@@ -53,6 +53,11 @@ function cssValue(prop, value) {
   if (/^-?\d+(\.\d+)?$/.test(text)) {
     return UNITLESS.has(prop) ? text : `${text}px`;
   }
+  // var() 等の関数形は verbatim (interpolation 混じりは別途 fail)。
+  if (/^[a-zA-Z-]+\(.*\)$/.test(text)) {
+    if (text.includes('${')) fail(`interpolation in ${text}`);
+    return text;
+  }
   fail(`unsupported value ${text} for ${prop}`);
 }
 
@@ -80,20 +85,84 @@ function matchBrace(src, open) {
   return -1;
 }
 
-/** flat object literal 本体 (`{` `}` 除く) を [prop, value] 列にする。 */
+/** flat object literal 本体 (`{` `}` 除く) を [prop, value] 列にする。
+ * 値は static scalar のほか 1 段 nested object (`&:hover` 等) を受け付ける。 */
 function parseFlatObject(body) {
   const entries = [];
-  for (const part of body.split(',')) {
+  // top-level comma で分割 (brace depth 考慮。string 内は無視)。
+  const parts = [];
+  let depth = 0;
+  let quote = null;
+  let current = '';
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (quote !== null) {
+      current += ch;
+      if (ch === '\\') {
+        current += body[i + 1] ?? '';
+        i++;
+      } else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    if (ch === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim() !== '') parts.push(current);
+  for (const part of parts) {
     if (part.trim() === '') continue;
-    const colon = part.indexOf(':');
+    // quote/brace 外の最初の `:` で分割する (`:where()` 内の colon 対策)。
+    let colon = -1;
+    let depth = 0;
+    let quote = null;
+    for (let i = 0; i < part.length; i++) {
+      const ch = part[i];
+      if (quote !== null) {
+        if (ch === '\\') i++;
+        else if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        continue;
+      }
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+      else if (ch === ':' && depth === 0) {
+        colon = i;
+        break;
+      }
+    }
     if (colon < 0) fail(`cannot parse declaration ${part.trim()}`);
     const prop = part.slice(0, colon).trim().replace(/^['"]|['"]$/g, '');
     const value = part.slice(colon + 1).trim();
     if (prop === '' || value === '') fail(`empty declaration in ${part.trim()}`);
-    if (value.includes('{') || value.includes('}')) fail(`nested value ${value}`);
     entries.push([prop, value]);
   }
   return entries;
+}
+
+/** nested key (`&:where(.g-on)` 等) を class 付き selector にする。`&` 始まりのみ対応。 */
+function expandNestedKey(cls, key) {
+  if (!key.startsWith('&')) fail(`non-& nested key ${key}`);
+  return `.${cls}${key.slice(1)}`;
+}
+
+/** static scalar / var() 等の関数値か (dynamic 判定用)。 */
+function isStaticValue(value) {
+  const text = value.trim();
+  if (/^(['"].*['"]|-?\d+(\.\d+)?)$/.test(text)) return true;
+  return /^[a-zA-Z-]+\(.*\)$/.test(text) && !text.includes('${');
 }
 
 function listTsx(dir) {
@@ -140,7 +209,7 @@ function convertFile(relPath) {
   // `css={sharedBox}` → class。
   if (src.includes('css={sharedBox}')) {
     const cls = newClass();
-    rules.push([cls, parseFlatObject(sharedBody)]);
+    rules.push([cls, parseFlatObject(sharedBody), []]);
     src = src.replaceAll('css={sharedBox}', `class="${cls}"`);
   }
   // `css={{...}}` → class (+ dyn-box の width は inline style)。
@@ -154,25 +223,53 @@ function convertFile(relPath) {
     // css={{ の直後に `}` が来るか (object scanner (a) 相当の形のみ対応)。
     const body = src.slice(open + 1, close - 1);
     const entries = parseFlatObject(body);
-    // tag に既存 class があれば非対応 (fixture には無い)。
+    // tag に既存 class/className があれば merge する (g-where 用)。
     const tagStart = src.lastIndexOf('<', at);
     const head = src.slice(tagStart, at);
-    if (/class\s*=/.test(head)) fail(`existing class with css prop in ${relPath}`);
-    const dynamics = entries.filter(([, value]) => !/^(['"].*['"]|-?\d+(\.\d+)?)$/.test(value.trim()));
+    const classAttr = /class(Name)?\s*=\s*(["'])(.*?)\2/.exec(head);
+    const dynamics = entries.filter(
+      ([, value]) => !isStaticValue(value) && !value.trim().startsWith('{'),
+    );
     if (dynamics.length > 1) fail(`multiple dynamics in ${relPath}: ${dynamics.map(([p]) => p)}`);
     const dynamic = dynamics[0];
-    const statics = entries.filter(([p]) => dynamic === undefined || p !== dynamic[0]);
+    const nested = entries.filter(([, value]) => value.trim().startsWith('{'));
+    if (nested.length > 0 && dynamic !== undefined) {
+      fail(`nested + dynamic mix in ${relPath}`);
+    }
+    const statics = entries.filter(
+      ([p]) => dynamic === undefined || p !== dynamic[0],
+    );
+    const nestedStatics = [];
+    for (const [key, value] of nested) {
+      const inner = value.trim();
+      const innerBody = inner.slice(1, inner.lastIndexOf('}'));
+      for (const [iprop, ivalue] of parseFlatObject(innerBody)) {
+        if (!isStaticValue(ivalue)) fail(`nested dynamic ${ivalue} in ${relPath}`);
+        nestedStatics.push([key, iprop, ivalue]);
+      }
+    }
     const cls = newClass();
-    rules.push([cls, statics]);
-    let replacement = `class="${cls}"`;
+    rules.push([cls, statics, nestedStatics]);
+    let stylePart = '';
     if (dynamic !== undefined) {
       // member 式のみ inline style に落とす (fixture は width.value のみ)。
       if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(dynamic[1].trim())) {
         fail(`unsupported dynamic ${dynamic[1]} in ${relPath}`);
       }
-      replacement += ` style={{ ${dynamic[0]}: ${dynamic[1].trim()} }}`;
+      stylePart = ` style={{ ${dynamic[0]}: ${dynamic[1].trim()} }}`;
     }
-    src = src.slice(0, at) + replacement + src.slice(close + 1);
+    if (classAttr !== null) {
+      // 既存 class がある場合は merge する。css span 削除を先に行い
+      // (head より後ろのため head offset に影響しない)、次に head を置換する。
+      const withoutCss = src.slice(0, at) + src.slice(close + 1);
+      const keyword = classAttr[1] === 'Name' ? 'className' : 'class';
+      const mergedAttr = `${keyword}=${classAttr[2]}${classAttr[3]} ${cls}${classAttr[2]}${stylePart}`;
+      const headEnd = tagStart + head.length;
+      const newHead = withoutCss.slice(tagStart, headEnd).replace(classAttr[0], mergedAttr);
+      src = withoutCss.slice(0, tagStart) + newHead + withoutCss.slice(headEnd);
+    } else {
+      src = src.slice(0, at) + `class="${cls}"${stylePart}` + src.slice(close + 1);
+    }
   }
   if (src.includes('css={{') || src.includes('css={') || src.includes('sharedBox')) {
     fail(`unconverted css usage remains in ${relPath}`);
@@ -206,15 +303,18 @@ for (const rel of ['entry.ssr.tsx', 'entry.node-server.tsx', 'qstyle.d.ts']) {
   fs.writeFileSync(rootPath, root);
 }
 let css = '/* baseline global (gen-baseline.mjs). qstyle OFF 時の意味的等価物。 */\n';
-for (const [cls, entries] of rules) {
+for (const [cls, entries, nestedEntries] of rules) {
   css += `.${cls} {\n`;
   for (const [prop, value] of entries) {
     // dynamic は baseline.css に書かない (inline style 側)。
-    if (/^(['"].*['"]|-?\d+(\.\d+)?)$/.test(value.trim())) {
+    if (isStaticValue(value)) {
       css += `  ${kebab(prop)}: ${cssValue(prop, value)};\n`;
     }
   }
   css += '}\n';
+  for (const [key, iprop, ivalue] of nestedEntries ?? []) {
+    css += `${expandNestedKey(cls, key)} {\n  ${kebab(iprop)}: ${cssValue(iprop, ivalue)};\n}\n`;
+  }
 }
 fs.writeFileSync(path.join(baselineSrc, 'baseline.css'), css);
 console.log(`baseline: ${rules.length} classes`);
