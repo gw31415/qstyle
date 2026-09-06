@@ -2,6 +2,10 @@
 
 Qwik 向け Style Graph Compiler。`css` prop / `css()` / tagged template で書いたスタイルを build 時に解析し、意味的に同一な宣言の重複排除・route 単位の分割・content-hash 付き immutable asset 化を行う。runtime に CSS パーサやコンパイラは持ち込まない。
 
+> 実装・設計の全文は git history の plan.md (最終版: `e9b6135^`) を参照。
+> MVP completion (Release Gate P0 / 旧 §15-16) 達成済み:
+> unit 442 + browser 93 (chromium/webkit/firefox) + size-report 7 tests green。
+
 ## パッケージ
 
 - `@qstyle/vite` — Vite plugin (transform・asset emission・dev/HMR)
@@ -195,8 +199,11 @@ route 単位の低レベル API として `virtual:qstyle/route-loader` の
 を `assets/qstyle.*.css` に設定すること (`@qstyle/core` の
 `IMMUTABLE_CACHE_HEADER` に同値を定義済み)。
 
-**未実装**: browser での実機検証 (SSG bake / navigation / FOUC) は plan.md C0
-(Playwright 基盤) 待ち。`options.routes` は手動指定 (route path → module paths)。
+**実機検証済み** (Playwright・chromium/webkit/firefox): SSR/SSG link bake・client
+navigation・lazy component 直前読み込み・resume・immutable cache hit・load 順逆転
+での computed style 一致。`fixtures/lifecycle/e2e/` 参照。
+`options.routes` は手動指定 (route path → module paths。`[param]` pattern は
+manifest 照合で解決)。
 
 ## Inspector
 
@@ -220,3 +227,20 @@ pnpm -r typecheck
 pnpm -r lint
 pnpm -r test
 ```
+
+### Browser test (fixtures/lifecycle)
+
+```sh
+cd fixtures/lifecycle
+node scripts/build.mjs                    # optimized build (SSG + SSR server)
+pnpm exec playwright test -c e2e/playwright.config.ts        # 24 tests x 3 browsers
+pnpm exec playwright test -c e2e/ssg.config.ts               # SSG bake (file assertions)
+
+node scripts/gen-baseline.mjs             # qstyle OFF 等価 app を生成
+(cd baseline && QSTYLE_SSG=0 node scripts/build.mjs)
+pnpm exec playwright test -c e2e/differential.config.ts      # OFF vs ON 差分
+```
+
+baseline 差分は Gate P0.1 (plugin OFF/ON の `getComputedStyle` 一致)。
+PERF budget は `benchmarks/budget.json`、実測 record は
+`node scripts/size-report.mjs <dist> --out benchmarks/<name>.json`。

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "recordedAt": "2026-09-06",
+  "note": "PERF budget (旧 plan.md §12)。実測 (b2-perf.test.ts log / size-report) に余裕率を乗せて固定。超過は test suite (b2-perf) の時間 guard と size-report --compare で検知する。",
+  "transform": {
+    "PERF-002": { "case": "1000 identical static styles", "measuredMs": 15, "budgetMs": 1000 },
+    "PERF-003": { "case": "1000 dynamic widths", "measuredMs": 8, "budgetMs": 1000 },
+    "PERF-008": { "case": "10k declarations / 2000 units", "measuredMs": 50, "budgetMs": 5000 },
+    "PERF-009": { "case": "100k occurrences transform+serialize+dedup", "measuredMs": 429, "budgetMs": 20000 },
+    "DED-014": { "case": "10k duplicate occurrences", "measuredMs": 40, "budgetMs": 1000 }
+  },
+  "delivery": {
+    "source": "benchmarks/lifecycle-ssr-2026-09-06.json (css-asset, 3 routes)",
+    "chunkCount": 8,
+    "totalCssBytes": 841,
+    "routeInitial": { "maxRequests": 4, "maxBytes": 624, "note": "route-local + shared chunks" },
+    "budget": {
+      "maxChunkBytes": 32768,
+      "maxInitialCssRequestsPerRoute": 5
+    }
+  },
+  "promotion": {
+    "PERF-010": {
+      "always": { "classAttrBytes": 1800, "styleAttrBytes": 4190, "cssBytes": 54 },
+      "never": { "classAttrBytes": 1800, "styleAttrBytes": 2990, "cssBytes": 25 }
+    }
+  }
+}

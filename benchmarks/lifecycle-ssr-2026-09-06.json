@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "dist": "/Users/ama/container_env/workspace/fixtures/lifecycle/dist",
+  "generatedAt": "2026-09-06T08:48:46.021Z",
+  "css": {
+    "fileCount": 8,
+    "totalBytes": 841,
+    "totalGzipBytes": 832,
+    "files": [
+      {
+        "name": "assets/qstyle.q_1ae57524.css",
+        "bytes": 68,
+        "gzipBytes": 88
+      },
+      {
+        "name": "assets/qstyle.q_33127ce0.css",
+        "bytes": 45,
+        "gzipBytes": 65
+      },
+      {
+        "name": "assets/qstyle.q_4783fecd.css",
+        "bytes": 67,
+        "gzipBytes": 87
+      },
+      {
+        "name": "assets/qstyle.q_65dd22d1.css",
+        "bytes": 46,
+        "gzipBytes": 66
+      },
+      {
+        "name": "assets/qstyle.q_6fcbe67a.css",
+        "bytes": 50,
+        "gzipBytes": 70
+      },
+      {
+        "name": "assets/qstyle.q_7a6c04a0.css",
+        "bytes": 74,
+        "gzipBytes": 90
+      },
+      {
+        "name": "assets/qstyle.q_8c36406d.css",
+        "bytes": 37,
+        "gzipBytes": 57
+      },
+      {
+        "name": "assets/qstyle.q_b3818e74.css",
+        "bytes": 454,
+        "gzipBytes": 309
+      }
+    ]
+  },
+  "routes": [
+    {
+      "route": "/",
+      "assetCount": 4,
+      "bytes": 624,
+      "gzipBytes": 535,
+      "assets": [
+        "assets/qstyle.q_65dd22d1.css",
+        "assets/qstyle.q_6fcbe67a.css",
+        "assets/qstyle.q_7a6c04a0.css",
+        "assets/qstyle.q_b3818e74.css"
+      ]
+    },
+    {
+      "route": "/about",
+      "assetCount": 3,
+      "bytes": 165,
+      "gzipBytes": 221,
+      "assets": [
+        "assets/qstyle.q_33127ce0.css",
+        "assets/qstyle.q_65dd22d1.css",
+        "assets/qstyle.q_7a6c04a0.css"
+      ]
+    },
+    {
+      "route": "/item/[id]",
+      "assetCount": 3,
+      "bytes": 157,
+      "gzipBytes": 213,
+      "assets": [
+        "assets/qstyle.q_65dd22d1.css",
+        "assets/qstyle.q_7a6c04a0.css",
+        "assets/qstyle.q_8c36406d.css"
+      ]
+    }
+  ],
+  "units": {
+    "count": 20
+  },
+  "embeddedUnitIds": {
+    "unique": 20,
+    "occurrences": 42,
+    "jsFileCount": 58
+  },
+  "warnings": []
+}
