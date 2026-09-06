@@ -164,6 +164,7 @@ describe('qstyle PERF 系 (vite transform level)', () => {
       },
     });
     expect(requested).toHaveLength(1);
+    // canonical dev id (`\0` 付き正規形)。
     expect(requested[0]?.startsWith('\0virtual:qstyle/dev/')).toBe(true);
     expect(invalidated).toHaveLength(1);
     // B の devCss は無効化されず同一内容のまま。

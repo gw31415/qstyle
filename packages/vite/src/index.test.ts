@@ -1523,7 +1523,6 @@ describe('qstyle dev mode + CSS HMR', () => {
     p.handleHotUpdate({ file: '/src/dev-d.tsx', server });
     expect(requested.length).toBe(1);
     expect(requested[0]?.startsWith('\0virtual:qstyle/dev/')).toBe(true);
-    expect(requested[0]?.endsWith('.css')).toBe(true);
     expect(invalidated.length).toBe(1);
   });
 

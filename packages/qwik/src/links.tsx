@@ -241,7 +241,11 @@ const PREFETCH_MARKER = 'qstyle:prefetch';
 export function qstyleRouteBootstrap(): void {
   // 設定は meta marker から読む。base は marker の data-qstyle-base
   // (build 時 BASE_URL。document.baseURI は nested route でずれるため使わない)。
+  // marker は本番 build でのみ描画される (dev では QstyleLinks が null を返す)。
+  // dev は per-module CSS pipeline が styles を担うため、marker 不在なら
+  // 何もせず抜ける (routes.json は存在しないため fetch すると 404 になる)。
   const marker: Element | null = document.querySelector('meta[name="qstyle:prefetch"]');
+  if (marker === null) return;
   const getMarkerAttr = (name: string): string | null =>
     marker !== null && typeof marker.getAttribute === 'function'
       ? marker.getAttribute(name)

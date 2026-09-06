@@ -326,6 +326,39 @@ describe('QstyleLinks component (R1.4 module 境界)', () => {
     }
   });
 
+  it('qstyleRouteBootstrap is a no-op without the marker (dev: no routes.json fetch)', async (): Promise<void> => {
+    const links = await freshLinks();
+    // dev では QstyleLinks が marker を描かない。bootstrap は fetch も history
+    // 監視の設置もしない (dev の routes.json は存在しないため 404 になる)。
+    const fetchCalls: string[] = [];
+    vi.stubGlobal('fetch', (input: unknown): Promise<never> => {
+      fetchCalls.push(String(input));
+      return Promise.reject(new Error('should not fetch'));
+    });
+    let patched = false;
+    vi.stubGlobal('document', {
+      baseURI: 'https://example.test/app/',
+      querySelector: (selector: string): null => {
+        void selector;
+        return null; // marker 無し
+      },
+      querySelectorAll: (): never[] => [],
+      addEventListener: (): void => undefined,
+    });
+    vi.stubGlobal('location', { pathname: '/', origin: 'https://example.test' });
+    const historyStub = {
+      pushState: (): void => undefined,
+      replaceState: (): void => undefined,
+    };
+    vi.stubGlobal('history', historyStub);
+    vi.stubGlobal('window', { addEventListener: (): void => undefined });
+    links.qstyleRouteBootstrap();
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, 0);
+    });
+    expect(fetchCalls).toEqual([]);
+  });
+
   it('qstyleRouteBootstrap injects current route styles and follows pushState navigation', async (): Promise<void> => {
     const links = await freshLinks();
     interface StubLink {
