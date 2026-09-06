@@ -178,11 +178,11 @@ describe('lowerTaggedTemplate parametric (M5b)', () => {
     expect(out.atoms.find((a) => a.value === 'blue')?.context.pseudo).toEqual([':hover']);
   });
 
-  it('residualizes unsupported nested keys that hold runtime declarations', () => {
+  it('resolves nested context for runtime declarations in combinators', () => {
     const out = tag`& > div { width: ${dynamicValue}px; }`;
-    expect(out.parametrics).toHaveLength(0);
-    expect(out.residuals).toHaveLength(1);
-    expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+    expect(out.parametrics).toHaveLength(1);
+    expect(out.parametrics[0]?.context.suffix).toBe(' > div');
+    expect(out.residuals).toHaveLength(0);
   });
 
   it('shares identity across equal structures with different runtime values (DYN-010)', () => {
@@ -280,5 +280,60 @@ describe('lowerTaggedTemplate interpolation identity', () => {
     expect(out.parametrics).toHaveLength(0);
     expect(out.residuals).toHaveLength(1);
     expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+  });
+});
+
+describe('lowerTaggedTemplate keyframes and globals', () => {
+  it('lowers @keyframes blocks and rewrites animation references', () => {
+    const out = tag`
+      @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+      animation: fade 2s;
+    `;
+    expect(out.residuals).toHaveLength(0);
+    expect(out.keyframes).toHaveLength(1);
+    const name: string = out.keyframes[0]?.name ?? '';
+    expect(out.atoms.find((a) => a.property === 'animation')?.value).toBe(`${name} 2s`);
+  });
+
+  it('lowers @font-face blocks into globals', () => {
+    const out = tag`
+      @font-face { font-family: MyFont; src: url(/a.woff2); }
+      color: red;
+    `;
+    expect(out.residuals).toHaveLength(0);
+    expect(out.globals).toHaveLength(1);
+    expect(out.globals[0]?.at).toBe('font-face');
+  });
+
+  it('residualizes keyframes with runtime interpolation (no silent emit)', () => {
+    const dynamicValue = {} as unknown;
+    const out = tag`
+      @keyframes fade { from { opacity: ${dynamicValue}; } }
+      color: red;
+    `;
+    expect(out.keyframes).toHaveLength(0);
+    expect(out.residuals.length).toBeGreaterThan(0);
+    expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+  });
+
+  it('residualizes dynamic animation values that coexist with local keyframes', () => {
+    const dynamicValue = {} as unknown;
+    const out = tag`
+      @keyframes fade { from { opacity: 0; } }
+      animation: ${dynamicValue};
+    `;
+    expect(out.keyframes).toHaveLength(1);
+    expect(out.parametrics).toHaveLength(0);
+    expect(out.residuals.length).toBeGreaterThan(0);
+  });
+
+  it('lowers SCSS-like nesting (suffix / layer) in templates', () => {
+    const out = tag`
+      & > svg { width: 16px; }
+      @layer base { color: red; }
+    `;
+    expect(out.residuals).toHaveLength(0);
+    expect(out.atoms.find((a) => a.property === 'width')?.context.suffix).toBe(' > svg');
+    expect(out.atoms.find((a) => a.property === 'color')?.context.layer).toBe('base');
   });
 });

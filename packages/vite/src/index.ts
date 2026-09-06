@@ -8,6 +8,7 @@ import {
   buildRouteManifest,
   canonicalProperty,
   chunkHash,
+  classSelectors,
   createParametricAtom,
   createUsageGraph,
   fnv1aHex,
@@ -18,14 +19,19 @@ import {
   recordComponentRoute,
   recordSource,
   recordUsage,
+  serializeGlobalAtRuleCss,
+  serializeKeyframesCss,
   serializeManifest,
   serializeParametricCss,
   serializeParametricDecl,
+  wrapContextAtRules,
 } from '@qstyle/core';
 import type {
   ChunkInput,
   ChunkOptions,
   ChunkPlan,
+  GlobalAtRule,
+  KeyframesRule,
   ParametricAtom,
   ResidualRuleNode,
   RuleContext,
@@ -832,21 +838,9 @@ function serializeUnitCss(className: string, members: readonly UnitMember[]): st
     .join('');
 }
 
-/** context wrapper (base rule + pseudo/descendant/media/supports/container)。preserve block と共有する。 */
+/** context wrapper (base rule + pseudo/descendant/suffix/media/supports/container/layer)。preserve block と共有する。 */
 function wrapRuleContext(className: string, context: RuleContext, body: string): string {
-  const pseudos: readonly string[] = context.pseudo ?? [];
-  const suffix: string = context.descendant !== undefined ? ` ${context.descendant}` : '';
-  let rule: string = `.${className}${pseudos.join('')}${suffix}{${body}}`;
-  if (context.supports !== undefined) {
-    rule = `@supports ${context.supports}{${rule}}`;
-  }
-  if (context.container !== undefined) {
-    rule = `@container ${context.container}{${rule}}`;
-  }
-  if (context.media !== undefined) {
-    rule = `@media ${context.media}{${rule}}`;
-  }
-  return rule;
+  return wrapContextAtRules(classSelectors(className, context), context, body);
 }
 
 /** preserve block を構成する 1 宣言 (static 値または var 参照)。 */
@@ -1212,6 +1206,9 @@ interface CssHandleEntry {
         readonly slotExprs: ReadonlyMap<string, string>;
       }
     | undefined;
+  /** template 由来の `@keyframes` / `@font-face` / `@property` (object 形は record 経由)。 */
+  readonly keyframes?: readonly KeyframesRule[] | undefined;
+  readonly globals?: readonly GlobalAtRule[] | undefined;
 }
 
 /**
@@ -1385,6 +1382,8 @@ function collectTemplateHandles(code: string, table: Map<string, CssHandleEntry>
     table.set(name, {
       ...(lowered.atoms.length > 0 ? { atoms: lowered.atoms } : {}),
       ...(lowered.parametric !== undefined ? { parametric: lowered.parametric } : {}),
+      ...(lowered.keyframes.length > 0 ? { keyframes: lowered.keyframes } : {}),
+      ...(lowered.globals.length > 0 ? { globals: lowered.globals } : {}),
     });
   }
 }
@@ -1395,6 +1394,8 @@ function collectTemplateHandles(code: string, table: Map<string, CssHandleEntry>
  */
 function lowerTemplateSpans(spans: TemplateSpans): {
   readonly atoms: readonly StaticAtom[];
+  readonly keyframes: readonly KeyframesRule[];
+  readonly globals: readonly GlobalAtRule[];
   readonly parametric?:
     | {
         readonly atoms: readonly ParametricAtom[];
@@ -1409,7 +1410,14 @@ function lowerTemplateSpans(spans: TemplateSpans): {
   );
   if (lowered.residuals.length > 0) return null;
   if (lowered.diagnostics.some((d) => d.severity === 'error')) return null;
-  if (lowered.atoms.length === 0 && lowered.parametrics.length === 0) return null;
+  if (
+    lowered.atoms.length === 0 &&
+    lowered.parametrics.length === 0 &&
+    lowered.keyframes.length === 0 &&
+    lowered.globals.length === 0
+  ) {
+    return null;
+  }
   let parametric:
     | {
         readonly atoms: readonly ParametricAtom[];
@@ -1430,7 +1438,12 @@ function lowerTemplateSpans(spans: TemplateSpans): {
     if (cursor !== spans.exprs.length) return null;
     parametric = { atoms: lowered.parametrics, slotExprs };
   }
-  return { atoms: lowered.atoms, ...(parametric !== undefined ? { parametric } : {}) };
+  return {
+    atoms: lowered.atoms,
+    keyframes: lowered.keyframes,
+    globals: lowered.globals,
+    ...(parametric !== undefined ? { parametric } : {}),
+  };
 }
 
 /** interpolation 1 個分の式として受理する grammar (identifier / member chain 全体一致)。 */
@@ -1749,6 +1762,9 @@ interface ResolvedPart {
         readonly slotExprs: ReadonlyMap<string, string>;
       }
     | undefined;
+  /** template handle 由来の `@keyframes` / `@font-face` / `@property`。 */
+  readonly handleKeyframes?: readonly KeyframesRule[] | undefined;
+  readonly handleGlobals?: readonly GlobalAtRule[] | undefined;
   readonly dynamics: readonly DynamicStyleValue[];
   /** 有限静的 ternary 値 (DYN-016)。条件付き handle とは別に static 展開する。 */
   readonly conditionals: readonly ConditionalStyleValue[];
@@ -1780,7 +1796,16 @@ function resolveSingleStatic(
       // 空 object は寄与なし (条件式の評価だけ残すため全体を untouched にする)。
       return Object.keys(entry.record).length === 0 ? null : { record: entry.record, dynamics: [], conditionals: [], compounds: [] };
     }
-    if (entry.atoms !== undefined) return { handleAtoms: entry.atoms, dynamics: [], conditionals: [], compounds: [] };
+    if (entry.atoms !== undefined) {
+      return {
+        handleAtoms: entry.atoms,
+        dynamics: [],
+        conditionals: [],
+        compounds: [],
+        ...(entry.keyframes !== undefined ? { handleKeyframes: entry.keyframes } : {}),
+        ...(entry.globals !== undefined ? { handleGlobals: entry.globals } : {}),
+      };
+    }
     return null;
   }
   if (text.startsWith('{')) {
@@ -1944,11 +1969,12 @@ function resolveCssExprParts(
         {
           ...(lowered.atoms.length > 0 ? { handleAtoms: lowered.atoms } : {}),
           handleParametrics: lowered.parametric,
+          ...carryAux(lowered),
           ...part,
         },
       ];
     }
-    return [{ handleAtoms: lowered.atoms, ...part }];
+    return [{ handleAtoms: lowered.atoms, ...carryAux(lowered), ...part }];
   }
   // 条件付き (CMP-007): `cond && X` / `cond ? A : B`。解決できなければ
   // fallthrough し、通常の単一・配列・inline 解決を試みる (文字列内の && 等)。
@@ -1975,12 +2001,34 @@ function resolveCssExprParts(
           dynamics: [],
           conditionals: [],
           compounds: [],
+          ...carryAux(entry),
         },
       ];
     }
-    if (entry.atoms !== undefined) return [{ handleAtoms: entry.atoms, dynamics: [], conditionals: [], compounds: [] }];
+    if (entry.atoms !== undefined) {
+      return [
+        {
+          handleAtoms: entry.atoms,
+          dynamics: [],
+          conditionals: [],
+          compounds: [],
+          ...carryAux(entry),
+        },
+      ];
+    }
     if (entry.parametric !== undefined) {
-      return [{ handleParametrics: entry.parametric, dynamics: [], conditionals: [], compounds: [] }];
+      return [
+        {
+          handleParametrics: entry.parametric,
+          dynamics: [],
+          conditionals: [],
+          compounds: [],
+          ...carryAux(entry),
+        },
+      ];
+    }
+    if ((entry.keyframes?.length ?? 0) > 0 || (entry.globals?.length ?? 0) > 0) {
+      return [{ dynamics: [], conditionals: [], compounds: [], ...carryAux(entry) }];
     }
     return null;
   }
@@ -2012,17 +2060,44 @@ function resolveCssExprParts(
 /** 解決済み parts を composeCssProp の入力形へ変換する (template handle は合成 handle 化)。 */
 function toCssPropParts(parts: readonly ResolvedPart[]): Array<StyleObject | StyleHandle> {
   return parts.map((p) => {
-    if (p.handleAtoms !== undefined) {
+    if (
+      p.handleAtoms !== undefined ||
+      p.handleKeyframes !== undefined ||
+      p.handleGlobals !== undefined
+    ) {
       const handle: StyleHandle = {
         __qstyleBrand: 'StyleHandle',
-        atoms: p.handleAtoms,
+        atoms: p.handleAtoms ?? [],
         parametrics: [],
         residuals: [],
+        keyframes: p.handleKeyframes ?? [],
+        globals: p.handleGlobals ?? [],
       };
       return handle;
     }
     return p.record as unknown as StyleObject;
   });
+}
+
+/** template handle 由来の keyframes/globals を ResolvedPart へ載せる (空なら省略)。 */
+function carryAux(source: {
+  readonly keyframes?: readonly KeyframesRule[] | undefined;
+  readonly globals?: readonly GlobalAtRule[] | undefined;
+}): {
+  readonly handleKeyframes?: readonly KeyframesRule[];
+  readonly handleGlobals?: readonly GlobalAtRule[];
+} {
+  const out: {
+    handleKeyframes?: readonly KeyframesRule[];
+    handleGlobals?: readonly GlobalAtRule[];
+  } = {};
+  if (source.keyframes !== undefined && source.keyframes.length > 0) {
+    out.handleKeyframes = source.keyframes;
+  }
+  if (source.globals !== undefined && source.globals.length > 0) {
+    out.handleGlobals = source.globals;
+  }
+  return out;
 }
 
 /** context (pseudo/media/...) を持つ atom は inline style にできない。 */
@@ -2033,7 +2108,9 @@ function atomHasContext(atom: ParametricAtom): boolean {
     context.media !== undefined ||
     context.supports !== undefined ||
     context.container !== undefined ||
-    context.layer !== undefined
+    context.layer !== undefined ||
+    context.descendant !== undefined ||
+    context.suffix !== undefined
   );
 }
 
@@ -2968,7 +3045,7 @@ export function qstyle(
             if (value === null) return '';
             const loweredBranch = lowerStyleObject(
               { [c.propPath]: value } as unknown as StyleObject,
-              { source: provenanceSource },
+              { source: provenanceSource, keyframes: moduleKeyframes },
             );
             if (loweredBranch.residuals.length > 0 || loweredBranch.atoms.length !== 1) {
               return null;
@@ -3019,6 +3096,104 @@ export function qstyle(
         }
         log(`collected ${blockId} (preserve) from ${id}`);
       };
+
+      /** `@keyframes` / global at-rule を収集する (global のため確定名のまま)。 */
+      const ingestAuxRules = (
+        keyframes: readonly KeyframesRule[],
+        globals: readonly GlobalAtRule[],
+      ): void => {
+        for (const rule of keyframes) ingestBlock(rule.name, serializeKeyframesCss(rule));
+        for (const rule of globals) ingestBlock(rule.id, serializeGlobalAtRuleCss(rule));
+      };
+
+      /**
+       * `animation` / `animation-name` に動的値・条件値を使う箇所があるか。
+       * 同一 module に `@keyframes` 定義がある場合、静的値のみ書換え可能なため
+       * 動的併用は untouched にする (書換え不能参照の黙殺防止)。
+       */
+      const hasDynamicAnimation = (
+        dynamics: readonly { readonly propPath: string }[],
+        compounds: readonly { readonly propPath: string }[],
+        conditionals: readonly { readonly propPath: string }[],
+      ): boolean =>
+        [...dynamics, ...compounds, ...conditionals].some((d) => {
+          const prop: string = canonicalProperty(d.propPath);
+          return prop === 'animation' || prop === 'animation-name';
+        });
+
+      /**
+       * module 内の `@keyframes` 定義表 (sourceName -> 確定名) を先行収集する。
+       * 定義と参照が別 occurrence に分かれていても書換えできるよう main loop へ渡す。
+       * global 系は内容アドレスのため即時 emit し、定義側が untouched でも参照が
+       * 壊れないようにする。同名で内容が異なる定義は先勝ち + 警告 (source 順で決定性)。
+       */
+      const moduleKeyframes = new Map<string, string>();
+      {
+        const preKeyframes: KeyframesRule[] = [];
+        const preGlobals: GlobalAtRule[] = [];
+        const takeAux = (
+          keyframes: readonly KeyframesRule[],
+          globals: readonly GlobalAtRule[],
+        ): void => {
+          for (const rule of keyframes) {
+            const prev: string | undefined = moduleKeyframes.get(rule.sourceName);
+            if (prev === undefined) {
+              moduleKeyframes.set(rule.sourceName, rule.name);
+              preKeyframes.push(rule);
+            } else if (prev !== rule.name) {
+              // untouched 件数に混ぜないよう専用 channel で警告する (定義自体は有効)。
+              const message = `duplicate @keyframes ${JSON.stringify(rule.sourceName)} with different content; using the first definition`;
+              if (diagnosticsMode === 'error') {
+                throw new Error(`[qstyle] ${id}: ${message}`);
+              }
+              if (diagnosticsMode === 'warning') {
+                const warnKey: string = `${id}::keyframes-conflict:${rule.sourceName}`;
+                if (!warnedKeys.has(warnKey)) {
+                  warnedKeys.add(warnKey);
+                  console.warn(`[qstyle] ${id}: ${message}`);
+                }
+              }
+            }
+          }
+          for (const rule of globals) preGlobals.push(rule);
+        };
+        const lowerRecordAux = (record: Record<string, unknown>): void => {
+          const lowered = lowerStyleObject(record as unknown as StyleObject, {
+            source: provenanceSource,
+          });
+          if (lowered.residuals.length > 0) return;
+          takeAux(lowered.keyframes, lowered.globals);
+        };
+        for (const preOcc of findCssPropOccurrences(code)) {
+          const preparsed: ParsedStyleLiteral | null = parseStyleObjectLiteralWithDynamics(
+            code.slice(preOcc.braceOpen, preOcc.braceClose),
+          );
+          if (preparsed === null) continue;
+          if (preparsed.dynamics.some((d) => d.propPath.includes('.'))) continue;
+          lowerRecordAux(preparsed.record);
+        }
+        for (const entry of handles.values()) {
+          if (entry.record !== undefined) {
+            lowerRecordAux(entry.record);
+          } else {
+            if (entry.keyframes !== undefined) takeAux(entry.keyframes, []);
+            if (entry.globals !== undefined) takeAux([], entry.globals);
+          }
+        }
+        for (const preOcc of findCssExprOccurrences(code)) {
+          const preParts: ResolvedPart[] | null = resolveCssExprParts(
+            code.slice(preOcc.exprOpen + 1, preOcc.exprClose - 1),
+            handles,
+          );
+          if (preParts === null) continue;
+          for (const part of preParts) {
+            if (part.record !== undefined) lowerRecordAux(part.record);
+            if (part.handleKeyframes !== undefined) takeAux(part.handleKeyframes, []);
+            if (part.handleGlobals !== undefined) takeAux([], part.handleGlobals);
+          }
+        }
+        ingestAuxRules(preKeyframes, preGlobals);
+      }
 
       /**
        * タグ head へ class (+ 必要なら style prop) を merge した newHead を返す。
@@ -3220,6 +3395,7 @@ export function qstyle(
         // plain object のみであり StyleObject の実行時サブセットである。
         const lowered = lowerStyleObject(record as unknown as StyleObject, {
           source: provenanceSource,
+          keyframes: moduleKeyframes,
         });
         if (lowered.residuals.length > 0) {
           for (const residual of lowered.residuals) {
@@ -3239,8 +3415,17 @@ export function qstyle(
           lowered.atoms.length === 0 &&
           dynamics.length === 0 &&
           conditionals.length === 0 &&
-          compounds.length === 0
+          compounds.length === 0 &&
+          lowered.keyframes.length === 0 &&
+          lowered.globals.length === 0
         ) {
+          continue;
+        }
+        if (
+          (lowered.keyframes.length > 0 || moduleKeyframes.size > 0) &&
+          hasDynamicAnimation(dynamics, compounds, conditionals)
+        ) {
+          noteSkipped('dynamic animation with local @keyframes cannot be rewritten; left untouched');
           continue;
         }
         // static と dynamic/compound の同一 property は cascade 順を保証できない。
@@ -3370,6 +3555,7 @@ export function qstyle(
           }
           if (hasBlock) ingestBlock(blockId, blockCss);
           ingestAtomUnits(conditional.atoms, devId);
+          ingestAuxRules(lowered.keyframes, lowered.globals);
           continue;
         }
         // 有限静的 ternary 値は CSS variable 化せず static branch にする (DYN-016)。
@@ -3412,6 +3598,7 @@ export function qstyle(
         }
         if (ids.length > 0) ingestUnit(ids[0] as string, membersA);
         ingestAtomUnits(conditional.atoms, devId);
+        ingestAuxRules(lowered.keyframes, lowered.globals);
       }
       // (b) M3: module-scope css() handle + css={...} composition (plan.md §21)。
       // static に解決できるもののみ rewrite し、条件付き (&&/?:)・未知参照・
@@ -3444,7 +3631,11 @@ export function qstyle(
           // static 側 (record/handleAtoms) を持つ part は parametric 併持でも composition する。
           const plain: ResolvedPart[] = parts.filter(
             (p) =>
-              p.cond === undefined && (p.record !== undefined || p.handleAtoms !== undefined),
+              p.cond === undefined &&
+              (p.record !== undefined ||
+                p.handleAtoms !== undefined ||
+                p.handleKeyframes !== undefined ||
+                p.handleGlobals !== undefined),
           );
           const conds: ResolvedPart[] = parts.filter((p) => p.cond !== undefined);
           const paramParts: ResolvedPart[] = parts.filter(
@@ -3460,6 +3651,19 @@ export function qstyle(
             const blockDecls: BlockDecl[] = [];
             const preserveSlotEntries: string[] = [];
             const preserveConditionals: ConditionalStyleValue[] = [];
+            const preserveAuxKf: KeyframesRule[] = [];
+            const preserveAuxG: GlobalAtRule[] = [];
+            const pushPreserveAux = (
+              keyframes: readonly KeyframesRule[],
+              globals: readonly GlobalAtRule[],
+            ): void => {
+              for (const rule of keyframes) {
+                if (!preserveAuxKf.some((r) => r.name === rule.name)) preserveAuxKf.push(rule);
+              }
+              for (const rule of globals) {
+                if (!preserveAuxG.some((r) => r.id === rule.id)) preserveAuxG.push(rule);
+              }
+            };
             let preserveFailed = false;
             for (const part of parts) {
               if (part.cond !== undefined) continue;
@@ -3467,6 +3671,7 @@ export function qstyle(
               if (part.record !== undefined) {
                 const loweredPart = lowerStyleObject(part.record as unknown as StyleObject, {
                   source: provenanceSource,
+                  keyframes: moduleKeyframes,
                 });
                 if (loweredPart.residuals.length > 0) {
                   for (const residual of loweredPart.residuals) {
@@ -3482,6 +3687,7 @@ export function qstyle(
                   preserveFailed = true;
                   break;
                 }
+                pushPreserveAux(loweredPart.keyframes, loweredPart.globals);
                 for (const a of loweredPart.atoms) {
                   blockDecls.push({
                     property: a.property,
@@ -3559,10 +3765,17 @@ export function qstyle(
                 }
               }
               if (preserveFailed) break;
+              pushPreserveAux(part.handleKeyframes ?? [], part.handleGlobals ?? []);
               preserveConditionals.push(...part.conditionals);
             }
             if (preserveFailed) continue;
-            if (blockDecls.length === 0 && conds.length === 0 && preserveConditionals.length === 0) {
+            if (
+              blockDecls.length === 0 &&
+              conds.length === 0 &&
+              preserveConditionals.length === 0 &&
+              preserveAuxKf.length === 0 &&
+              preserveAuxG.length === 0
+            ) {
               continue;
             }
             // conds (preserve): static branch → mini-block、dynamic → parametric + spread。
@@ -3596,6 +3809,7 @@ export function qstyle(
               } else if (part.record !== undefined) {
                 const loweredCond = lowerStyleObject(part.record as unknown as StyleObject, {
                   source: provenanceSource,
+                  keyframes: moduleKeyframes,
                 });
                 if (loweredCond.residuals.length > 0) {
                   noteSkipped('unsafe conditional branch; left untouched');
@@ -3607,6 +3821,7 @@ export function qstyle(
                   preserveCondFailed = true;
                   break;
                 }
+                pushPreserveAux(loweredCond.keyframes, loweredCond.globals);
                 for (const a of loweredCond.atoms) {
                   miniDecls.push({
                     property: a.property,
@@ -3627,6 +3842,7 @@ export function qstyle(
                 })),
                 ...part.compounds.map((c) => ({ propPath: c.propPath, segments: c.segments })),
               ];
+              pushPreserveAux(part.handleKeyframes ?? [], part.handleGlobals ?? []);
               if (
                 condDynDecls.some(
                   (d) => d.propPath.includes('.') || !CSS_PROPERTY_RE.test(d.propPath),
@@ -3674,6 +3890,17 @@ export function qstyle(
               });
             }
             if (preserveCondFailed) continue;
+            if (
+              (preserveAuxKf.length > 0 || moduleKeyframes.size > 0) &&
+              (hasDynamicAnimation(
+                parts.flatMap((p) => p.dynamics),
+                parts.flatMap((p) => p.compounds),
+                preserveConditionals,
+              ))
+            ) {
+              noteSkipped('dynamic animation with local @keyframes cannot be rewritten; left untouched');
+              continue;
+            }
             const preserveCondSegments: string[] = [];
             const preserveCondSpreads: string[] = [];
             for (const group of preserveCondGroups) {
@@ -3732,6 +3959,7 @@ export function qstyle(
                 ]);
               }
             }
+            ingestAuxRules(preserveAuxKf, preserveAuxG);
             ingestAtomUnits(preserveConditional.atoms, devId);
             continue;
           }
@@ -3741,6 +3969,7 @@ export function qstyle(
           }
           const composed = composeCssProp(toCssPropParts(plain), {
             source: provenanceSource,
+            keyframes: moduleKeyframes,
           });
           if (composed.residuals.length > 0) {
             for (const residual of composed.residuals) {
@@ -3759,14 +3988,44 @@ export function qstyle(
           const dynamics: DynamicStyleValue[] = plain.flatMap((p) => p.dynamics);
           const conditionals: ConditionalStyleValue[] = plain.flatMap((p) => p.conditionals);
           const compounds: CompoundStyleValue[] = plain.flatMap((p) => p.compounds);
+          // parts 持ち込み (template handle 等) と composed 由来の aux を集める。
+          const auxKeyframes: KeyframesRule[] = [...composed.keyframes];
+          const auxGlobals: GlobalAtRule[] = [...composed.globals];
+          {
+            const seenKf = new Set<string>(auxKeyframes.map((r) => r.name));
+            const seenG = new Set<string>(auxGlobals.map((r) => r.id));
+            for (const part of [...paramParts, ...conds]) {
+              for (const rule of part.handleKeyframes ?? []) {
+                if (!seenKf.has(rule.name)) {
+                  seenKf.add(rule.name);
+                  auxKeyframes.push(rule);
+                }
+              }
+              for (const rule of part.handleGlobals ?? []) {
+                if (!seenG.has(rule.id)) {
+                  seenG.add(rule.id);
+                  auxGlobals.push(rule);
+                }
+              }
+            }
+          }
           if (
             composed.atoms.length === 0 &&
             dynamics.length === 0 &&
             conds.length === 0 &&
             conditionals.length === 0 &&
             compounds.length === 0 &&
-            paramParts.length === 0
+            paramParts.length === 0 &&
+            auxKeyframes.length === 0 &&
+            auxGlobals.length === 0
           ) {
+            continue;
+          }
+          if (
+            (auxKeyframes.length > 0 || moduleKeyframes.size > 0) &&
+            hasDynamicAnimation(dynamics, compounds, conditionals)
+          ) {
+            noteSkipped('dynamic animation with local @keyframes cannot be rewritten; left untouched');
             continue;
           }
           // static atom と dynamic/compound が同一 property で競合したら cascade 順を
@@ -3918,6 +4177,7 @@ export function qstyle(
             } else if (part.record !== undefined) {
               const loweredCond = lowerStyleObject(part.record as unknown as StyleObject, {
                 source: provenanceSource,
+                keyframes: moduleKeyframes,
               });
               if (loweredCond.residuals.length > 0) {
                 noteSkipped('unsafe conditional branch; left untouched');
@@ -3929,7 +4189,21 @@ export function qstyle(
                 condFailed = true;
                 break;
               }
+              if (
+                loweredCond.keyframes.length > 0 &&
+                hasDynamicAnimation(part.dynamics, part.compounds, [])
+              ) {
+                noteSkipped('dynamic animation with local @keyframes cannot be rewritten; left untouched');
+                condFailed = true;
+                break;
+              }
               staticAtoms = [...loweredCond.atoms];
+              for (const rule of loweredCond.keyframes) {
+                if (!auxKeyframes.some((r) => r.name === rule.name)) auxKeyframes.push(rule);
+              }
+              for (const rule of loweredCond.globals) {
+                if (!auxGlobals.some((r) => r.id === rule.id)) auxGlobals.push(rule);
+              }
             } else if (part.dynamics.length === 0 && part.compounds.length === 0) {
               noteSkipped('cannot resolve conditional branch; left untouched');
               condFailed = true;
@@ -4105,6 +4379,7 @@ export function qstyle(
               { atomId, context: atom.context, decl: serializeStaticDecl(atom) },
             ]);
           }
+          ingestAuxRules(auxKeyframes, auxGlobals);
         }
       }
       if (skippedReasons.length > 0) {

@@ -65,8 +65,35 @@ export const Card = component$((props) => (
 
 - 数値は unitless 以外 `px` 補完、`0` は単位なし。custom property (`--x`) はそのまま
 - `class` / `style` と共存可。既存 `style` には dynamic 値の代入だけ追記される
-- ネストキー: `&:hover` (pseudo)、`& svg` / `& .tile` (子孫セレクタ, 単純セレクタのみ)、
-  `@media` / `@supports` / `@container`。それ以外の selector は untouched (黙って書き換えない)
+- ネストキー: `&:hover` (pseudo)、`&--mod` / `&.active` (連結)、`& svg` / `& a b` (子孫)、
+  `& > svg` / `& + sib` / `& ~ sib` (combinator)、`&:hover, &:focus` (リスト)、
+  `@media` / `@supports` / `@container` / `@layer`。`&` 再出現・`{ } ; < !` 混じりは untouched
+- `@keyframes fade` / `@font-face` / `@property --x` は top-level のみ (nested は untouched)。
+  keyframes 名は内容 hash (`qkf_xxxxxxxx`) に確定し、同一内容は重複排除される。
+  `animation` / `animation-name` の同名参照は同一オブジェクト・同一モジュール内で書換えられる
+  (template 内参照は同一リテラル内に co-locate すること。動的値との併用は untouched)
+
+### `@keyframes` の書き方
+
+```tsx
+<div
+  css={{
+    '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } },
+    animation: 'fade 1s ease',
+  }}
+/>
+```
+
+```tsx
+const spin = css`
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  animation: spin 1s linear infinite;
+`;
+<div css={spin} />;
+```
 
 ### `css()` と composition
 

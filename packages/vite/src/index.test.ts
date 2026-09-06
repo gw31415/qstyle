@@ -57,9 +57,9 @@ describe('qstyle vite plugin (M0)', () => {
       p.transform(`export const A = () => <div css={{ display: getWidth() }} />;`, '/src/d2.tsx'),
     ).toBeNull();
     expect(p.transform(`export const A = () => <div css={handle} />;`, '/src/e.tsx')).toBeNull();
-    // combinator selector は residual のため untouched。
+    // combinator selector は suffix として受理されるため、`&` 再出現のみ untouched。
     expect(
-      p.transform(`export const A = () => <div css={{ '& > svg': { width: 16 } }} />;`, '/src/f.tsx'),
+      p.transform(`export const A = () => <div css={{ '&& svg': { width: 16 } }} />;`, '/src/f.tsx'),
     ).toBeNull();
   });
 
@@ -1711,7 +1711,7 @@ describe('qstyle residual log (DIA-003)', () => {
       readonly __residuals: readonly { reason: string; cssText: string }[];
     };
     expect(
-      p.transform(`export const A = () => <div css={{ '& > svg': { width: 16 } }} />;`, '/src/r.tsx'),
+      p.transform(`export const A = () => <div css={{ '&& svg': { width: 16 } }} />;`, '/src/r.tsx'),
     ).toBeNull();
     expect(p.__residuals.length).toBeGreaterThan(0);
     expect(p.__residuals[0]?.reason).toBe('unsupported-selector');
@@ -1910,7 +1910,7 @@ describe('qstyle options validation + diagnostics', () => {
       };
       expect(
         p.transform(
-          `export const A = () => <div css={{ '& > div': { color: 'red' } }} />;`,
+          `export const A = () => <div css={{ '&& div': { color: 'red' } }} />;`,
           '/src/dia002.tsx',
         ),
       ).toBeNull();
@@ -2300,5 +2300,120 @@ describe('qstyle css-asset backend (plan.md §3.4 R1.1-R1.3/R1.6)', () => {
     // vite 配管由来の CSS には従来どおり適用される。
     expect(viteAsset.source).not.toBe('.q_cccccccc{color:red}.q_dddddddd{color:red}');
     expect(viteAsset.source).toContain('.q_cccccccc,.q_dddddddd{color:red}');
+  });
+});
+
+describe('serializeAtomCss with suffix and layer', () => {
+  it('serializes suffix, comma lists and layer wrappers', () => {
+    const lowered = lowerStyleObject({ '& > svg': { width: 16 } });
+    const atom = lowered.atoms[0];
+    if (atom === undefined) throw new Error('expected atom');
+    const id: string = hashStaticAtom(atom);
+    expect(serializeAtomCss(atom, id)).toBe(`.${id} > svg{width:16px}`);
+    const listed = lowerStyleObject({ '&:hover, &:focus': { color: 'red' } });
+    const lAtom = listed.atoms[0];
+    if (lAtom === undefined) throw new Error('expected atom');
+    const lId: string = hashStaticAtom(lAtom);
+    expect(serializeAtomCss(lAtom, lId)).toBe(`.${lId}:hover,.${lId}:focus{color:red}`);
+    const layered = lowerStyleObject({ '@layer base': { color: 'red' } });
+    const gAtom = layered.atoms[0];
+    if (gAtom === undefined) throw new Error('expected atom');
+    const gId: string = hashStaticAtom(gAtom);
+    expect(serializeAtomCss(gAtom, gId)).toBe(`@layer base{.${gId}{color:red}}`);
+  });
+});
+
+describe('qstyle keyframes and globals (transform)', () => {
+  const pluginOf = (options: Parameters<typeof qstyleFactory>[0]): {
+    transform: (code: string, id: string) => { code: string; map: null } | null;
+    load: (id: string) => string | null;
+  } => qstyle(options) as unknown as {
+    transform: (code: string, id: string) => { code: string; map: null } | null;
+    load: (id: string) => string | null;
+  };
+
+  it('emits @keyframes with rewritten animation references in the pack', () => {
+    const p = pluginOf({ diagnostics: 'silent' });
+    const out = p.transform(
+      `export const A = () => <div css={{ '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } }, animation: 'fade 1s' }} />;`,
+      '/src/kf1.tsx',
+    );
+    expect(out).not.toBeNull();
+    const pack: string = packCssOf(p, out?.code ?? '');
+    const kf: RegExpMatchArray | null = /@keyframes (qkf_[0-9a-f]{8})\{from\{opacity:0\}to\{opacity:1\}\}/.exec(pack);
+    expect(kf).not.toBeNull();
+    expect(pack).toContain(`animation:${kf?.[1] ?? ''} 1s`);
+  });
+
+  it('resolves keyframes defined in a separate occurrence of the same module', () => {
+    const p = pluginOf({ diagnostics: 'silent' });
+    const out = p.transform(
+      `export const A = () => <><div css={{ '@keyframes fade': { from: { opacity: 0 } } }} /><div css={{ animationName: 'fade' }} /></>;`,
+      '/src/kf2.tsx',
+    );
+    expect(out).not.toBeNull();
+    const pack: string = packCssOf(p, out?.code ?? '');
+    const kf: RegExpMatchArray | null = /@keyframes (qkf_[0-9a-f]{8})\{from\{opacity:0\}\}/.exec(pack);
+    expect(kf).not.toBeNull();
+    expect(pack).toContain(`animation-name:${kf?.[1] ?? ''}`);
+  });
+
+  it('emits @font-face globals into the pack', () => {
+    const p = pluginOf({ diagnostics: 'silent' });
+    const out = p.transform(
+      `export const A = () => <div css={{ '@font-face': { fontFamily: 'MyFont', src: 'url(/a.woff2)' }, color: 'red' }} />;`,
+      '/src/ff1.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(packCssOf(p, out?.code ?? '')).toContain(
+      '@font-face{font-family:MyFont;src:url(/a.woff2)}',
+    );
+  });
+
+  it('leaves dynamic animation with local keyframes untouched', () => {
+    const p = pluginOf({ diagnostics: 'silent' });
+    expect(
+      p.transform(
+        `export const A = () => <div css={{ '@keyframes fade': { from: { opacity: 0 } }, animationName: props.name }} />;`,
+        '/src/kf3.tsx',
+      ),
+    ).toBeNull();
+  });
+
+  it('dedups identical keyframes across modules by content hash', () => {
+    const p = pluginOf({ diagnostics: 'silent' });
+    const kf = `'@keyframes fade': { from: { opacity: 0 } }`;
+    const outA = p.transform(
+      `export const A = () => <div css={{ ${kf}, animation: 'fade 1s' }} />;`,
+      '/src/kfa.tsx',
+    );
+    const outB = p.transform(
+      `export const B = () => <div css={{ ${kf}, animation: 'fade 2s' }} />;`,
+      '/src/kfb.tsx',
+    );
+    expect(outA).not.toBeNull();
+    expect(outB).not.toBeNull();
+    const packA: string = packCssOf(p, outA?.code ?? '');
+    const packB: string = packCssOf(p, outB?.code ?? '');
+    const nameA: RegExpMatchArray | null = /@keyframes (qkf_[0-9a-f]{8})/.exec(packA);
+    const nameB: RegExpMatchArray | null = /@keyframes (qkf_[0-9a-f]{8})/.exec(packB);
+    // 別モジュール・別 unit でも同一内容は同一確定名。
+    expect(nameA?.[1]).toBe(nameB?.[1]);
+    // 各 pack 内に @keyframes ブロックは1個だけ (unit 参照と重複しない)。
+    expect(packA.match(/@keyframes/g)).toHaveLength(1);
+    expect(packA).toContain(`animation:${nameA?.[1] ?? ''} 1s`);
+    expect(packB).toContain(`animation:${nameB?.[1] ?? ''} 2s`);
+  });
+
+  it('warns and uses the first definition on conflicting keyframes names', () => {
+    const p = pluginOf({ diagnostics: 'warning' });
+    const out = p.transform(
+      `export const A = () => <><div css={{ '@keyframes fade': { from: { opacity: 0 } }, animation: 'fade 1s' }} /><div css={{ '@keyframes fade': { from: { opacity: 1 } }, animation: 'fade 2s' }} /></>;`,
+      '/src/kfconf.tsx',
+    );
+    expect(out).not.toBeNull();
+    // 各 occurrence は local-first で正しく解決される (別 hash)。
+    const pack: string = packCssOf(p, out?.code ?? '');
+    expect(pack.match(/@keyframes qkf_[0-9a-f]{8}/g)).toHaveLength(2);
   });
 });

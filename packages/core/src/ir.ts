@@ -9,6 +9,11 @@ export interface RuleContext {
   readonly layer?: string | undefined;
   /** `& span.x` 形式の子孫セレクタ (plan.md §10 selectorRelation)。単純セレクタのみ。 */
   readonly descendant?: string | undefined;
+  /**
+   * SCSS 的ネストの `&` 接尾辞 (` > svg` / `--mod` / `:hover, :focus` 等)。
+   * class 直後に連結される生サフィックス (カンマ区切りは各要素に class を付与)。
+   */
+  readonly suffix?: string | undefined;
 }
 
 export interface OrderingConstraints {
@@ -33,7 +38,7 @@ export interface StaticAtom {
   readonly provenance: readonly Provenance[];
 }
 
-export type StyleNode = StaticAtom | ParametricAtom | ResidualRuleNode;
+export type StyleNode = StaticAtom | ParametricAtom | KeyframesRule | GlobalAtRule | ResidualRuleNode;
 
 /** static / parametric を区別しない atom 処理用の合併型。 */
 export type AnyAtom = StaticAtom | ParametricAtom;
@@ -113,3 +118,40 @@ export interface ParametricAtom {
   readonly provenance: readonly Provenance[];
 }
 // Milestone 5b 以降で ThemeVariable / Keyframes 等を StyleNode に追加する。
+
+/** `@keyframes` 内の 1 宣言 (通常宣言と同一 canonical 則)。 */
+export interface AtRuleDecl {
+  readonly property: string;
+  readonly value: string;
+  readonly important: boolean;
+}
+
+export interface KeyframesFrame {
+  /** `from` / `to` / `0%` / `0%, 100%` (正規化済み小文字)。 */
+  readonly selector: string;
+  readonly decls: readonly AtRuleDecl[];
+}
+
+/**
+ * `@keyframes` 定義。name は内容 hash 由来 (`qkf_xxxxxxxx`) で
+ * グローバルに安定 (同一内容は同一名に畳まれる)。sourceName は解決用。
+ */
+export interface KeyframesRule {
+  readonly kind: 'keyframes-rule';
+  readonly name: string;
+  readonly sourceName: string;
+  readonly frames: readonly KeyframesFrame[];
+  readonly provenance: readonly Provenance[];
+}
+
+/** `@font-face` / `@property` (宣言ブロックのみのグローバル at-rule)。 */
+export interface GlobalAtRule {
+  readonly kind: 'global-at-rule';
+  readonly at: 'font-face' | 'property';
+  /** `@font-face` は ''、`@property` は `--x`。 */
+  readonly prelude: string;
+  readonly decls: readonly AtRuleDecl[];
+  /** 内容アドレス id (`qg_xxxxxxxx`)。同一内容は emit 単位で自然 dedup される。 */
+  readonly id: string;
+  readonly provenance: readonly Provenance[];
+}

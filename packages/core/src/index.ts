@@ -4,6 +4,10 @@ export const VERSION: string = '0.1.0-m1';
 
 export type {
   AnyAtom,
+  AtRuleDecl,
+  GlobalAtRule,
+  KeyframesFrame,
+  KeyframesRule,
   OrderingConstraints,
   ParametricAtom,
   Provenance,
@@ -17,7 +21,7 @@ export type {
   StyleNode,
   ValueTemplatePart,
 } from './ir.js';
-export { canonicalProperty, canonicalValue, createStaticAtom, fnv1aHex, hashStaticAtom } from './atom.js';
+export { canonicalProperty, canonicalValue, classSelectors, createStaticAtom, fnv1aHex, hashStaticAtom, wrapContextAtRules } from './atom.js';
 export type { CreateStaticAtomInput } from './atom.js';
 export {
   UNITLESS_PROPERTIES,
@@ -36,6 +40,18 @@ export {
   longhandsOf,
   needsOrderingGroup,
 } from './safety.js';
+export {
+  buildAtRuleDecls,
+  buildGlobalAtRule,
+  buildKeyframesRule,
+  normalizeFrameSelector,
+  parseGlobalAtRuleKey,
+  parseKeyframesKey,
+  parseLayerKey,
+  rewriteAnimationValue,
+  serializeGlobalAtRuleCss,
+  serializeKeyframesCss,
+} from './keyframes.js';
 export {
   createParametricAtom,
   hashParametricAtom,

@@ -1,4 +1,4 @@
-import { canonicalProperty, fnv1aHex } from './atom.js';
+import { canonicalProperty, classSelectors, fnv1aHex, wrapContextAtRules } from './atom.js';
 import { hasInvalidDeclarationChars } from './safety.js';
 import type {
   OrderingConstraints,
@@ -164,20 +164,7 @@ export function serializeParametricDecl(atom: ParametricAtom): string {
 }
 
 function wrapParametricRule(className: string, context: RuleContext, decl: string): string {
-  const pseudos: readonly string[] = context.pseudo ?? [];
-  const suffix: string =
-    context.descendant !== undefined ? ` ${context.descendant}` : '';
-  let rule: string = `.${className}${pseudos.join('')}${suffix}{${decl}}`;
-  if (context.supports !== undefined) {
-    rule = `@supports ${context.supports}{${rule}}`;
-  }
-  if (context.container !== undefined) {
-    rule = `@container ${context.container}{${rule}}`;
-  }
-  if (context.media !== undefined) {
-    rule = `@media ${context.media}{${rule}}`;
-  }
-  return rule;
+  return wrapContextAtRules(classSelectors(className, context), context, decl);
 }
 
 const LENGTH_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(px|em|rem|vw|vh|vmin|vmax|ch|ex|cm|mm|in|pt|pc|lh|rlh|cap|ic|vi|vb|cqw|cqh|cqi|cqb|cqmin|cqmax)$/i;

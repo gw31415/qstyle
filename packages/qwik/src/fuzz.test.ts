@@ -252,7 +252,9 @@ describe('fuzz: nested key (parseNestedKey)', () => {
     expect(parseNestedKey('@media (min-width: 600px)')).toEqual({
       media: '(min-width: 600px)',
     });
-    expect(parseNestedKey('& > div')).toBeNull();
+    expect(parseNestedKey('@layer base')).toEqual({ layer: 'base' });
+    expect(parseNestedKey('& > div')).toEqual({ suffix: ' > div' });
+    expect(parseNestedKey('&--mod')).toEqual({ suffix: '--mod' });
     expect(parseNestedKey('&&')).toBeNull();
     expect(parseNestedKey('@unknown x')).toBeNull();
     expect(parseNestedKey(':hover')).toBeNull();

@@ -110,55 +110,54 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
     ).toBeNull();
   });
 
-  it('SEL-004: `& > child` combinator selector is untouched with residual reason', () => {
+  it('SEL-004: `& > child` combinator selector is compiled with suffix', () => {
     const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
-    expect(
-      p.transform(
-        `export const A = () => <div css={{ '& > svg': { width: 16 } }} />;`,
-        '/src/sel004.tsx',
-      ),
-    ).toBeNull();
-    expect(p.__residuals.some((r) => r.reason === 'unsupported-selector')).toBe(true);
+    const out = p.transform(
+      `export const A = () => <div css={{ '& > svg': { width: 16 } }} />;`,
+      '/src/sel004.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(packCssOf(p, out?.code ?? '')).toMatch(/\.q_[0-9a-f]{8} > svg\{width:16px\}/);
+    expect(p.__residuals.some((r) => r.reason === 'unsupported-selector')).toBe(false);
   });
 
-  it('SEL-005: `& + sibling` / `& ~ sibling` combinator selectors are untouched', () => {
+  it('SEL-005: `& + sibling` / `& ~ sibling` combinator selectors are compiled', () => {
     const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
-    expect(
-      p.transform(
-        `export const A = () => <div css={{ '& + sibling': { color: 'red' } }} />;`,
-        '/src/sel005a.tsx',
-      ),
-    ).toBeNull();
-    expect(
-      p.transform(
-        `export const A = () => <div css={{ '& ~ sibling': { color: 'red' } }} />;`,
-        '/src/sel005b.tsx',
-      ),
-    ).toBeNull();
-    expect(p.__residuals.filter((r) => r.reason === 'unsupported-selector').length).toBe(2);
+    const outA = p.transform(
+      `export const A = () => <div css={{ '& + sibling': { color: 'red' } }} />;`,
+      '/src/sel005a.tsx',
+    );
+    expect(outA).not.toBeNull();
+    expect(packCssOf(p, outA?.code ?? '')).toMatch(/\.q_[0-9a-f]{8} \+ sibling\{color:red\}/);
+    const outB = p.transform(
+      `export const A = () => <div css={{ '& ~ sibling': { color: 'red' } }} />;`,
+      '/src/sel005b.tsx',
+    );
+    expect(outB).not.toBeNull();
+    expect(packCssOf(p, outB?.code ?? '')).toMatch(/\.q_[0-9a-f]{8} ~ sibling\{color:red\}/);
+    expect(p.__residuals.filter((r) => r.reason === 'unsupported-selector').length).toBe(0);
   });
 
-  it('SEL-006: multi-word descendant selector (`& div span`) is untouched (現状固定)', () => {
+  it('SEL-006: multi-word descendant selector (`& div span`) is compiled', () => {
     const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
-    // 単語 descendant (`& svg`) は受理済み (SEL-021)。2 語形は residual。
-    expect(
-      p.transform(
-        `export const A = () => <div css={{ '& div span': { display: 'block' } }} />;`,
-        '/src/sel006.tsx',
-      ),
-    ).toBeNull();
-    expect(p.__residuals.some((r) => r.reason === 'unsupported-selector')).toBe(true);
+    const out = p.transform(
+      `export const A = () => <div css={{ '& div span': { display: 'block' } }} />;`,
+      '/src/sel006.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(packCssOf(p, out?.code ?? '')).toMatch(/\.q_[0-9a-f]{8} div span\{display:block\}/);
+    expect(p.__residuals.some((r) => r.reason === 'unsupported-selector')).toBe(false);
   });
 
-  it('SEL-007: attribute selector (`& [data-x]`) is untouched (現状固定)', () => {
+  it('SEL-007: attribute selector (`& [data-x]`) is compiled', () => {
     const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
-    expect(
-      p.transform(
-        `export const A = () => <div css={{ '& [data-x]': { color: 'red' } }} />;`,
-        '/src/sel007.tsx',
-      ),
-    ).toBeNull();
-    expect(p.__residuals.some((r) => r.reason === 'unsupported-selector')).toBe(true);
+    const out = p.transform(
+      `export const A = () => <div css={{ '& [data-x]': { color: 'red' } }} />;`,
+      '/src/sel007.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(packCssOf(p, out?.code ?? '')).toMatch(/\.q_[0-9a-f]{8} \[data-x\]\{color:red\}/);
+    expect(p.__residuals.some((r) => r.reason === 'unsupported-selector')).toBe(false);
   });
 
   it('SEL-017: solo class rule is declaration-equivalent to handwritten CSS at (0,1,0)', () => {
@@ -850,28 +849,28 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
     expect(unitCount(p)).toBe(2);
   });
 
-  it('DED-009: @layer nest is residual/untouched', () => {
+  it('DED-009: @layer nest is compiled with a layer wrapper', () => {
     const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
-    expect(
-      p.transform(
-        `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,
-        '/src/ded009.tsx',
-      ),
-    ).toBeNull();
-    expect(p.__residuals.some((r) => r.reason === 'unsupported-at-rule')).toBe(true);
+    const out = p.transform(
+      `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,
+      '/src/ded009.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(packCssOf(p, out?.code ?? '')).toMatch(/@layer base\{\.q_[0-9a-f]{8}\{color:red\}\}/);
+    expect(p.__residuals.some((r) => r.reason === 'unsupported-at-rule')).toBe(false);
   });
 
-  it('CSS-012: @layer order is residual, not miscompiled', () => {
+  it('CSS-012: @layer order is preserved in the wrapper, not miscompiled', () => {
     const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
-    // layer 順序は transform が解釈せず untouched (+理由記録)。黙って書き換えない。
-    expect(
-      p.transform(
-        `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,
-        '/src/css012.tsx',
-      ),
-    ).toBeNull();
-    expect(p.__residuals.some((r) => r.reason === 'unsupported-at-rule')).toBe(true);
-    expect(unitCount(p)).toBe(0);
+    // layer 指定は wrapper として素直に出力する (順序の解釈は CSS に委ねる)。
+    const out = p.transform(
+      `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,
+      '/src/css012.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(packCssOf(p, out?.code ?? '')).toContain('@layer base');
+    expect(p.__residuals.some((r) => r.reason === 'unsupported-at-rule')).toBe(false);
+    expect(unitCount(p)).toBe(1);
   });
 
 describe('qstyle B-2 CSS semantics preservation (CSS-004/005/011/015/016/017/018)', () => {

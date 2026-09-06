@@ -63,3 +63,35 @@ export function fnv1aHex(payload: string): string {
   }
   return (h >>> 0).toString(16).padStart(8, '0');
 }
+
+/**
+ * class に対する完全セレクタ列。suffix のカンマ区切りは各要素に class を付与する
+ * (`.h:hover, .h:focus`)。単一時は従来と同一文字列になる。
+ */
+export function classSelectors(className: string, context: RuleContext): string[] {
+  const base: string = `.${className}${(context.pseudo ?? []).join('')}`;
+  const tail: string = `${context.descendant !== undefined ? ` ${context.descendant}` : ''}${context.suffix ?? ''}`;
+  if (tail === '') return [base];
+  return tail.split(',').map((part) => `${base}${part}`);
+}
+
+/**
+ * context の at-rule wrapper (supports → container → media → layer、外側ほど広域)。
+ * layer なしの従来 context では従来と同一文字列になる。
+ */
+export function wrapContextAtRules(selectors: readonly string[], context: RuleContext, body: string): string {
+  let rule: string = `${selectors.join(',')}{${body}}`;
+  if (context.supports !== undefined) {
+    rule = `@supports ${context.supports}{${rule}}`;
+  }
+  if (context.container !== undefined) {
+    rule = `@container ${context.container}{${rule}}`;
+  }
+  if (context.media !== undefined) {
+    rule = `@media ${context.media}{${rule}}`;
+  }
+  if (context.layer !== undefined) {
+    rule = `@layer${context.layer === '' ? '' : ` ${context.layer}`}{${rule}}`;
+  }
+  return rule;
+}

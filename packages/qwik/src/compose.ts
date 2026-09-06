@@ -1,4 +1,4 @@
-import type { AnyAtom, ParametricAtom, ResidualRuleNode } from '@qstyle/core';
+import type { AnyAtom, GlobalAtRule, KeyframesRule, ParametricAtom, ResidualRuleNode } from '@qstyle/core';
 import { lowerStyleObject } from './object.js';
 import type { Diagnostic } from './object.js';
 import type { CssProp, StyleHandle, StyleObject } from './index.js';
@@ -9,6 +9,8 @@ export interface ComposedStyle {
   readonly parametrics: ParametricAtom[];
   readonly residuals: ResidualRuleNode[];
   readonly diagnostics: Diagnostic[];
+  readonly keyframes: KeyframesRule[];
+  readonly globals: GlobalAtRule[];
 }
 
 export function isStyleHandle(value: unknown): value is StyleHandle {
@@ -73,11 +75,29 @@ function semanticKey(atom: AnyAtom): string {
  */
 export function composeCssProp(
   prop: CssProp,
-  opts: { readonly source?: string | undefined } = {},
+  opts: { readonly source?: string | undefined; readonly keyframes?: ReadonlyMap<string, string> | undefined } = {},
 ): ComposedStyle {
   const atoms: AnyAtom[] = [];
   const residuals: ResidualRuleNode[] = [];
   const diagnostics: Diagnostic[] = [];
+  const keyframes: KeyframesRule[] = [];
+  const globals: GlobalAtRule[] = [];
+  const seenKeyframes = new Set<string>();
+  const seenGlobals = new Set<string>();
+  const pushKeyframes = (rules: readonly KeyframesRule[]): void => {
+    for (const rule of rules) {
+      if (seenKeyframes.has(rule.name)) continue;
+      seenKeyframes.add(rule.name);
+      keyframes.push(rule);
+    }
+  };
+  const pushGlobals = (rules: readonly GlobalAtRule[]): void => {
+    for (const rule of rules) {
+      if (seenGlobals.has(rule.id)) continue;
+      seenGlobals.add(rule.id);
+      globals.push(rule);
+    }
+  };
   // conflictKey -> atoms 内 index。semantic 重複はスキップする。
   const positions = new Map<string, number>();
   const seenSemantics = new Set<string>();
@@ -90,6 +110,8 @@ export function composeCssProp(
           parametrics: part.parametrics,
           residuals: part.residuals,
           diagnostics: [] as Diagnostic[],
+          keyframes: part.keyframes,
+          globals: part.globals,
         }
       : { ...lowerStyleObject(part, opts), parametrics: [] as readonly ParametricAtom[] };
     const partAtoms: readonly AnyAtom[] = lowered.atoms;
@@ -97,6 +119,8 @@ export function composeCssProp(
     const partDiagnostics: readonly Diagnostic[] = lowered.diagnostics;
     for (const residual of partResiduals) residuals.push(residual);
     for (const diagnostic of partDiagnostics) diagnostics.push(diagnostic);
+    pushKeyframes(lowered.keyframes);
+    pushGlobals(lowered.globals);
 
     for (const atom of [...lowered.parametrics, ...partAtoms]) {
       const sem: string = semanticKey(atom);
@@ -120,5 +144,5 @@ export function composeCssProp(
   const parametrics: ParametricAtom[] = atoms.filter(
     (a): a is ParametricAtom => a.kind === 'parametric-atom',
   );
-  return { atoms, parametrics, residuals, diagnostics };
+  return { atoms, parametrics, residuals, diagnostics, keyframes, globals };
 }

@@ -56,12 +56,12 @@ describe('lowerStyleObject', () => {
     expect(out.atoms[0]?.value).toBe('16px');
   });
 
-  it('residualizes combinator selectors instead of rewriting (SEL-016)', () => {
+  it('lowers combinator selectors into suffix context (SEL-016)', () => {
     const out = lowerStyleObject({ '& > svg': { width: 16 } });
-    expect(out.atoms).toHaveLength(0);
-    expect(out.residuals).toHaveLength(1);
-    expect(out.residuals[0]?.reason).toBe('unsupported-selector');
-    expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+    expect(out.atoms).toHaveLength(1);
+    expect(out.atoms[0]?.context.suffix).toBe(' > svg');
+    expect(out.atoms[0]?.value).toBe('16px');
+    expect(out.residuals).toHaveLength(0);
   });
 
   it('lowers & <simple-selector> into descendant context (SEL-021)', () => {
@@ -71,12 +71,17 @@ describe('lowerStyleObject', () => {
     expect(out.atoms[1]?.context.descendant).toBe('.tile');
   });
 
-  it('residualizes compound descendants and pseudo on descendant (SEL-022)', () => {
-    for (const key of ['& a b', '& svg:hover', '&& svg']) {
-      const out = lowerStyleObject({ [key]: { display: 'block' } });
-      expect(out.atoms).toHaveLength(0);
-      expect(out.residuals[0]?.reason).toBe('unsupported-selector');
-    }
+  it('lowers multi-level descendants and pseudo on descendant into suffix (SEL-022)', () => {
+    expect(lowerStyleObject({ '& a b': { display: 'block' } }).atoms[0]?.context.suffix).toBe(
+      ' a b',
+    );
+    expect(lowerStyleObject({ '& svg:hover': { display: 'block' } }).atoms[0]?.context.suffix).toBe(
+      ' svg:hover',
+    );
+    // `&` の再出現は解決不能のため residual のまま。
+    const out = lowerStyleObject({ '&& svg': { display: 'block' } });
+    expect(out.atoms).toHaveLength(0);
+    expect(out.residuals[0]?.reason).toBe('unsupported-selector');
   });
 
   it('ignores prototype-like keys (SEC-008)', () => {
@@ -269,17 +274,15 @@ describe('lowerStyleObject selectors and at-rules', () => {
     expect(out.atoms[1]?.context.pseudo).toEqual(['::after']);
   });
 
-  it('residualizes :is() selector-list args and :has() relational args (SEL-008/009 — 現状固定)', () => {
-    // 現行 parseNestedKey は pseudo 引数に空白 / combinator を含む形式を受理しない。
-    expect(parseNestedKey('&:is(.a, .b)')).toBeNull();
-    expect(parseNestedKey('&:has(> img)')).toBeNull();
+  it('accepts :is() selector-list args and :has() relational args as suffix (SEL-008/009)', () => {
+    expect(parseNestedKey('&:is(.a, .b)')).toEqual({ suffix: ':is(.a, .b)' });
+    expect(parseNestedKey('&:has(> img)')).toEqual({ suffix: ':has(> img)' });
     for (const key of ['&:is(.a, .b)', '&:has(> img)']) {
       const out = lowerStyleObject({ [key]: { color: 'red' } });
-      expect(out.atoms).toHaveLength(0);
-      expect(out.residuals[0]?.reason).toBe('unsupported-selector');
-      expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+      expect(out.atoms).toHaveLength(1);
+      expect(out.residuals).toHaveLength(0);
     }
-    // 単一の simple arg (空白なし) は pseudo として受理される (現状固定)。
+    // 単一の simple arg (空白なし) は pseudo として受理される (従来どおり)。
     expect(parseNestedKey('&:not(.foo)')).toEqual({ pseudo: [':not(.foo)'] });
     expect(lowerStyleObject({ '&:not(.foo)': { color: 'red' } }).atoms[0]?.context.pseudo).toEqual(
       [':not(.foo)'],
@@ -323,11 +326,142 @@ describe('lowerStyleObject selectors and at-rules', () => {
     expect(out.atoms[0]?.value).toBe('4px');
   });
 
-  it('residualizes cascade layer at-rules (SEL-015 — 現状固定)', () => {
+  it('accepts cascade layer at-rules as layer context (SEL-015)', () => {
     const out = lowerStyleObject({ '@layer base': { color: 'red' } });
-    expect(out.atoms).toHaveLength(0);
-    expect(out.residuals).toHaveLength(1);
-    expect(out.residuals[0]?.reason).toBe('unsupported-at-rule');
-    expect(out.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+    expect(out.atoms).toHaveLength(1);
+    expect(out.atoms[0]?.context.layer).toBe('base');
+    expect(out.residuals).toHaveLength(0);
+    // dotted layer 名・anonymous layer も受理する。不正 prelude は residual。
+    expect(lowerStyleObject({ '@layer base.components': { color: 'red' } }).atoms[0]?.context.layer).toBe(
+      'base.components',
+    );
+    expect(lowerStyleObject({ '@layer': { color: 'red' } }).atoms[0]?.context.layer).toBe('');
+    const bad = lowerStyleObject({ '@layer base; x': { color: 'red' } });
+    expect(bad.atoms).toHaveLength(0);
+    expect(bad.residuals[0]?.reason).toBe('unsupported-at-rule');
+  });
+});
+
+describe('lowerStyleObject SCSS-like nesting (suffix)', () => {
+  it('lowers &-concatenation and attribute selectors into suffix', () => {
+    expect(lowerStyleObject({ '&--mod': { color: 'red' } }).atoms[0]?.context.suffix).toBe('--mod');
+    expect(lowerStyleObject({ '&.active': { color: 'red' } }).atoms[0]?.context.suffix).toBe(
+      '.active',
+    );
+    expect(
+      lowerStyleObject({ '&[type="text"]': { color: 'red' } }).atoms[0]?.context.suffix,
+    ).toBe('[type="text"]');
+    expect(lowerStyleObject({ '& + sib': { color: 'red' } }).atoms[0]?.context.suffix).toBe(
+      ' + sib',
+    );
+    expect(lowerStyleObject({ '& ~ sib': { color: 'red' } }).atoms[0]?.context.suffix).toBe(
+      ' ~ sib',
+    );
+  });
+
+  it('expands comma selector lists with class on each item', () => {
+    const out = lowerStyleObject({ '&:hover, &:focus': { color: 'red' } });
+    expect(out.atoms).toHaveLength(1);
+    expect(out.atoms[0]?.context.suffix).toBe(':hover,:focus');
+    // `&` 付き継続も受理する。descendant 継続は各要素に space を付与する。
+    expect(lowerStyleObject({ '&:hover, &:focus': { color: 'red' } }).atoms).toHaveLength(1);
+    expect(lowerStyleObject({ '& .a, & .b': { color: 'red' } }).atoms[0]?.context.suffix).toBe(
+      ' .a, .b',
+    );
+    expect(lowerStyleObject({ '& .a, .b': { color: 'red' } }).atoms[0]?.context.suffix).toBe(
+      ' .a, .b',
+    );
+  });
+
+  it('combines nested contexts (media > pseudo > suffix, layer merge)', () => {
+    const out = lowerStyleObject({
+      '@media (width >= 768px)': { '&:hover': { '& .x': { color: 'blue' } } },
+    });
+    expect(out.residuals).toHaveLength(0);
+    const atom = out.atoms[0];
+    expect(atom?.context.media).toBe('(width >= 768px)');
+    expect(atom?.context.pseudo).toEqual([':hover']);
+    expect(atom?.context.descendant).toBe('.x');
+    // suffix 同士は直積で結合する (外側×内側の順序を保つ)。
+    const cross = lowerStyleObject({ '&:hover, &:focus': { '& .x': { color: 'red' } } });
+    expect(cross.atoms[0]?.context.suffix).toBe(':hover .x,:focus .x');
+    // nested layer は dotted 結合する。
+    const layered = lowerStyleObject({ '@layer a': { '@layer b': { color: 'red' } } });
+    expect(layered.atoms[0]?.context.layer).toBe('a.b');
+  });
+
+  it('still residualizes & re-occurrence and breaking characters', () => {
+    for (const key of ['&:hover &', '& &', '& <div', '&;x', '&{x']) {
+      const out = lowerStyleObject({ [key]: { color: 'red' } });
+      expect(out.atoms).toHaveLength(0);
+      expect(out.residuals).toHaveLength(1);
+    }
+  });
+});
+
+describe('lowerStyleObject @keyframes and globals', () => {
+  it('lowers @keyframes and rewrites animation references to the hashed name', () => {
+    const out = lowerStyleObject({
+      '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } },
+      animation: 'fade 1s ease',
+      animationName: 'fade',
+    });
+    expect(out.residuals).toHaveLength(0);
+    expect(out.keyframes).toHaveLength(1);
+    const name: string = out.keyframes[0]?.name ?? '';
+    expect(name).toMatch(/^qkf_[0-9a-f]{8}$/);
+    const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
+    expect(byProp['animation']).toBe(`${name} 1s ease`);
+    expect(byProp['animation-name']).toBe(name);
+  });
+
+  it('dedups identical keyframes across different names (content identity)', () => {
+    const a = lowerStyleObject({ '@keyframes one': { from: { opacity: 0 } } });
+    const b = lowerStyleObject({ '@keyframes two': { from: { opacity: 0 } } });
+    expect(a.keyframes[0]?.name).toBe(b.keyframes[0]?.name);
+  });
+
+  it('does not rewrite CSS-wide keywords or partial matches', () => {
+    const out = lowerStyleObject({
+      '@keyframes fade': { from: { opacity: 0 } },
+      animation: 'none',
+      animationName: 'fadein',
+    });
+    const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
+    expect(byProp['animation']).toBe('none');
+    expect(byProp['animation-name']).toBe('fadein');
+  });
+
+  it('residualizes nested @keyframes and invalid frames (no silent emit)', () => {
+    const nested = lowerStyleObject({ '@media (x)': { '@keyframes fade': { from: { opacity: 0 } } } });
+    expect(nested.keyframes).toHaveLength(0);
+    expect(nested.residuals.some((r) => r.reason === 'unsupported-at-rule')).toBe(true);
+    const bad = lowerStyleObject({ '@keyframes fade': { middle: { opacity: 0 } } });
+    expect(bad.keyframes).toHaveLength(0);
+    expect(bad.residuals.length).toBeGreaterThan(0);
+    expect(bad.diagnostics.some((d) => d.severity === 'warn')).toBe(true);
+  });
+
+  it('lowers @font-face and @property into globals', () => {
+    const out = lowerStyleObject({
+      '@font-face': { fontFamily: 'MyFont', src: 'url(/a.woff2)' },
+      '@property --brand': { syntax: '"<color>"', inherits: 'false', initialValue: 'red' },
+    });
+    expect(out.residuals).toHaveLength(0);
+    expect(out.globals).toHaveLength(2);
+    expect(out.globals[0]?.at).toBe('font-face');
+    expect(out.globals[1]?.prelude).toBe('--brand');
+  });
+
+  it('rewrites references via the external module table (local wins)', () => {
+    const external = new Map([['fade', 'qkf_external']]);
+    const out = lowerStyleObject({ animationName: 'fade' }, { keyframes: external });
+    expect(out.atoms[0]?.value).toBe('qkf_external');
+    const local = lowerStyleObject(
+      { '@keyframes fade': { from: { opacity: 0 } }, animationName: 'fade' },
+      { keyframes: external },
+    );
+    expect(local.atoms[0]?.value).toBe(local.keyframes[0]?.name);
+    expect(local.atoms[0]?.value).not.toBe('qkf_external');
   });
 });

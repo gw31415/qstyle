@@ -1,6 +1,6 @@
 // @qstyle/qwik — MVP authoring API surface (plan.md §19-24)。
 // Milestone 2 以降で transform 本体を実装する。現時点では型 + runtime stub。
-import type { ParametricAtom, ResidualRuleNode, StaticAtom } from '@qstyle/core';
+import type { GlobalAtRule, KeyframesRule, ParametricAtom, ResidualRuleNode, StaticAtom } from '@qstyle/core';
 import { lowerStyleObject } from './object.js';
 
 export interface StyleHandle {
@@ -10,6 +10,10 @@ export interface StyleHandle {
   /** runtime 値スロットを持つ共有可能構造 (M5b 以降)。 */
   readonly parametrics: readonly ParametricAtom[];
   readonly residuals: readonly ResidualRuleNode[];
+  /** 同一オブジェクト内で定義された `@keyframes` (内容 hash 名で重複排除)。 */
+  readonly keyframes: readonly KeyframesRule[];
+  /** 同一オブジェクト内で定義された `@font-face` / `@property`。 */
+  readonly globals: readonly GlobalAtRule[];
 }
 export { lowerStyleObject, mergeRuleContext, parseNestedKey, splitImportant } from './object.js';
 export type { Diagnostic, ImportantSplit, LowerOptions, LoweredStyle } from './object.js';
@@ -53,6 +57,8 @@ export function css(
       atoms: lowered.atoms,
       parametrics: lowered.parametrics,
       residuals: lowered.residuals,
+      keyframes: lowered.keyframes,
+      globals: lowered.globals,
     };
   }
   // object syntax は eager に lowering して handle に保持する。
@@ -63,5 +69,7 @@ export function css(
     atoms: lowered.atoms,
     parametrics: [],
     residuals: lowered.residuals,
+    keyframes: lowered.keyframes,
+    globals: lowered.globals,
   };
 }

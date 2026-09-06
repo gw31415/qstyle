@@ -1,5 +1,14 @@
 import { createParametricAtom } from '@qstyle/core';
+import {
+  buildGlobalAtRule,
+  buildKeyframesRule,
+  parseGlobalAtRuleKey,
+  parseKeyframesKey,
+  rewriteAnimationValue,
+} from '@qstyle/core';
 import type {
+  GlobalAtRule,
+  KeyframesRule,
   ParametricAtom,
   Provenance,
   ResidualRuleNode,
@@ -23,6 +32,8 @@ export interface LoweredTemplate {
   readonly parametrics: ParametricAtom[];
   readonly residuals: ResidualRuleNode[];
   readonly diagnostics: Diagnostic[];
+  readonly keyframes: KeyframesRule[];
+  readonly globals: GlobalAtRule[];
 }
 
 type ScannedItem =
@@ -257,6 +268,8 @@ interface TemplateSink {
   readonly residuals: ResidualRuleNode[];
   readonly diagnostics: Diagnostic[];
   readonly provenance: readonly Provenance[];
+  readonly keyframes: KeyframesRule[];
+  readonly globals: GlobalAtRule[];
 }
 
 /** decl value 内の runtime marker 列 (`\0R\0`)。 */
@@ -399,12 +412,35 @@ function containsRuntimeDecl(item: { readonly items: readonly ScannedItem[] }): 
  * block を record へ落とす。runtime decl を含む block はここでネスト key を
  * context へ解決し (DYN-008)、対応不能なら block 全体を residual にして
  * null を返す。static decl のみの block は従来どおり record 経由。
+ * `@keyframes` / `@font-face` / `@property` は top-level のみ global 系 IR へ
+ * 落とし (nested は residual)、record には載せず null を返す。
  */
 function lowerBlock(
   item: { readonly header: string; readonly items: ScannedItem[] },
   sink: TemplateSink,
   context: RuleContext,
 ): Record<string, unknown> | null {
+  const keyframesName: string | null = parseKeyframesKey(item.header);
+  const globalKey: { at: 'font-face' | 'property'; prelude: string } | null =
+    keyframesName === null ? parseGlobalAtRuleKey(item.header) : null;
+  if (keyframesName !== null || globalKey !== null) {
+    if (isScopedContext(context)) {
+      sink.residuals.push({
+        kind: 'residual-rule',
+        cssText: item.header,
+        scope: 'component',
+        reason: 'unsupported-at-rule',
+        provenance: sink.provenance,
+      });
+      sink.diagnostics.push({
+        severity: 'warn',
+        message: `nested ${JSON.stringify(item.header)} is not supported; kept as residual`,
+      });
+      return null;
+    }
+    lowerAtRuleBlock(item.items, sink, keyframesName, globalKey);
+    return null;
+  }
   if (!containsRuntimeDecl(item)) return blockToRecord(item.items, sink, context);
   const delta: RuleContext | null = parseNestedKey(item.header);
   if (delta === null) {
@@ -422,6 +458,103 @@ function lowerBlock(
     return null;
   }
   return blockToRecord(item.items, sink, mergeRuleContext(context, delta));
+}
+
+/** context が何らかのスコープ (pseudo/media/…) を持つか。 */
+function isScopedContext(context: RuleContext): boolean {
+  return (
+    (context.pseudo?.length ?? 0) > 0 ||
+    context.media !== undefined ||
+    context.supports !== undefined ||
+    context.container !== undefined ||
+    context.layer !== undefined ||
+    context.descendant !== undefined ||
+    context.suffix !== undefined
+  );
+}
+
+/**
+ * `@keyframes` / `@font-face` / `@property` ブロックを global 系 IR へ落とす。
+ * 子要素は static decl (keyframes は frame ブロック) のみ受理し、
+ * interpolation・handle・ネスト混じりは block 全体を residual にする。
+ */
+function lowerAtRuleBlock(
+  items: readonly ScannedItem[],
+  sink: TemplateSink,
+  keyframesName: string | null,
+  globalKey: { at: 'font-face' | 'property'; prelude: string } | null,
+): void {
+  const fail = (message: string): void => {
+    sink.residuals.push({
+      kind: 'residual-rule',
+      cssText: keyframesName !== null ? `@keyframes ${keyframesName}` : '@font-face/@property',
+      scope: 'component',
+      reason: 'unsupported-value',
+      provenance: sink.provenance,
+    });
+    sink.diagnostics.push({ severity: 'warn', message });
+  };
+  const readDecls = (
+    decls: readonly ScannedItem[],
+  ): Record<string, unknown> | null => {
+    const record: Record<string, unknown> = {};
+    for (const decl of decls) {
+      // interpolation marker (runtime/handle) 混じりは受理しない。
+      if (decl.kind !== 'decl') return null;
+      if (decl.value.includes(HANDLE_MARK) || decl.value.includes(RUNTIME_MARK)) return null;
+      record[decl.prop] = decl.value;
+    }
+    return record;
+  };
+  if (keyframesName !== null) {
+    const framesRecord: Record<string, unknown> = {};
+    for (const child of items) {
+      if (child.kind !== 'block') {
+        fail('@keyframes block only accepts frame blocks with static declarations');
+        return;
+      }
+      const frameRecord: Record<string, unknown> | null = readDecls(child.items);
+      if (frameRecord === null) {
+        fail('@keyframes frame only accepts static declarations');
+        return;
+      }
+      framesRecord[child.header] = { ...(framesRecord[child.header] as Record<string, unknown> | undefined), ...frameRecord };
+    }
+    const built = buildKeyframesRule(keyframesName, framesRecord, sink.provenance);
+    if ('rule' in built) {
+      sink.keyframes.push(built.rule);
+    } else {
+      sink.residuals.push({
+        kind: 'residual-rule',
+        cssText: `@keyframes ${keyframesName}`,
+        scope: 'component',
+        reason: built.reason,
+        provenance: sink.provenance,
+      });
+      sink.diagnostics.push({ severity: 'warn', message: built.message });
+    }
+    return;
+  }
+  if (globalKey !== null) {
+    const record: Record<string, unknown> | null = readDecls(items);
+    if (record === null) {
+      fail(`@${globalKey.at} block only accepts static declarations`);
+      return;
+    }
+    const built = buildGlobalAtRule(globalKey.at, globalKey.prelude, record, sink.provenance);
+    if ('rule' in built) {
+      sink.globals.push(built.rule);
+    } else {
+      sink.residuals.push({
+        kind: 'residual-rule',
+        cssText: `@${globalKey.at} ${globalKey.prelude}`.trim(),
+        scope: 'component',
+        reason: built.reason,
+        provenance: sink.provenance,
+      });
+      sink.diagnostics.push({ severity: 'warn', message: built.message });
+    }
+  }
 }
 
 function blockToRecord(
@@ -496,7 +629,9 @@ export function lowerTaggedTemplate(
   const parametrics: ParametricAtom[] = [];
   const residuals: ResidualRuleNode[] = [];
   const diagnostics: Diagnostic[] = [];
-  const sink: TemplateSink = { parametrics, residuals, diagnostics, provenance };
+  const keyframes: KeyframesRule[] = [];
+  const globals: GlobalAtRule[] = [];
+  const sink: TemplateSink = { parametrics, residuals, diagnostics, provenance, keyframes, globals };
   const pushResidual = (cssText: string, message: string): void => {
     residuals.push({
       kind: 'residual-rule',
@@ -513,7 +648,7 @@ export function lowerTaggedTemplate(
   const items: ScannedItem[] | null = scanItems(scanner, false);
   if (items === null) {
     pushResidual(text, 'unbalanced block in template literal');
-    return { atoms, parametrics, residuals, diagnostics };
+    return { atoms, parametrics, residuals, diagnostics, keyframes, globals };
   }
 
   const segments: Segment[] = [];
@@ -554,6 +689,8 @@ export function lowerTaggedTemplate(
       for (const atom of segment.handle.atoms) atoms.push(atom);
       for (const parametric of segment.handle.parametrics) parametrics.push(parametric);
       for (const residual of segment.handle.residuals) residuals.push(residual);
+      for (const rule of segment.handle.keyframes) keyframes.push(rule);
+      for (const rule of segment.handle.globals) globals.push(rule);
     } else if (segment.kind === 'parametric') {
       parametrics.push(segment.atom);
     } else if (segment.kind === 'runtime') {
@@ -566,7 +703,37 @@ export function lowerTaggedTemplate(
       for (const atom of lowered.atoms) atoms.push(atom);
       for (const residual of lowered.residuals) residuals.push(residual);
       for (const diagnostic of lowered.diagnostics) diagnostics.push(diagnostic);
+      for (const rule of lowered.keyframes) keyframes.push(rule);
+      for (const rule of lowered.globals) globals.push(rule);
     }
   }
-  return { atoms, parametrics, residuals, diagnostics };
+  // 同一 template 内の `@keyframes` 定義は静的な animation 参照へ書換える
+  // (record segment 経由の宣言は定義を知らないため post-pass で統一する)。
+  if (keyframes.length > 0) {
+    const table = new Map<string, string>(keyframes.map((rule) => [rule.sourceName, rule.name]));
+    for (let i = 0; i < atoms.length; i += 1) {
+      const atom: StaticAtom = atoms[i] as StaticAtom;
+      if (atom.property !== 'animation' && atom.property !== 'animation-name') continue;
+      const rewritten: string = rewriteAnimationValue(atom.value, table);
+      if (rewritten !== atom.value) atoms[i] = { ...atom, value: rewritten };
+    }
+  }
+  // 動的な animation 参照は確定名へ書換えできないため、同一 template 内に
+  // `@keyframes` 定義がある場合は residual に落とす (書換え不能の黙殺防止)。
+  if (keyframes.length > 0) {
+    const kept: ParametricAtom[] = [];
+    for (const atom of parametrics) {
+      if (atom.property === 'animation' || atom.property === 'animation-name') {
+        pushResidual(
+          `${atom.property}:runtime value`,
+          'dynamic animation with local @keyframes cannot be rewritten; use a static value',
+        );
+      } else {
+        kept.push(atom);
+      }
+    }
+    parametrics.length = 0;
+    for (const atom of kept) parametrics.push(atom);
+  }
+  return { atoms, parametrics, residuals, diagnostics, keyframes, globals };
 }
