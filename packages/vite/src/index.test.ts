@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { hashStaticAtom } from '@qstyle/core';
 import { lowerStyleObject } from '@qstyle/qwik';
 import {
+  closeRouteModules,
+  discoverRoutes,
   parseStyleObjectLiteral,
   parseStyleObjectLiteralWithDynamics,
   qstyle as qstyleFactory,
@@ -24,12 +29,12 @@ function packCssOf(p: { load: (id: string) => string | null }, code: string): st
 
 describe('qstyle vite plugin (M0)', () => {
   it('exposes vite plugin name', () => {
-    const p = qstyle({});
+    const p = qstyle({ backend: 'qwik-native' });
     expect(p.name).toBe('qstyle');
   });
 
   it('rewrites single string-literal css prop to atom class', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
@@ -45,7 +50,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('leaves complex css props untouched', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     // spread / call / ternary / bare handle は parse 不能または residual のため untouched。
@@ -64,7 +69,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('rewrites multi-declaration css props', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
@@ -83,7 +88,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('rewrites &:hover nested styles with pseudo context', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
@@ -96,7 +101,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('emits descendant selector atoms for & svg (SEL-021)', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
@@ -108,7 +113,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges with a pre-existing class attribute', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const code = `export const A = () => <div class="legacy" css={{ display: 'flex' }} />;`;
@@ -119,7 +124,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges into a pre-existing className attribute without dropping it', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     // className 値を落とすと :where(.g-on) 等の既存 class 依存が壊れる (実バグ回帰)。
@@ -133,7 +138,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges into a className expression via array wrap (keyword preserved)', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -147,7 +152,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges into an existing class={...} expression via array wrap', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -162,7 +167,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges with a static class attribute written after the css prop', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -177,7 +182,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges with a class expression written after the css prop', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -191,7 +196,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('keeps the tag end scan safe when a later attribute contains >', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -205,7 +210,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('only merges css when an explicit class follows all spread props', () => {
-    const p = qstyle({ debug: false }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     expect(
@@ -246,7 +251,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('ignores files without css prop', () => {
-    const p = qstyle({}) as unknown as {
+    const p = qstyle({ backend: 'qwik-native' }) as unknown as {
       transform: (code: string, id: string) => unknown;
     };
     expect(p.transform(`export const x = 1;`, '/src/b.tsx')).toBeNull();
@@ -373,7 +378,7 @@ describe('qstyle vite plugin dynamics (M5c)', () => {
   }
   // parametric 機構の検証のため promotion:'always' を明示する (default cost-based は単発を inline 化する)。
   const plugin = (): Transformable =>
-    qstyle({ debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
+    qstyle({ backend: 'qwik-native', debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
 
   /** 出力 code 内の class 属性から atom id 一覧を取る。 */
   function classIds(code: string): string[] {
@@ -467,7 +472,7 @@ describe('qstyle css() handles + composition (M3)', () => {
   }
   // parametric 機構の検証のため promotion:'always' を明示する。
   const plugin = (): Transformable =>
-    qstyle({ debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
+    qstyle({ backend: 'qwik-native', debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
   const withImport = (body: string): string => `import { css } from '@qstyle/qwik';\n${body}`;
 
   /** 出力 code 内の class 属性から atom id 一覧を取る。 */
@@ -747,6 +752,7 @@ describe('qstyle css() handles + composition (M3)', () => {
 
   it('reports an actionable reason for cross-module handles (CMP-017 boundary)', () => {
     const errPlugin = qstyle({
+      backend: 'qwik-native',
       diagnostics: 'error',
       runtimeStyles: { promotion: 'always' },
     }) as unknown as {
@@ -801,7 +807,7 @@ describe('qstyle static template handles (M4)', () => {
     transform: (code: string, id: string) => { code: string; map: null } | null;
     load: (id: string) => string | null;
   }
-  const plugin = (): Transformable => qstyle({ debug: false }) as unknown as Transformable;
+  const plugin = (): Transformable => qstyle({ backend: 'qwik-native', debug: false }) as unknown as Transformable;
   const withImport = (body: string): string => `import { css } from '@qstyle/qwik';\n${body}`;
 
   function classIds(code: string): string[] {
@@ -1009,7 +1015,7 @@ describe('qstyle finite ternary values (DYN-016)', () => {
     transform: (code: string, id: string) => { code: string; map: null } | null;
     load: (id: string) => string | null;
   }
-  const plugin = (): Transformable => qstyle({ debug: false }) as unknown as Transformable;
+  const plugin = (): Transformable => qstyle({ backend: 'qwik-native', debug: false }) as unknown as Transformable;
 
   it('expands static ternary values to runtime class choice without CSS vars', () => {
     const p = plugin();
@@ -1062,7 +1068,7 @@ describe('qstyle finite ternary values (DYN-016)', () => {
 
 describe('qstyle legacy hooks coexistence (§24)', () => {
   it('tracks useStyles/useStylesScoped provenance without rewriting', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       readonly __legacyStyles: readonly {
         module: string;
@@ -1096,7 +1102,7 @@ describe('qstyle legacy hooks coexistence (§24)', () => {
   });
 
   it('records global hooks and unresolvable css paths', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       readonly __legacyStyles: readonly { hook: string; local: string; cssPath: string | null }[];
     };
@@ -1114,7 +1120,7 @@ describe('qstyle compound template values (§23/DYN-006)', () => {
   }
   // parametric 機構の検証のため promotion:'always' を明示する。
   const plugin = (): Transformable =>
-    qstyle({ debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
+    qstyle({ backend: 'qwik-native', debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
 
   function classIds(code: string): string[] {
     const m: RegExpMatchArray | null = /class="([^"]*)"/.exec(code);
@@ -1198,7 +1204,7 @@ describe('qstyle scale bounds (PERF-001/003 unit)', () => {
   }
 
   it('dedups 100 identical static styles to one atom', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as Transformable;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as Transformable;
     for (let i = 0; i < 100; i += 1) {
       const out = p.transform(
         `export const A${i} = () => <div css={{ display: 'flex', gap: 8 }} />;`,
@@ -1213,6 +1219,7 @@ describe('qstyle scale bounds (PERF-001/003 unit)', () => {
 
   it('shares one parametric structure across 1000 dynamic widths', () => {
     const p = qstyle({
+      backend: 'qwik-native',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
     }) as unknown as Transformable;
@@ -1227,8 +1234,12 @@ describe('qstyle scale bounds (PERF-001/003 unit)', () => {
     expect(registry.split('\n').filter((line) => line.includes('q_'))).toHaveLength(1);
   });
 
-  it('keeps singleton dynamics inline under default cost-based promotion', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as Transformable;
+  it('keeps singleton dynamics inline under explicit cost-based promotion', () => {
+    const p = qstyle({
+      backend: 'qwik-native',
+      diagnostics: 'silent',
+      runtimeStyles: { promotion: 'cost-based' },
+    }) as unknown as Transformable;
     const out = p.transform(
       `export const A = () => <div css={{ display: 'flex', width: props.w }} />;`,
       '/src/cb-single.tsx',
@@ -1250,6 +1261,7 @@ describe('qstyle promotion modes (§32)', () => {
   }
   const never = (): Transformable =>
     qstyle({
+      backend: 'qwik-native',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'never' },
     }) as unknown as Transformable;
@@ -1304,8 +1316,12 @@ describe('qstyle promotion modes (§32)', () => {
     ).toBeNull();
   });
 
-  it('promotes module-shared structures under default cost-based', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as Transformable;
+  it('promotes module-shared structures under explicit cost-based', () => {
+    const p = qstyle({
+      backend: 'qwik-native',
+      diagnostics: 'silent',
+      runtimeStyles: { promotion: 'cost-based' },
+    }) as unknown as Transformable;
     const out = p.transform(
       `export const A = () => <div css={{ display: 'flex', width: props.a }} />;\n` +
         `export const B = () => <div css={{ display: 'block', width: props.b }} />;`,
@@ -1411,7 +1427,7 @@ describe('qstyle source maps (VLQ + edit tracking)', () => {
   });
 
   it('maps generated class attributes to the original css prop line', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as Transformable;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as Transformable;
     const code = [
       `export const A = () => (`,
       `  <div`,
@@ -1471,7 +1487,7 @@ describe('qstyle dev mode + CSS HMR', () => {
     }) => Promise<void> | void;
   }
   const devPlugin = (): DevPlugin => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as DevPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as DevPlugin;
     p.configResolved({ command: 'serve', mode: 'development' });
     return p;
   };
@@ -1705,7 +1721,7 @@ describe('qstyle dev mode + CSS HMR', () => {
 
 describe('qstyle residual log (DIA-003)', () => {
   it('collects residual reasons for unsafe selectors', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
       readonly __residuals: readonly { reason: string; cssText: string }[];
@@ -1738,6 +1754,7 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('emits one class per occurrence without atomicization in preserve mode', () => {
     const p = qstyle({
+      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1760,6 +1777,7 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('dedups identical blocks and groups contexts in preserve mode', () => {
     const p = qstyle({
+      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1781,6 +1799,7 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('keeps dynamic values as var refs inside preserve blocks', () => {
     const p = qstyle({
+      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1801,6 +1820,7 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('leaves order-sensitive declarations untouched in preserve mode', () => {
     const p = qstyle({
+      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1819,6 +1839,7 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('concatenates composition in author order in preserve mode', () => {
     const p = qstyle({
+      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1839,7 +1860,7 @@ describe('qstyle options validation + diagnostics', () => {
   });
 
   it('strict mode turns untouched occurrences into compile errors (§61)', () => {
-    const p = qstyle({ optimization: 'strict' }) as unknown as {
+    const p = qstyle({ backend: 'qwik-native', optimization: 'strict' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     expect(() =>
@@ -1848,13 +1869,13 @@ describe('qstyle options validation + diagnostics', () => {
   });
 
   it('diagnostics error mode throws, silent mode stays quiet (DIA-008)', () => {
-    const errPlugin = qstyle({ diagnostics: 'error' }) as unknown as {
+    const errPlugin = qstyle({ backend: 'qwik-native', diagnostics: 'error' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     expect(() =>
       errPlugin.transform(`export const A = () => <div css={{ ...base }} />;`, '/src/e.tsx'),
     ).toThrow(/\[qstyle\]/);
-    const silent = qstyle({ diagnostics: 'silent' }) as unknown as {
+    const silent = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     expect(
@@ -1865,7 +1886,7 @@ describe('qstyle options validation + diagnostics', () => {
   it('warns once per module × reason across re-transforms (DIA-009)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
+      const p = qstyle({ backend: 'qwik-native', diagnostics: 'warning' }) as unknown as {
         transform: (code: string, id: string) => { code: string; map: null } | null;
       };
       const code = `export const A = () => <div css={{ ...base }} />;`;
@@ -1884,7 +1905,7 @@ describe('qstyle options validation + diagnostics', () => {
   it('unsupported dynamic property names a reason (DIA-001)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
+      const p = qstyle({ backend: 'qwik-native', diagnostics: 'warning' }) as unknown as {
         transform: (code: string, id: string) => { code: string; map: null } | null;
       };
       expect(
@@ -1905,7 +1926,7 @@ describe('qstyle options validation + diagnostics', () => {
   it('unsupported selectors name a reason (DIA-002)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
+      const p = qstyle({ backend: 'qwik-native', diagnostics: 'warning' }) as unknown as {
         transform: (code: string, id: string) => { code: string; map: null } | null;
       };
       expect(
@@ -1924,7 +1945,7 @@ describe('qstyle options validation + diagnostics', () => {
   it('malformed template CSS names a reason (DIA-004)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
+      const p = qstyle({ backend: 'qwik-native', diagnostics: 'warning' }) as unknown as {
         transform: (code: string, id: string) => { code: string; map: null } | null;
       };
       expect(
@@ -1948,7 +1969,7 @@ describe('qstyle generateBundle wiring', () => {
       readonly source: string;
     }
     const runOnce = (): { emitted: string[]; packCss: string } => {
-      const p = qstyle({ routes: { '/': ['/src/a.tsx'] } }) as unknown as {
+      const p = qstyle({ backend: 'qwik-native', routes: { '/': ['/src/a.tsx'] } }) as unknown as {
         buildStart: () => void;
         transform: (code: string, id: string) => { code: string; map: null } | null;
         generateBundle: (this: { emitFile: (f: { fileName: string; source: string }) => void }) => void;
@@ -1977,7 +1998,7 @@ describe('qstyle generateBundle wiring', () => {
 
   it('records provenance sources for deduped atoms across modules', async () => {
     const { sourceSignature } = await import('@qstyle/core');
-    const p = qstyle({}) as unknown as {
+    const p = qstyle({ backend: 'qwik-native' }) as unknown as {
       buildStart: () => void;
       transform: (code: string, id: string) => { code: string; map: null } | null;
       readonly __usageGraph: { styleToComponents: Map<string, Set<string>> };
@@ -2333,7 +2354,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   };
 
   it('emits @keyframes with rewritten animation references in the pack', () => {
-    const p = pluginOf({ diagnostics: 'silent' });
+    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
     const out = p.transform(
       `export const A = () => <div css={{ '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } }, animation: 'fade 1s' }} />;`,
       '/src/kf1.tsx',
@@ -2346,7 +2367,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('resolves keyframes defined in a separate occurrence of the same module', () => {
-    const p = pluginOf({ diagnostics: 'silent' });
+    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
     const out = p.transform(
       `export const A = () => <><div css={{ '@keyframes fade': { from: { opacity: 0 } } }} /><div css={{ animationName: 'fade' }} /></>;`,
       '/src/kf2.tsx',
@@ -2359,7 +2380,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('emits @font-face globals into the pack', () => {
-    const p = pluginOf({ diagnostics: 'silent' });
+    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
     const out = p.transform(
       `export const A = () => <div css={{ '@font-face': { fontFamily: 'MyFont', src: 'url(/a.woff2)' }, color: 'red' }} />;`,
       '/src/ff1.tsx',
@@ -2371,7 +2392,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('leaves dynamic animation with local keyframes untouched', () => {
-    const p = pluginOf({ diagnostics: 'silent' });
+    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
     expect(
       p.transform(
         `export const A = () => <div css={{ '@keyframes fade': { from: { opacity: 0 } }, animationName: props.name }} />;`,
@@ -2381,7 +2402,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('dedups identical keyframes across modules by content hash', () => {
-    const p = pluginOf({ diagnostics: 'silent' });
+    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
     const kf = `'@keyframes fade': { from: { opacity: 0 } }`;
     const outA = p.transform(
       `export const A = () => <div css={{ ${kf}, animation: 'fade 1s' }} />;`,
@@ -2406,7 +2427,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('warns and uses the first definition on conflicting keyframes names', () => {
-    const p = pluginOf({ diagnostics: 'warning' });
+    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'warning' });
     const out = p.transform(
       `export const A = () => <><div css={{ '@keyframes fade': { from: { opacity: 0 } }, animation: 'fade 1s' }} /><div css={{ '@keyframes fade': { from: { opacity: 1 } }, animation: 'fade 2s' }} /></>;`,
       '/src/kfconf.tsx',
@@ -2415,5 +2436,194 @@ describe('qstyle keyframes and globals (transform)', () => {
     // 各 occurrence は local-first で正しく解決される (別 hash)。
     const pack: string = packCssOf(p, out?.code ?? '');
     expect(pack.match(/@keyframes qkf_[0-9a-f]{8}/g)).toHaveLength(2);
+  });
+});
+
+describe('qstyle performance defaults (backend css-asset / promotion always / routes auto)', () => {
+  interface Transformable {
+    transform: (code: string, id: string) => { code: string; map: null } | null;
+    load: (id: string) => string | null;
+  }
+  const def = (): Transformable =>
+    qstyleFactory({ diagnostics: 'silent' })[0] as unknown as Transformable;
+
+  it('defaults to css-asset delivery (ensureModuleStyles, no pack import)', () => {
+    const out = def().transform(
+      `export const A = () => <div css={{ display: 'flex' }} />;`,
+      '/src/dflt-a.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(out?.code).toContain(`from '@qstyle/qwik/client'`);
+    expect(out?.code).not.toContain('virtual:qstyle/pack/');
+  });
+
+  it('defaults to always promotion (singleton dynamic becomes a class)', () => {
+    const out = def().transform(
+      `export const A = () => <div css={{ display: 'flex', width: props.w }} />;`,
+      '/src/dflt-b.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(out?.code).toContain('--qstyle-');
+    expect(out?.code).not.toContain(`'width': props.w`);
+  });
+
+  it('rejects unknown routes shapes', () => {
+    expect(() => qstyleFactory({ routes: 42 as never })).toThrow(/unknown routes/);
+  });
+
+  it('discovers Qwik City routes from <root>/src/routes', () => {
+    const root: string = mkdtempSync(join(tmpdir(), 'qstyle-routes-'));
+    try {
+      const files: readonly string[] = [
+        'src/routes/index.tsx',
+        'src/routes/about/index.tsx',
+        'src/routes/about/card.tsx',
+        'src/routes/blog/[slug]/index.tsx',
+        'src/routes/contact.tsx',
+      ];
+      for (const file of files) {
+        const abs: string = join(root, file);
+        mkdirSync(join(abs, '..'), { recursive: true });
+        writeFileSync(abs, 'export default 1;\n');
+      }
+      const found: Record<string, string[]> = discoverRoutes(root);
+      expect(Object.keys(found).sort()).toEqual(['/', '/about', '/blog/[slug]', '/contact']);
+      expect(found['/about']?.map((p) => p.replace(/\\/g, '/')).sort()).toEqual(
+        [`${root}/src/routes/about/card.tsx`, `${root}/src/routes/about/index.tsx`].sort(),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('returns {} when the routes dir is missing', () => {
+    expect(discoverRoutes('/no/such/dir')).toEqual({});
+    expect(discoverRoutes('')).toEqual({});
+  });
+
+  it('closeRouteModules follows the import chain transitively (cycle safe)', () => {
+    const entries: Record<string, readonly string[]> = {
+      '/': ['/app/src/routes/index.tsx'],
+      '/about': ['/app/src/routes/about/index.tsx'],
+    };
+    const graph = {
+      ids: [
+        '/app/src/routes/index.tsx',
+        '/app/src/components/card.tsx',
+        '/app/src/components/shared.tsx',
+        '/app/src/routes/about/index.tsx',
+        '\0virtual:skip',
+      ],
+      importedIdsOf: (id: string): readonly string[] => {
+        if (id === '/app/src/routes/index.tsx') return ['/app/src/components/card.tsx'];
+        if (id === '/app/src/components/card.tsx')
+          return ['/app/src/components/shared.tsx', '\0virtual:skip'];
+        // cycle: shared -> card。
+        if (id === '/app/src/components/shared.tsx') return ['/app/src/components/card.tsx'];
+        return [];
+      },
+    };
+    expect(closeRouteModules(entries, graph)).toEqual({
+      '/': ['/app/src/components/card.tsx', '/app/src/components/shared.tsx', '/app/src/routes/index.tsx'],
+      '/about': ['/app/src/routes/about/index.tsx'],
+    });
+  });
+
+  it('auto routes wire the manifest without manual config', () => {
+    const root: string = mkdtempSync(join(tmpdir(), 'qstyle-autoroutes-'));
+    try {
+      mkdirSync(join(root, 'src/routes/about'), { recursive: true });
+      writeFileSync(join(root, 'src/routes/index.tsx'), 'export default 1;\n');
+      writeFileSync(join(root, 'src/routes/about/index.tsx'), 'export default 1;\n');
+      const [main] = qstyleFactory({ diagnostics: 'silent' }) as unknown as [
+        {
+          configResolved: (config: { command: string; mode: string; root: string }) => void;
+          buildStart: () => void;
+          transform: (code: string, id: string) => { code: string } | null;
+          generateBundle: (this: {
+            emitFile: (f: { fileName: string; source: string }) => void;
+          }) => void;
+        },
+      ];
+      main.configResolved({ command: 'build', mode: 'production', root });
+      main.buildStart();
+      const absHome: string = join(root, 'src/routes/index.tsx').replace(/\\/g, '/');
+      const out = main.transform(
+        `export const A = () => <div css={{ display: 'flex' }} />;`,
+        absHome,
+      );
+      expect(out).not.toBeNull();
+      const emitted: { fileName: string; source: string }[] = [];
+      main.generateBundle.call({ emitFile: (f) => emitted.push(f) });
+      const manifest = JSON.parse(
+        emitted.find((e) => e.fileName === 'qstyle.routes.json')?.source ?? '{}',
+      ) as { entries: { route: string; assets: string[] }[] };
+      const home = manifest.entries.find((e) => e.route === '/');
+      expect(home?.assets.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('auto routes include transitively imported components in the manifest', () => {
+    const root: string = mkdtempSync(join(tmpdir(), 'qstyle-autochain-'));
+    try {
+      mkdirSync(join(root, 'src/routes'), { recursive: true });
+      mkdirSync(join(root, 'src/components'), { recursive: true });
+      const absEntry: string = join(root, 'src/routes/index.tsx').replace(/\\/g, '/');
+      const absCard: string = join(root, 'src/components/card.tsx').replace(/\\/g, '/');
+      writeFileSync(absEntry, 'export default 1;\n');
+      writeFileSync(absCard, 'export default 1;\n');
+      const [main] = qstyleFactory({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as [
+        {
+          configResolved: (config: { command: string; mode: string; root: string }) => void;
+          buildStart: () => void;
+          transform: (code: string, id: string) => { code: string } | null;
+          load: (id: string) => string | null;
+          generateBundle: (this: {
+            emitFile: (f: { fileName: string; source: string }) => void;
+            getModuleIds: () => Iterable<string>;
+            getModuleInfo: (id: string) => {
+              readonly importedIds: readonly string[];
+              readonly dynamicallyImportedIds: readonly string[];
+            } | null;
+          }) => void;
+        },
+      ];
+      main.configResolved({ command: 'build', mode: 'production', root });
+      main.buildStart();
+      const entryOut = main.transform(
+        `export const A = () => <div css={{ display: 'flex' }} />;`,
+        absEntry,
+      );
+      const cardOut = main.transform(
+        `export const Card = () => <div css={{ color: 'red' }} />;`,
+        absCard,
+      );
+      expect(entryOut).not.toBeNull();
+      expect(cardOut).not.toBeNull();
+      const registry: string = main.load('virtual:qstyle/registry') ?? '';
+      const cardUnit: RegExpMatchArray | null = /\.?(q_[0-9a-f]{8})\{color:red\}/.exec(registry);
+      expect(cardUnit?.[1]).not.toBeUndefined();
+      const emitted: { fileName: string; source: string }[] = [];
+      const moduleGraph = new Map<string, readonly string[]>([[absEntry, [absCard]]]);
+      main.generateBundle.call({
+        emitFile: (f) => emitted.push(f),
+        getModuleIds: () => [absEntry, absCard],
+        getModuleInfo: (id: string) => ({
+          importedIds: moduleGraph.get(id) ?? [],
+          dynamicallyImportedIds: [],
+        }),
+      });
+      const manifest = JSON.parse(
+        emitted.find((e) => e.fileName === 'qstyle.routes.json')?.source ?? '{}',
+      ) as { entries: { route: string; assets: string[] }[] };
+      const home = manifest.entries.find((e) => e.route === '/');
+      // entry 自身の unit と、連鎖先 card の unit がどちらも載る。
+      expect(home?.assets.length).toBeGreaterThan(1);
+      expect(home?.assets).toContain(cardUnit?.[1] as string);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

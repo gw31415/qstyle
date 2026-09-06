@@ -29,10 +29,11 @@ const qstyle = (options: Parameters<typeof qstyleFactory>[0]): Transformable =>
   qstyleFactory(options)[0] as unknown as Transformable;
 
 const plugin = (): Transformable =>
-  qstyle({ diagnostics: 'silent' }) as unknown as Transformable;
+  qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as Transformable;
 
 const parametricPlugin = (): Transformable =>
   qstyle({
+    backend: 'qwik-native',
     diagnostics: 'silent',
     runtimeStyles: { promotion: 'always' },
   }) as unknown as Transformable;
@@ -111,7 +112,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
   });
 
   it('SEL-004: `& > child` combinator selector is compiled with suffix', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const out = p.transform(
       `export const A = () => <div css={{ '& > svg': { width: 16 } }} />;`,
       '/src/sel004.tsx',
@@ -122,7 +123,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
   });
 
   it('SEL-005: `& + sibling` / `& ~ sibling` combinator selectors are compiled', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const outA = p.transform(
       `export const A = () => <div css={{ '& + sibling': { color: 'red' } }} />;`,
       '/src/sel005a.tsx',
@@ -139,7 +140,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
   });
 
   it('SEL-006: multi-word descendant selector (`& div span`) is compiled', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const out = p.transform(
       `export const A = () => <div css={{ '& div span': { display: 'block' } }} />;`,
       '/src/sel006.tsx',
@@ -150,7 +151,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
   });
 
   it('SEL-007: attribute selector (`& [data-x]`) is compiled', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const out = p.transform(
       `export const A = () => <div css={{ '& [data-x]': { color: 'red' } }} />;`,
       '/src/sel007.tsx',
@@ -203,7 +204,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
     );
     expect(packCssOf(p2, out2?.code ?? '')).toMatch(/\.q_[0-9a-f]{8}\{color:red;z-index:1\}/);
     // dev は source 順 (既存 test と同じ pipeline で対比を固定)。
-    const dev = qstyle({ diagnostics: 'silent' }) as unknown as Transformable & {
+    const dev = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as Transformable & {
       configResolved: (config: { command: string; mode: string }) => void;
     };
     dev.configResolved({ command: 'serve', mode: 'development' });
@@ -275,7 +276,7 @@ describe('qstyle B-2 composition / template / dynamics', () => {
     expect(p.transform(moduleA, '/src/cmp018-a.tsx')).toBeNull();
     expect(p.transform(moduleB, '/src/cmp018-b.tsx')).toBeNull();
     // diagnostic は actionable (error mode で cross-module 理由が出る)。
-    const err = qstyle({ diagnostics: 'error' }) as unknown as Transformable;
+    const err = qstyle({ backend: 'qwik-native', diagnostics: 'error' }) as unknown as Transformable;
     expect(() => err.transform(moduleA, '/src/cmp018-c.tsx')).toThrow(/across modules/);
     expect(() => err.transform(moduleB, '/src/cmp018-d.tsx')).toThrow(/across modules/);
   });
@@ -418,7 +419,7 @@ describe('qstyle B-2 composition / template / dynamics', () => {
 
 describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
   it('SEC-001: statically hostile declaration values are rejected as residual', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     // value 内の declaration/rule 境界を壊す文字列は classify で拒否される。
     expect(
       p.transform(
@@ -436,7 +437,7 @@ describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
   });
 
   it('SEC-002: values containing </style> are rejected', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     expect(
       p.transform(
         `export const A = () => <div css={{ content: '</style><script>x</script>' }} />;`,
@@ -472,7 +473,7 @@ describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
   });
 
   it('SEC-004: url(javascript:...) values are rejected', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     expect(
       p.transform(
         `export const A = () => <div css={{ backgroundImage: 'url(javascript:alert(1))' }} />;`,
@@ -519,7 +520,7 @@ describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
       ),
     ).toBeNull();
     // diagnostic は出る (error mode で観測)。
-    const err = qstyle({ diagnostics: 'error' }) as unknown as Transformable;
+    const err = qstyle({ backend: 'qwik-native', diagnostics: 'error' }) as unknown as Transformable;
     expect(() =>
       err.transform(
         withImport('export const A = () => <div css={css`&:hover { color: red;`} />;'),
@@ -530,6 +531,7 @@ describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
 
   it('FLB-003: runtime-only structures inline into the style attribute under promotion never', () => {
     const p = qstyle({
+      backend: 'qwik-native',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'never' },
     }) as unknown as Transformable;
@@ -850,7 +852,7 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
   });
 
   it('DED-009: @layer nest is compiled with a layer wrapper', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const out = p.transform(
       `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,
       '/src/ded009.tsx',
@@ -861,7 +863,7 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
   });
 
   it('CSS-012: @layer order is preserved in the wrapper, not miscompiled', () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
     // layer 指定は wrapper として素直に出力する (順序の解釈は CSS に委ねる)。
     const out = p.transform(
       `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,

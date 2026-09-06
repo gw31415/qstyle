@@ -3,11 +3,11 @@
 ```ts
 qstyle({
   optimization: 'safe',
-  backend: 'qwik-native',
+  backend: 'css-asset',
   runtimeStyles: {
     strategy: 'custom-property',
     fallback: 'inline',
-    promotion: 'cost-based',
+    promotion: 'always',
   },
   composition: { falsy: 'ignore' },
   chunking: {
@@ -17,7 +17,7 @@ qstyle({
     similarityThreshold: 0.3,
     requestOverheadBytes: 512,
   },
-  routes: { '/': ['/src/routes/index.tsx'] },
+  routes: 'auto',
   diagnostics: 'warning',
   debug: false,
 });
@@ -32,10 +32,11 @@ qstyle({
 - `'safe'` (既定): 最適化不能箇所は residual/untouched に落とし、`diagnostics` に従い警告する。
 - `'strict'`: 最適化不能箇所を compile error にする。
 
-## `backend`: `'qwik-native'` (既定) | `'css-asset'`
+## `backend`: `'qwik-native'` | `'css-asset'` (既定)
 
 - `'qwik-native'`: module 単位の pack CSS を Vite/Qwik の CSS 配管に乗せる。
-- `'css-asset'`: plugin 自身が chunk 単位の content-hash 付き CSS asset を直接 emit する。
+- `'css-asset'` (既定): plugin 自身が chunk 単位の content-hash 付き CSS asset を直接 emit する。
+  読み込み速度・キャッシュ優先のため既定。route 単位分割 + immutable asset になる。
   build のみに影響し、dev (serve) は `qwik-native` と同じ per-module CSS＋HMR のまま。
   詳細は [delivery.md](delivery.md)。
 
@@ -43,9 +44,10 @@ qstyle({
 
 - `strategy: 'custom-property'` (固定): 動的値は CSS カスタムプロパティに分離する。
 - `fallback: 'inline'` (固定): 非 promote 値は `style` に inline で残す。
-- `promotion: 'never'` | `'cost-based'` (既定) | `'always'`:
+- `promotion: 'never'` | `'cost-based'` | `'always'` (既定):
   `'never'` は動的値を常に inline のままにし、`'cost-based'` は module 内で共有される
-  構造のみ class 化し、`'always'` は常に class 化する。
+  構造のみ class 化し、`'always'` (既定) は常に class 化する。既定 `always` は動的値も
+  確定 class + content-hash asset に寄せ、HTML 肥大化を抑えキャッシュヒット率を上げる。
 
 ## `composition`
 
@@ -62,12 +64,17 @@ qstyle({
 
 ## `routes`
 
-route path → その route が描画する module path の list。route manifest
-(`qstyle.routes.json`) の逆引き元。未指定時は entries 空。
+route path → その route が描画する module path の list、または `'auto'` (既定)。
+未指定/`'auto'` 時は `<root>/src/routes` を走査して自動検出する
+(Qwik City 規約。`src/routes/about/index.tsx` と同 dir の co-located file → `/about`)。
+さらに build 時の module graph を辿り、各 entry から import 連鎖で到達する
+component (static/dynamic 不問) をその route に含める。手動指定時は連鎖展開せず
+指定のまま使う。root 不明・dir 不在時は entries 空。
 `[param]` 形式の pattern は manifest 照合で解決される。
 
 ```ts
-routes: { '/': ['/src/routes/index.tsx'] }
+routes: 'auto', // 既定
+routes: { '/': ['/src/routes/index.tsx'] }, // 手動上書き
 ```
 
 ## `diagnostics`: `'silent'` | `'warning'` (既定) | `'error'`

@@ -6,9 +6,9 @@ Qwik optimizer は client build で `build.cssCodeSplit = false` を強制する
 vite/qwik の CSS 配管に乗せた CSS はすべて単一 asset に統合され SSR HTML に
 インラインされる。
 
-- `backend: 'qwik-native'` (既定): module 単位の pack CSS を import graph 経由で
+- `backend: 'qwik-native'`: module 単位の pack CSS を import graph 経由で
   Vite/Qwik の配管に乗せる。lazy bundle の CSS は直前読み込みになる。
-- `backend: 'css-asset'`: この配管に一切乗せず、plugin 自身が chunk planner の結果
+- `backend: 'css-asset'` (既定): この配管に一切乗せず、plugin 自身が chunk planner の結果
   (usage clustering＋min/max sizing) に従って content-hash 付き CSS asset を直接 emit する。
   chunk 内の宣言 dedup (§39 v1) は hash 計算前に適用済み。
   build のみに影響し、dev (serve) は `qwik-native` と同じ per-module CSS＋HMR のまま。
@@ -56,7 +56,8 @@ export default component$(() => (
 route 単位の低レベル API として `virtual:qstyle/route-loader` の
 `loadRouteStyles(route)` も残っている (`qstyle.routes.json` の asset 名解決を利用)。
 
-`options.routes` は手動指定 (route path → module paths。`[param]` pattern は
+`options.routes` は既定 `'auto'` で `<root>/src/routes` から自動検出される
+(手動の route path → module paths 指定で上書き可。`[param]` pattern は
 manifest 照合で解決)。
 
 ## Virtual modules

@@ -46,8 +46,12 @@ interface HmrPlugin extends Transformable {
   }) => Promise<void> | void;
 }
 
-const plugin = (options: Parameters<typeof qstyleFactory>[0] = { diagnostics: 'silent' }): HmrPlugin =>
-  qstyleFactory(options)[0] as unknown as HmrPlugin;
+const plugin = (
+  options: Parameters<typeof qstyleFactory>[0] = {
+    backend: 'qwik-native',
+    diagnostics: 'silent',
+  },
+): HmrPlugin => qstyleFactory(options)[0] as unknown as HmrPlugin;
 
 const devPlugin = (options: Parameters<typeof qstyleFactory>[0] = { diagnostics: 'silent' }): HmrPlugin => {
   const p = plugin(options);

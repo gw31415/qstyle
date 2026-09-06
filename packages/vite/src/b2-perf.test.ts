@@ -39,10 +39,12 @@ interface DevPlugin extends Transformable {
 const qstyle = (options: Parameters<typeof qstyleFactory>[0]): Transformable =>
   qstyleFactory(options)[0] as unknown as Transformable;
 
-const plugin = (): Transformable => qstyle({ diagnostics: 'silent' }) as Transformable;
+const plugin = (): Transformable =>
+  qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as Transformable;
 
 const parametricPlugin = (): Transformable =>
   qstyle({
+    backend: 'qwik-native',
     diagnostics: 'silent',
     runtimeStyles: { promotion: 'always' },
   }) as unknown as Transformable;
@@ -131,7 +133,7 @@ describe('qstyle PERF 系 (vite transform level)', () => {
   );
 
   it('PERF-007: a local module edit does not invalidate other modules devCss', async () => {
-    const p = qstyle({ diagnostics: 'silent' }) as unknown as DevPlugin;
+    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as DevPlugin;
     p.configResolved({ command: 'serve', mode: 'development' });
     const devCssOf = (code: string): string => {
       const key: string = (code.match(/virtual:qstyle\/dev\/([\w.]+)/) ?? [])[1] ?? '';
@@ -307,6 +309,7 @@ describe('qstyle PERF 系 (vite transform level)', () => {
     measure(parametricPlugin(), 'always');
     measure(
       qstyle({
+        backend: 'qwik-native',
         diagnostics: 'silent',
         runtimeStyles: { promotion: 'never' },
       }) as unknown as Transformable,

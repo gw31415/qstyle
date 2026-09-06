@@ -1,5 +1,7 @@
 import type { HmrContext, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { readdirSync, statSync } from 'node:fs';
+import { relative as relativePath } from 'node:path';
 import { createRequire } from 'node:module';
 import {
   DEFAULT_CHUNK_OPTIONS,
@@ -119,8 +121,10 @@ export interface QstyleOptions {
     /** clustering v2 (R3): 1 request の等価 overhead bytes (default 512)。 */
     readonly requestOverheadBytes?: number | undefined;
   } | undefined;
-  /** route -> その route が描画する module path の list (§45 route manifest の逆引き元)。 */
-  readonly routes?: Record<string, readonly string[]> | undefined;
+  /** route -> その route が描画する module path の list (§45 route manifest の逆引き元)。
+   * `'auto'` または未指定時は `<root>/src/routes` を走査して自動検出する
+   * (Qwik City 規約。手動指定時はそれを使う)。 */
+  readonly routes?: Record<string, readonly string[]> | 'auto' | undefined;
   readonly diagnostics?: 'silent' | 'warning' | 'error' | undefined;
   readonly debug?: boolean | undefined;
 }
@@ -215,11 +219,137 @@ export function classifyChunkUnits(
   };
 }
 
+/**
+ * build 時 module graph (Rollup/Vite が解決済みの import 辺)。
+ * `generateBundle` の plugin context から作る。unit test 等 context が無い場合は
+ * 渡さない (entry のみ配線に fallback)。
+ */
+export interface RouteModuleGraph {
+  readonly ids: readonly string[];
+  readonly importedIdsOf: (id: string) => readonly string[];
+}
+
+/**
+ * route entry から import を連鎖的に辿り、各 route が到達する module 群へ展開する。
+ * static + dynamic import を区別しない (style 到達性はどちらも同じ)。
+ * virtual (`\0`)・query 付きは辿らない。cycle safe。決定性のため出力は sort。
+ * graph に無い entry (graph 外・test 等) は entry 自身のみ残す (落とさない)。
+ */
+export function closeRouteModules(
+  entries: Record<string, readonly string[]>,
+  graph: RouteModuleGraph,
+): Record<string, string[]> {
+  const norm = (p: string): string => (p.replace(/\\/g, '/').split('?')[0] ?? '');
+  const sortedIds: readonly string[] = [...graph.ids].sort();
+  const byNorm = new Map<string, string>();
+  for (const id of sortedIds) {
+    const n: string = norm(id);
+    if (n.includes('\0')) continue;
+    if (!byNorm.has(n)) byNorm.set(n, id);
+  }
+  const resolveEntry = (entry: string): string | undefined => {
+    const n: string = norm(entry);
+    const exact: string | undefined = byNorm.get(n);
+    if (exact !== undefined) return exact;
+    for (const id of sortedIds) {
+      const candidate: string | undefined = byNorm.get(norm(id));
+      if (candidate !== undefined && norm(id).endsWith(`/${n}`)) return candidate;
+    }
+    return undefined;
+  };
+  const out: Record<string, string[]> = {};
+  for (const route of Object.keys(entries).sort()) {
+    const seen = new Set<string>();
+    const queue: string[] = [];
+    for (const entry of entries[route] ?? []) {
+      const resolved: string | undefined = resolveEntry(entry);
+      queue.push(resolved ?? entry);
+    }
+    while (queue.length > 0) {
+      const current: string = queue.pop() as string;
+      if (seen.has(current)) continue;
+      seen.add(current);
+      for (const next of graph.importedIdsOf(current)) {
+        const n: string = norm(next);
+        if (n.includes('\0') || seen.has(next)) continue;
+        queue.push(next);
+      }
+    }
+    out[route] = [...seen].sort();
+  }
+  return out;
+}
+
 /** css-asset backend の build 計画。unit → fileName の逆引き index を持つ (§3.4 R1.3)。 */
 export interface CssAssetPlan {
   readonly chunks: readonly CssAssetChunk[];
   /** 各 unit は恰好 1 chunk に属する。 */
   readonly unitToFile: ReadonlyMap<string, string>;
+}
+
+/**
+ * `<root>/src/routes` を走査し route -> module paths を自動検出する (Qwik City 規約)。
+ * - `src/routes/index.tsx` → `/`、同一 dir の co-located file は同 route に束ねる
+ *   (`src/routes/about/card.tsx` → `/about`)
+ * - top-level の `foo.tsx` → `/foo`。dotfiles / `*.d.ts` / `*.test.*` 等は除外。
+ * - dir 不在・走査失敗時は `{}` (routes 未配線と同等。黙って落とさず空にする)。
+ * - 決定性のため module list は sort する。entry から import 連鎖で辿れる module は
+ *   `closeRouteModules` (generateBundle 時) が各 route に展開するため、ここでは
+ *   entry 列挙のみ行う。
+ */
+export function discoverRoutes(rootDir: string): Record<string, string[]> {
+  const out = new Map<string, string[]>();
+  const norm: string = rootDir.replace(/\\/g, '/').replace(/\/$/, '');
+  if (norm === '') return {};
+  const routesDir: string = `${norm}/src/routes`;
+  const files: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir).sort();
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith('.')) continue;
+      const abs: string = `${dir}/${entry}`;
+      let isDir = false;
+      try {
+        isDir = statSync(abs).isDirectory();
+      } catch {
+        continue;
+      }
+      if (isDir) {
+        if (entry === 'node_modules') continue;
+        walk(abs);
+      } else if (/\.(tsx|jsx|ts|js)$/.test(entry) && !/\.d\.ts$/.test(entry)) {
+        if (/(^|\.)(test|spec)\./.test(entry)) continue;
+        files.push(abs);
+      }
+    }
+  };
+  walk(routesDir);
+  for (const abs of files) {
+    // ponytail: posix join — rootDir は正規化済みのため文字列結合で十分。
+    const rel: string = relativePath(routesDir, abs).replace(/\\/g, '/');
+    const dir: string = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+    const base: string = rel.includes('/') ? rel.slice(rel.lastIndexOf('/') + 1) : rel;
+    const stem: string = base.replace(/\.(tsx|jsx|ts|js)$/, '');
+    let route: string;
+    if (dir === '') {
+      route = stem === 'index' || /^(layout|error|loading|plugin|menu)[^/]*$/.test(stem) ? '/' : `/${stem}`;
+    } else {
+      route = `/${dir}`;
+    }
+    const list: string[] = out.get(route) ?? [];
+    list.push(abs);
+    out.set(route, list);
+  }
+  const result: Record<string, string[]> = {};
+  for (const route of [...out.keys()].sort()) {
+    result[route] = (out.get(route) ?? []).sort();
+  }
+  return result;
 }
 
 /**
@@ -2227,7 +2357,7 @@ function validateQstyleOptions(options: QstyleOptions): void {
       `[qstyle] unknown optimization ${JSON.stringify(optimization)}; expected 'preserve', 'safe' or 'strict'.`,
     );
   }
-  const backend: string = options.backend ?? 'qwik-native';
+  const backend: string = options.backend ?? 'css-asset';
   if (backend !== 'qwik-native' && backend !== 'css-asset') {
     throw new Error(
       `[qstyle] unknown backend ${JSON.stringify(backend)}; expected 'qwik-native' or 'css-asset'.`,
@@ -2251,7 +2381,7 @@ function validateQstyleOptions(options: QstyleOptions): void {
       `[qstyle] unknown runtimeStyles.fallback ${JSON.stringify(fallback)}; expected 'inline'.`,
     );
   }
-  const promotion: string = options.runtimeStyles?.promotion ?? 'cost-based';
+  const promotion: string = options.runtimeStyles?.promotion ?? 'always';
   if (promotion !== 'never' && promotion !== 'cost-based' && promotion !== 'always') {
     throw new Error(
       `[qstyle] unknown runtimeStyles.promotion ${JSON.stringify(promotion)}; expected 'never', 'cost-based' or 'always'.`,
@@ -2267,6 +2397,16 @@ function validateQstyleOptions(options: QstyleOptions): void {
   if (chunkStrategy !== 'usage-cluster') {
     throw new Error(
       `[qstyle] unknown chunking.strategy ${JSON.stringify(chunkStrategy)}; expected 'usage-cluster'.`,
+    );
+  }
+  const routesOption: unknown = options.routes;
+  if (
+    routesOption !== undefined &&
+    routesOption !== 'auto' &&
+    (typeof routesOption !== 'object' || routesOption === null || Array.isArray(routesOption))
+  ) {
+    throw new Error(
+      `[qstyle] unknown routes ${JSON.stringify(routesOption)}; expected a route map or 'auto'.`,
     );
   }
   const similarityThreshold: number | undefined = options.chunking?.similarityThreshold;
@@ -2335,7 +2475,8 @@ export function qstyle(
 ] {
   validateQstyleOptions(options);
   const optimization: OptimizationLevel = options.optimization ?? 'safe';
-  const backend: BackendKind = options.backend ?? 'qwik-native';
+  // 既定は読み込み速度・キャッシュ優先: content-hash 付き immutable asset + route 分割。
+  const backend: BackendKind = options.backend ?? 'css-asset';
   const diagnosticsMode: 'silent' | 'warning' | 'error' = options.diagnostics ?? 'warning';
   checkPeerVersionsOrThrow(diagnosticsMode);
   const strict: boolean = optimization === 'strict';
@@ -2343,8 +2484,10 @@ export function qstyle(
   const preserve: boolean = optimization === 'preserve';
   // §32 promotion: never=常に inline、always=常に class 化、
   // cost-based=module 内共有構造のみ class 化し単発は inline のままにする。
+  // 既定 always: 動的値も確定 class + content-hash asset に寄せ、HTML を小さく保ち
+  // キャッシュヒット率を上げる (読み込み速度優先)。
   const promotion: 'never' | 'cost-based' | 'always' =
-    options.runtimeStyles?.promotion ?? 'cost-based';
+    options.runtimeStyles?.promotion ?? 'always';
   const debug = options.debug ?? false;
 
   const collected = new Map<string, CollectedStyle>();
@@ -2471,6 +2614,13 @@ export function qstyle(
     return cssAssetPlanCache;
   };
 
+  /** 実効 routes: 手動指定があればそれを、未指定/'auto' なら src/routes 走査を使う。
+   * rootDir 確定後 (configResolved 以降) に呼ぶこと。unit test 等 root 不明時は空。 */
+  function effectiveRoutes(): Record<string, readonly string[]> {
+    if (typeof options.routes === 'object' && options.routes !== null) return options.routes;
+    return discoverRoutes(rootDir);
+  }
+
   /**
    * §3.4 R1.3: route -> modules -> units -> (css-asset) chunk fileName を解決した
    * Route Style Manifest。main plugin の emit (qstyle.routes.json) と css-asset
@@ -2478,15 +2628,18 @@ export function qstyle(
    * 参照するため、build pass 内で cache する (buildStart で reset)。
    */
   let routeManifestCache: StyleManifest | null = null;
+  /** auto 時の import 連鎖展開済み routes (generateBundle で確定。buildStart で reset)。 */
+  let expandedRoutesCache: Record<string, readonly string[]> | null = null;
   const buildRouteStyleManifest = (): StyleManifest => {
     if (routeManifestCache !== null) return routeManifestCache;
     // route -> modules の逆引きを unit list へ解決する。
     // css-asset 時はさらに unit → 所属 chunk の fileName へ解決する (§3.4 R1.3)。
     const assetPlan: CssAssetPlan | null = backend === 'css-asset' ? buildCssAssetPlan() : null;
     const routeToAssets = new Map<string, readonly string[]>();
-    for (const route of Object.keys(options.routes ?? {})) {
+    const routes: Record<string, readonly string[]> = expandedRoutesCache ?? effectiveRoutes();
+    for (const route of Object.keys(routes)) {
       const assets = new Set<string>();
-      for (const modulePath of options.routes?.[route] ?? []) {
+      for (const modulePath of routes[route] ?? []) {
         for (const [mod, atoms] of moduleToAtoms) {
           if (modulePathMatches(mod, modulePath)) {
             for (const atom of atoms) assets.add(atom);
@@ -2508,12 +2661,14 @@ export function qstyle(
     return routeManifestCache;
   };
 
-  /** options.routes (route -> module paths) を component -> route の逆引きへ張る (冪等)。
+  /** 実効 routes (手動 or 自動検出) を component -> route の逆引きへ張る (冪等)。
    * moduleToAtoms の実 id と suffix 照合するため、buildStart 時点 (transform 前) は
-   * option path を暫定 key として張り、transform 時に実 id でも張り直す。 */
+   * option path を暫定 key として張り、transform 時に実 id でも張り直す。
+   * auto 時の import 連鎖展開は generateBundle 時 (module graph 確定後) に行う。 */
   function wireRoutes(target: UsageGraph): void {
-    for (const route of Object.keys(options.routes ?? {})) {
-      const modules: readonly string[] = options.routes?.[route] ?? [];
+    const routes: Record<string, readonly string[]> = effectiveRoutes();
+    for (const route of Object.keys(routes)) {
+      const modules: readonly string[] = routes[route] ?? [];
       for (const modulePath of modules) {
         let matched = false;
         for (const mod of moduleToAtoms.keys()) {
@@ -2673,7 +2828,7 @@ export function qstyle(
       isDev = config.command === 'serve';
       // moduleKey の root 相対化用 (同名 basename の区別。未設定なら basename 動作)。
       rootDir = (config.root ?? '').replace(/\\/g, '/').replace(/\/$/, '');
-      // §45: route -> module の逆引きを usage graph へ張る (routes option がなければ何もしない)。
+      // §45: route -> module の逆引きを usage graph へ張る (未指定/'auto' は src/routes 自動検出)。
       wireRoutes(graph);
       log(`optimization=${optimization} backend=${backend} mode=${config.mode} dev=${isDev}`);
     },
@@ -2751,6 +2906,7 @@ export function qstyle(
       condUnitIds.clear();
       cssAssetPlanCache = null;
       routeManifestCache = null;
+      expandedRoutesCache = null;
       graph = createUsageGraph();
       wireRoutes(graph);
     },
@@ -4457,6 +4613,37 @@ export function qstyle(
     },
 
     generateBundle(): void {
+      // auto routes: entry から import 連鎖で到達する module へ展開し graph へ張る
+      // (chunk 分類と manifest が同一の到達集合を見る。static/dynamic 不問)。
+      // module graph が無い context (unit test) では entry のみ配線に fallback。
+      if (typeof options.routes !== 'object' || options.routes === null) {
+        const bundleCtx = this as unknown as {
+          getModuleIds?: () => Iterable<string>;
+          getModuleInfo?: (id: string) => {
+            readonly importedIds: readonly string[];
+            readonly dynamicallyImportedIds: readonly string[];
+          } | null;
+        };
+        if (
+          typeof bundleCtx.getModuleIds === 'function' &&
+          typeof bundleCtx.getModuleInfo === 'function'
+        ) {
+          const getInfo = bundleCtx.getModuleInfo.bind(bundleCtx);
+          const expanded: Record<string, string[]> = closeRouteModules(effectiveRoutes(), {
+            ids: [...bundleCtx.getModuleIds()],
+            importedIdsOf: (id: string): readonly string[] => {
+              const info = getInfo(id);
+              return [...(info?.importedIds ?? []), ...(info?.dynamicallyImportedIds ?? [])];
+            },
+          });
+          expandedRoutesCache = expanded;
+          for (const route of Object.keys(expanded)) {
+            for (const mod of expanded[route] ?? []) {
+              recordComponentRoute(graph, moduleKey(mod), route);
+            }
+          }
+        }
+      }
       const manifest: Record<string, string[]> = {};
       for (const [mod, atoms] of moduleToAtoms) {
         manifest[mod] = atoms;
