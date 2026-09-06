@@ -132,6 +132,20 @@ describe('qstyle vite plugin (M0)', () => {
     expect(out?.code).not.toContain('css={{');
   });
 
+  it('merges into a className expression via array wrap (keyword preserved)', () => {
+    const p = qstyle({ debug: false }) as unknown as {
+      transform: (code: string, id: string) => { code: string; map: null } | null;
+    };
+    const out = p.transform(
+      `export const A = () => <div className={cls} css={{ display: 'flex' }} />;`,
+      '/src/clsname-expr.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect((out?.code.match(/className=/g) ?? []).length).toBe(1);
+    expect(out?.code).toMatch(/className=\{\[cls, "q_[0-9a-f]{8}"\]\}/);
+    expect(out?.code).not.toContain('css={{');
+  });
+
   it('merges into an existing class={...} expression via array wrap', () => {
     const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
