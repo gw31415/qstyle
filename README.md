@@ -43,8 +43,16 @@ declare module '@qwik.dev/core/internal' {
   interface HTMLElementAttrs {
     css?: CssProp;
   }
+  // SVG 要素 (`<svg>` / `<path>` 等) は HTMLElementAttrs を経由しないため別途必要
+  // (JSX の LenientSVGProps / 関数用の SVGProps の共通親)。
+  interface SVGAttributes<T extends Element = Element> {
+    css?: CssProp;
+  }
 }
 ```
+
+Qwik が本体で `css` prop を持たないための暫定対応 (workaround)。
+transform はタグ非依存のため、型さえ通れば HTML / SVG いずれの要素でも使える。
 
 ## クイックスタート
 

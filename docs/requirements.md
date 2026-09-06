@@ -40,5 +40,9 @@ declare module '@qwik.dev/core/internal' {
   interface HTMLElementAttrs {
     css?: CssProp;
   }
+  // SVG 要素 (`<svg>` / `<path>` 等) は HTMLElementAttrs を経由しないため別途必要。
+  interface SVGAttributes<T extends Element = Element> {
+    css?: CssProp;
+  }
 }
 ```

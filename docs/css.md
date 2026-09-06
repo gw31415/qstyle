@@ -50,6 +50,10 @@ export type CssProp =
 - 未知 property は型 error だが、実行時は落とさず atom 化する
   (browser の前方互換 error recovery に委ねる。typo 指摘は型に任せる)。
 - tagged template literal は対象外 (別途 LSP を用意する必要があるため)。
+- `css` prop 自体は Qwik 本体に存在しないため、使う側で型の augmentation
+  (`src/qstyle.d.ts` を 1 ファイル) が必要。HTML (`HTMLElementAttrs`) と
+  SVG (`SVGAttributes`) の両方を拡張すること。詳細は
+  [README](../README.md#css-prop-の型-consumer-側設定) を参照。
 
 ## 値の規則
 

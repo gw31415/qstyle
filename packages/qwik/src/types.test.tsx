@@ -14,7 +14,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JSXOutput } from '@qwik.dev/core';
-import type { HTMLElementAttrs } from '@qwik.dev/core/internal';
+import type { HTMLElementAttrs, SVGAttributes } from '@qwik.dev/core/internal';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { isStyleHandle } from './compose.js';
 import { css } from './index.js';
@@ -24,6 +24,11 @@ import type { QstyleLinksProps } from './links.js';
 
 declare module '@qwik.dev/core/internal' {
   interface HTMLElementAttrs {
+    css?: CssProp;
+  }
+  // SVG 要素は HTMLElementAttrs を経由しない (SVGAttributes 系。
+  // JSX の LenientSVGProps / 関数用の SVGProps の共通親) ため別途必要。
+  interface SVGAttributes<T extends Element = Element> {
     css?: CssProp;
   }
 }
@@ -102,6 +107,16 @@ describe('TYP: authoring API 型の固定', () => {
     expectTypeOf(renderWithArray).toBeFunction();
     expectTypeOf(renderWithFalsy).toBeFunction();
     expectTypeOf(renderWithObject).toBeFunction();
+  });
+
+  it('TYP-015: css prop は SVG 要素でも受け取れる', () => {
+    expectTypeOf<SVGAttributes<SVGSVGElement>['css']>().toEqualTypeOf<CssProp | undefined>();
+    const renderSvg = (): JSXOutput => (
+      <svg css={css({ display: 'block' })}>
+        <path css={[{ fill: 'red' }]} />
+      </svg>
+    );
+    expectTypeOf(renderSvg).toBeFunction();
   });
 
   it('TYP-014: kebab-case / keyframes・globals / 条件値を許容し、未対応 at-rule は型 error', () => {
