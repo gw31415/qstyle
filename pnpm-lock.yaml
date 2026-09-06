@@ -200,6 +200,9 @@ importers:
       '@qstyle/core':
         specifier: workspace:^
         version: link:../core
+      csstype:
+        specifier: ^3.2.3
+        version: 3.2.3
     devDependencies:
       '@qwik.dev/core':
         specifier: ^2.0.0-beta.43

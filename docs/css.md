@@ -5,13 +5,31 @@ qstyle は `css` prop / `css()` / tagged template の 3 記法を受け付ける
 GlobalAtRule) へ lowering され、安全に atomicize できないものは書き換えず
 そのまま残す (untouched + diagnostic)。**黙って意味を変えることはない**のが原則。
 
-型:
+型 (`@qstyle/qwik`)。宣言部分は Qwik の `style` (`CSSProperties`) と同じ出自
+(csstype) を流用し、qstyle 固有のネスト・at-rule を足した closed typing。
+未知 property・未対応 at-rule は型 error になり、LSP 補完が効く:
 
 ```ts
-export type CssPrimitive = string | number;
+export type CssDeclarationValue = string | number | boolean | null | undefined;
 
-export type StyleObject = {
-  readonly [K in string]?: CssPrimitive | boolean | null | undefined | StyleObject;
+export type StyleDeclarations = /* csstype */ Properties & PropertiesHyphen & {
+  readonly [V in `--${string}`]?: CssDeclarationValue;
+};
+
+export interface KeyframesBody {
+  readonly [frame: string]: StyleDeclarations; // from / to / 0% ...
+}
+export type FontFaceBody = /* csstype */ AtRule.FontFace & AtRule.FontFaceHyphen;
+export type PropertyBody = /* csstype */ AtRule.Property & AtRule.PropertyHyphen;
+
+export type NestedStyleValue = StyleObject | boolean | null | undefined;
+
+export type StyleObject = StyleDeclarations & {
+  readonly [K in `&${string}`]?: NestedStyleValue; // &:hover / & .tile / &--mod 等
+  readonly [K in `@media${string}` | `@supports${string}` | `@container${string}` | `@layer${string}`]?: NestedStyleValue;
+  readonly [K in `@keyframes${string}`]?: KeyframesBody;
+  readonly '@font-face'?: FontFaceBody;
+  readonly [K in `@property${string}`]?: PropertyBody;
 };
 
 export type CssProp =
@@ -22,6 +40,16 @@ export type CssProp =
   | undefined
   | readonly CssProp[];
 ```
+
+注意:
+
+- Qwik の `ClassList` とも `style` (`CSSProperties`) とも別型
+  (ネスト・条件・keyframes を扱うため)。`style` 属性の宣言集合だけ流用している。
+- 値の falsy (`null` / `undefined` / 真偽値) は実行時に無視する
+  (`cond && 'red'`・`c ? {...} : undefined` 形の条件値を型でも許す)。
+- 未知 property は型 error だが、実行時は落とさず atom 化する
+  (browser の前方互換 error recovery に委ねる。typo 指摘は型に任せる)。
+- tagged template literal は対象外 (別途 LSP を用意する必要があるため)。
 
 ## 値の規則
 

@@ -43,7 +43,8 @@
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@qstyle/core": "workspace:^"
+    "@qstyle/core": "workspace:^",
+    "csstype": "^3.2.3"
   },
   "devDependencies": {
     "@qwik.dev/core": "^2.0.0-beta.43",

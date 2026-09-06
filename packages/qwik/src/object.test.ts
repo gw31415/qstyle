@@ -103,6 +103,7 @@ describe('lowerStyleObject value serialization', () => {
       WebkitTransform: 'translateX(1px)',
       MozAppearance: 'none',
       OTransition: 'none',
+      // @ts-expect-error csstype が落とした legacy prop は型で拒否するが、実行時は正規化する
       msFlexAlign: 'center',
     });
     const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));
@@ -157,6 +158,7 @@ describe('lowerStyleObject value serialization', () => {
     const out = lowerStyleObject({
       content: '"quoted"',
       quotes: `'"inner"'`,
+      // @ts-expect-error 未知 property は型で拒否するが、実行時は素通しする (OBJ-016)
       escaped: '\\"',
     });
     expect(out.residuals).toHaveLength(0);
@@ -182,6 +184,7 @@ describe('lowerStyleObject value serialization', () => {
     // 未知だが well-formed な property は atom として出し、解釈は CSS 自身の
     // 前方互換 error recovery (browser が未知 property を無視する) に委ねる。
     // 既知 property table による明示 diagnostic は R4 (plan.md §6.2) で扱う。
+    // @ts-expect-error typo は型で拒否するが、実行時は atom 化する (OBJ-022)
     const out = lowerStyleObject({ displayy: 'flex' });
     expect(out.atoms).toHaveLength(1);
     expect(out.atoms[0]?.property).toBe('displayy');
@@ -278,6 +281,7 @@ describe('lowerStyleObject selectors and at-rules', () => {
     expect(parseNestedKey('&:is(.a, .b)')).toEqual({ suffix: ':is(.a, .b)' });
     expect(parseNestedKey('&:has(> img)')).toEqual({ suffix: ':has(> img)' });
     for (const key of ['&:is(.a, .b)', '&:has(> img)']) {
+      // @ts-expect-error 任意キーの実行時分類を通す (型は closed)
       const out = lowerStyleObject({ [key]: { color: 'red' } });
       expect(out.atoms).toHaveLength(1);
       expect(out.residuals).toHaveLength(0);
@@ -291,6 +295,7 @@ describe('lowerStyleObject selectors and at-rules', () => {
 
   it('residualizes re-occurrence of & (SEL-010 — 現状固定)', () => {
     for (const key of ['&:hover &', '& &']) {
+      // @ts-expect-error 任意キーの実行時分類を通す (型は closed)
       const out = lowerStyleObject({ [key]: { color: 'red' } });
       expect(out.atoms).toHaveLength(0);
       expect(out.residuals[0]?.reason).toBe('unsupported-selector');
@@ -392,6 +397,7 @@ describe('lowerStyleObject SCSS-like nesting (suffix)', () => {
 
   it('still residualizes & re-occurrence and breaking characters', () => {
     for (const key of ['&:hover &', '& &', '& <div', '&;x', '&{x']) {
+      // @ts-expect-error 任意キーの実行時分類を通す (型は closed)
       const out = lowerStyleObject({ [key]: { color: 'red' } });
       expect(out.atoms).toHaveLength(0);
       expect(out.residuals).toHaveLength(1);

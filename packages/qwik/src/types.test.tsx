@@ -37,16 +37,13 @@ describe('TYP: authoring API 型の固定', () => {
     expectTypeOf(css(mixed)).toEqualTypeOf<StyleHandle>();
   });
 
-  it('TYP-002 (現状固定): typo property は型 error にならない (free-form)', () => {
-    // 現状の StyleObject は任意 string key を許容する index signature のため、
-    // `displayy` のような typo は compile を通ってしまう。CSX 的な既知 property
-    // 集合による制約導入は src 側の型変更を要するため、ここでは「現状の挙動」を
-    // 固定するのみ (制約導入は課題として記録。report 参照)。
-    // 制約を導入した際はこの test を `// @ts-expect-error` 付きの error 期待へ反転
-    // させること。
+  it('TYP-002: typo property は型 error になる (closed typing)', () => {
+    // StyleObject は csstype 出自の closed typing のため、`displayy` のような
+    // typo は compile error になる (LSP 補完も効く)。
+    // @ts-expect-error 未知の property は StyleObject に割り当てられない
     const withTypo: StyleObject = { displayy: 'flex' };
     expectTypeOf(withTypo).toMatchTypeOf<StyleObject>();
-    // runtime 側も落とされず atom 化される (property 名として構文は正当なため)。
+    // runtime 側は落とさず atom 化する (browser の前方互換 error recovery に委ねる)。
     expect(isStyleHandle(css(withTypo))).toBe(true);
   });
 
@@ -105,6 +102,32 @@ describe('TYP: authoring API 型の固定', () => {
     expectTypeOf(renderWithArray).toBeFunction();
     expectTypeOf(renderWithFalsy).toBeFunction();
     expectTypeOf(renderWithObject).toBeFunction();
+  });
+
+  it('TYP-014: kebab-case / keyframes・globals / 条件値を許容し、未対応 at-rule は型 error', () => {
+    // kebab-case (PropertiesHyphen) も補完・許容する。
+    const hyphen: StyleObject = { 'background-color': 'red', 'font-weight': 700 };
+    expectTypeOf(css(hyphen)).toEqualTypeOf<StyleHandle>();
+    // top-level の keyframes / font-face / property body。
+    const bodies: StyleObject = {
+      '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } },
+      animation: 'fade 1s ease',
+      '@font-face': { fontFamily: 'MyFont', src: 'url(/a.woff2)' },
+      '@property --brand': { syntax: '"<color>"', inherits: 'false', initialValue: 'red' },
+    };
+    expectTypeOf(css(bodies)).toEqualTypeOf<StyleHandle>();
+    // 条件値 (falsy 消化): `cond && 'red'` / `c ? {...} : undefined`。
+    const condAmounts = (active: boolean): StyleObject => ({
+      color: active && 'red',
+      '&:hover': active ? { color: 'blue' } : undefined,
+    });
+    expectTypeOf(css(condAmounts(true))).toEqualTypeOf<StyleHandle>();
+    // 未対応 at-rule は型 error (runtime では residual + 警告になる)。
+    const unknownAtRule: StyleObject = {
+      // @ts-expect-error 未対応 at-rule は StyleObject に割り当てられない
+      '@unknown x': { color: 'red' },
+    };
+    expectTypeOf(unknownAtRule).toMatchTypeOf<StyleObject>();
   });
 
   it('TYP-010: css prop に number 等の invalid primitive は型 error', () => {
