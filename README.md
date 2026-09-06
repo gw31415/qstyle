@@ -20,10 +20,16 @@ pnpm add @qstyle/vite @qstyle/qwik
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite';
+import { qwikRouter } from '@qwik.dev/router/vite';
+import { qwikVite } from '@qwik.dev/core/optimizer';
 import { qstyle } from '@qstyle/vite';
 
 export default defineConfig({
-  plugins: [qstyle()],
+  plugins: [
+      qwikRouter(),
+      qstyle(),      // qstyle は qwikVite より前に置く
+      qwikVite(),
+  ],
 });
 ```
 
