@@ -143,6 +143,33 @@ describe('resolveRouteLinks (R1.4 純関数)', () => {
     const links = await freshLinks();
     expect(links.resolveRouteLinks({ version: 1, entries: [] }, '/a')).toEqual([]);
   });
+
+  it('matches [param] patterns for dynamic routes (RTE-004)', async (): Promise<void> => {
+    const links = await freshLinks();
+    const manifest: linksModule.QstyleRouteManifest = {
+      version: 1,
+      entries: [{ route: '/item/[id]', assets: ['assets/qstyle.item.css'] }],
+    };
+    expect(links.resolveRouteLinks(manifest, '/item/42')).toEqual([
+      'assets/qstyle.item.css',
+    ]);
+    expect(links.resolveRouteLinks(manifest, '/item/42/')).toEqual([
+      'assets/qstyle.item.css',
+    ]);
+    // segment 数が違う・空 segment は不一致。exact があれば exact が勝つ。
+    expect(links.resolveRouteLinks(manifest, '/item')).toEqual([]);
+    expect(links.resolveRouteLinks(manifest, '/item/42/extra')).toEqual([]);
+    expect(links.resolveRouteLinks(manifest, '/other/42')).toEqual([]);
+    const mixed: linksModule.QstyleRouteManifest = {
+      version: 1,
+      entries: [
+        { route: '/item/[id]', assets: ['assets/qstyle.pattern.css'] },
+        { route: '/item/42', assets: ['assets/qstyle.exact.css'] },
+      ],
+    };
+    expect(links.resolveRouteLinks(mixed, '/item/42')).toEqual(['assets/qstyle.exact.css']);
+    expect(links.resolveRouteLinks(mixed, '/item/99')).toEqual(['assets/qstyle.pattern.css']);
+  });
 });
 
 describe('parseRouteManifest', () => {

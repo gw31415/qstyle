@@ -812,6 +812,22 @@ function preserveBlockId(decls: readonly BlockDecl[]): string {
  * `open` (=開き括弧の offset) に対応する閉じ括弧の offset を返す。
  * 文字列・escape を考慮し、backtick・comment を含むものは安全に数えられないため -1。
  */
+/**
+ * `//...` / `/*...*\/` を飛ばし、直後の offset を返す。閉じない block comment は -1。
+ * JS 構造走査用。handler 内 comment 等を含む `{...}` を正しく数える
+ * (comment で諦めると通常コードが untouched になる実バグの修正)。
+ */
+function skipJsComment(code: string, i: number): number {
+  if (code[i] !== '/' || (code[i + 1] !== '/' && code[i + 1] !== '*')) return i;
+  if (code[i + 1] === '/') {
+    let j: number = i + 2;
+    while (j < code.length && code[j] !== '\n') j += 1;
+    return j;
+  }
+  const close: number = code.indexOf('*/', i + 2);
+  return close < 0 ? -1 : close + 2;
+}
+
 function findMatching(code: string, open: number, openCh: string, closeCh: string): number {
   let depth = 0;
   let i: number = open;
@@ -838,7 +854,9 @@ function findMatching(code: string, open: number, openCh: string, closeCh: strin
       continue;
     }
     if (ch === '/' && (code[i + 1] === '/' || code[i + 1] === '*')) {
-      return -1;
+      i = skipJsComment(code, i);
+      if (i < 0) return -1;
+      continue;
     }
     if (ch === openCh) depth += 1;
     else if (ch === closeCh) {
@@ -892,7 +910,11 @@ function skipTemplate(code: string, open: number): number {
           if (j < 0) return -1;
           continue;
         }
-        if (c === '/' && (code[j + 1] === '/' || code[j + 1] === '*')) return -1;
+        if (c === '/' && (code[j + 1] === '/' || code[j + 1] === '*')) {
+          j = skipJsComment(code, j);
+          if (j < 0) return -1;
+          continue;
+        }
         if (c === '{') depth += 1;
         else if (c === '}') {
           depth -= 1;
@@ -1171,6 +1193,11 @@ function scanTagAttributes(head: string): { classStart: number; lastSpreadEnd: n
   let i = 0;
   while (i < head.length) {
     const ch: string = head[i] ?? '';
+    if (ch === '/' && (head[i + 1] === '/' || head[i + 1] === '*')) {
+      i = skipJsComment(head, i);
+      if (i < 0) return null;
+      continue;
+    }
     if (ch === '"' || ch === "'") {
       const quote: string = ch;
       i += 1;
@@ -1213,12 +1240,17 @@ function extractClassExpr(
   return { start, end: close + 1, expr: head.slice(open + 1, close) };
 }
 
-/** from 以降で開始タグを閉じる '>' の位置を返す。文字列と brace の内側は無視する。 */
+/** from 以降で開始タグを閉じる '>' の位置を返す。文字列・comment と brace の内側は無視する。 */
 function findOpeningTagGt(code: string, from: number): number | null {
   let depth = 0;
   let i = from;
   while (i < code.length) {
     const ch: string = code[i] ?? '';
+    if (ch === '/' && (code[i + 1] === '/' || code[i + 1] === '*')) {
+      i = skipJsComment(code, i);
+      if (i < 0) return null;
+      continue;
+    }
     if (ch === '"' || ch === "'" || ch === '`') {
       const quote: string = ch;
       i += 1;

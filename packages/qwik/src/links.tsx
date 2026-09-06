@@ -86,10 +86,28 @@ function routePathCandidates(pathname: string): readonly string[] {
   return path === stripped ? [path, `${path}/`] : [path, stripped];
 }
 
+/** `[param]` segment を持つ route pattern か。Qwik City の file 規約に合わせる。 */
+function isRoutePattern(route: string): boolean {
+  return route.split('/').some((segment) => /^\[[^\]/]+\]$/.test(segment));
+}
+
+/** pattern (`/item/[id]`) と pathname (`/item/42`) の照合。segment 数が同じで、
+ * `[param]` が任意の非空 segment に一致すれば真 (trailing slash は吸収)。 */
+function matchRoutePattern(pattern: string, pathname: string): boolean {
+  const trim = (p: string): string => (p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p);
+  const patternSegments: string[] = trim(pattern).split('/');
+  const pathSegments: string[] = trim(pathname).split('/');
+  if (patternSegments.length !== pathSegments.length) return false;
+  return patternSegments.every(
+    (segment, i) => /^\[[^\]/]+\]$/.test(segment) || segment === pathSegments[i],
+  );
+}
+
 /**
  * R1.4: pathname に必要な asset file names (root 相対) を manifest から引く純関数。
- * 完全一致のみ (prefix match はしない — MVP は `options.routes` に正確な path を
- * 書く運用)。trailing slash の有無は吸収する。不一致は空配列。
+ * 完全一致を優先し、次に `[param]` pattern 照合 (RTE-004 dynamic route 用)。
+ * prefix match はしない (MVP は `options.routes` に正確な path を書く運用)。
+ * trailing slash の有無は吸収する。不一致は空配列。
  */
 export function resolveRouteLinks(
   manifest: QstyleRouteManifest,
@@ -98,6 +116,13 @@ export function resolveRouteLinks(
   for (const candidate of routePathCandidates(pathname)) {
     for (const entry of manifest.entries) {
       if (entry.route === candidate) return [...entry.assets];
+    }
+  }
+  for (const candidate of routePathCandidates(pathname)) {
+    for (const entry of manifest.entries) {
+      if (isRoutePattern(entry.route) && matchRoutePattern(entry.route, candidate)) {
+        return [...entry.assets];
+      }
     }
   }
   return [];

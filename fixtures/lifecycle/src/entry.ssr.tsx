@@ -11,12 +11,34 @@
 import { createRenderer } from '@qwik.dev/router';
 import Root from './root';
 
+function readManifestEnv(): unknown | undefined {
+  try {
+    // SSG worker は child process のため build.mjs が env 経由で渡す。
+    const fromEnv: unknown = (globalThis as { process?: { env?: unknown } }).process?.env;
+    const json: unknown =
+      typeof fromEnv === 'object' && fromEnv !== null
+        ? (fromEnv as Record<string, unknown>)['QSTYLE_ROUTES_JSON']
+        : undefined;
+    if (typeof json === 'string' && json.length > 0) {
+      return JSON.parse(json) as unknown;
+    }
+  } catch {
+    // 不正 JSON は無視して file 復元に進む。
+  }
+  return undefined;
+}
+
 try {
   const g = globalThis as { __QSTYLE_ROUTES__?: unknown };
   if (g.__QSTYLE_ROUTES__ === undefined) {
-    const { readFileSync } = await import('node:fs');
-    const manifestUrl = new URL('./qstyle.routes.json', import.meta.url);
-    g.__QSTYLE_ROUTES__ = JSON.parse(readFileSync(manifestUrl, 'utf8'));
+    const fromEnv: unknown | undefined = readManifestEnv();
+    if (fromEnv !== undefined) {
+      g.__QSTYLE_ROUTES__ = fromEnv;
+    } else {
+      const { readFileSync } = await import('node:fs');
+      const manifestUrl = new URL('./qstyle.routes.json', import.meta.url);
+      g.__QSTYLE_ROUTES__ = JSON.parse(readFileSync(manifestUrl, 'utf8'));
+    }
   }
 } catch {
   // manifest が無ければ何もしない (QstyleLinks は null を返し client が補完する)

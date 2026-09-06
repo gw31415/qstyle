@@ -41,16 +41,23 @@ process.env.NODE_ENV = 'production';
 // 素の `createBuilder().buildApp()` はこの構成では client の途中で止まる
 // (SSR 成果物・manifest が出ない) ため、plain の `vite build` を使う
 // (Qwik 側の警告文にもあるとおり builder が自動選択される)。
-// NOTE: Qwik beta.43 の SSG は `<Link>` の click handler QRL を解決できず Q14 で
-// 落ちる (qstyle とは無関係・素の fixture でも再現)。QSTYLE_SSG=0 では ssgAdapter
-// を外し (vite.config.ts)、SSR server 用の build のみ行う。SSG bake (QWK-002) は
-// framework 側の修正待ちとして plan.md B-1 に記録する。
 const { build } = await import('vite');
 await build({
   root: fixtureRoot,
   logLevel: 'warn',
   mode: 'production',
 });
+// SSG worker (child process) への route manifest 受け渡し (QWK-002 link bake 用)。
+// in-process の globalThis は worker に届かないが env は継承される。base build の
+// 成果物 (adapter build と決定論的同一内容) を env に積む。entry.ssr.tsx が読む。
+try {
+  const routesJson = path.resolve(fixtureRoot, 'dist', 'qstyle.routes.json');
+  if (fs.existsSync(routesJson)) {
+    process.env.QSTYLE_ROUTES_JSON = fs.readFileSync(routesJson, 'utf8');
+  }
+} catch {
+  // QSTYLE_OFF=1 (対照実験) では成果物が出ない。無ければ SSG bake なしで続行。
+}
 // SSR server bundle (server/)。base の client build の後に積む。
 // adapter config は base を extend するため qstyle plugin も再走するが、
 // 同一入力からは同一内容になる (HASH-002) ため成果物は安定。

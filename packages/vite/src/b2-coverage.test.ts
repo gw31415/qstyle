@@ -58,6 +58,20 @@ function unitCount(p: { load: (id: string) => string | null }): number {
 }
 
 describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
+  it('JSX-001: comments inside handler braces do not break the transform', () => {
+    const p = plugin();
+    // handler 内の `//` / `/* */` (brace・quote 混じり) があっても css prop は
+    // 正常に rewrite される (findMatching の comment bail 実バグの回帰)。
+    const out = p.transform(
+      `export const A = () => <div css={{ display: 'flex' }} onClick={() => {\n// hello { } "quoted"\n doIt();\n/* multi\nline } brace */\n }} />;`,
+      '/src/jsx001.tsx',
+    );
+    expect(out).not.toBeNull();
+    expect(out?.code).toContain('class="q_');
+    expect(out?.code).not.toContain('css={{');
+    expect(packCssOf(p, out?.code ?? '')).toContain('display:flex');
+  });
+
   it('OBJ-019: css={false}/null/undefined are untouched with no CSS side effects', () => {
     const p = plugin();
     expect(p.transform(`export const A = () => <div css={false} />;`, '/src/obj19-f.tsx')).toBeNull();

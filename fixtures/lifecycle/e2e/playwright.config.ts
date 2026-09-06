@@ -12,7 +12,7 @@ const fixtureRoot: string = path.resolve(here, '..');
 
 export default defineConfig({
   testDir: here,
-  testMatch: ['c0-smoke.spec.ts'],
+  testMatch: ['c0-smoke.spec.ts', 'ssg-bake.spec.ts', 'qwk-matrix.spec.ts', 'dyn-matrix.spec.ts', 'rte-matrix.spec.ts'],
   fullyParallel: false,
   retries: 0,
   use: {
