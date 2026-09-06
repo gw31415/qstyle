@@ -2044,6 +2044,44 @@ export function qstyle(
     return cssAssetPlanCache;
   };
 
+  /**
+   * §3.4 R1.3: route -> modules -> units -> (css-asset) chunk fileName を解決した
+   * Route Style Manifest。main plugin の emit (qstyle.routes.json) と css-asset
+   * plugin の in-process SSG 連携 (globalThis.__QSTYLE_ROUTES__) が同一内容を
+   * 参照するため、build pass 内で cache する (buildStart で reset)。
+   */
+  let routeManifestCache: StyleManifest | null = null;
+  const buildRouteStyleManifest = (): StyleManifest => {
+    if (routeManifestCache !== null) return routeManifestCache;
+    // route -> modules の逆引きを unit list へ解決する。
+    // css-asset 時はさらに unit → 所属 chunk の fileName へ解決する (§3.4 R1.3)。
+    const assetPlan: CssAssetPlan | null = backend === 'css-asset' ? buildCssAssetPlan() : null;
+    const routeToAssets = new Map<string, readonly string[]>();
+    for (const route of Object.keys(options.routes ?? {})) {
+      const assets = new Set<string>();
+      for (const modulePath of options.routes?.[route] ?? []) {
+        const key: string = moduleKey(modulePath);
+        for (const [mod, atoms] of moduleToAtoms) {
+          if (moduleKey(mod) === key) {
+            for (const atom of atoms) assets.add(atom);
+          }
+        }
+      }
+      if (assetPlan !== null) {
+        const files = new Set<string>();
+        for (const unitId of assets) {
+          const fileName: string | undefined = assetPlan.unitToFile.get(unitId);
+          if (fileName !== undefined) files.add(fileName);
+        }
+        routeToAssets.set(route, [...files]);
+      } else {
+        routeToAssets.set(route, [...assets]);
+      }
+    }
+    routeManifestCache = buildRouteManifest(routeToAssets, { compilerVersion: VERSION });
+    return routeManifestCache;
+  };
+
   /** options.routes (route -> module paths) を component -> route の逆引きへ張る (冪等)。 */
   function wireRoutes(target: UsageGraph): void {
     for (const route of Object.keys(options.routes ?? {})) {
@@ -2152,6 +2190,7 @@ export function qstyle(
       unitTagNames.clear();
       condUnitIds.clear();
       cssAssetPlanCache = null;
+      routeManifestCache = null;
       graph = createUsageGraph();
       wireRoutes(graph);
     },
@@ -2290,8 +2329,13 @@ export function qstyle(
         if (!list.includes(unitId)) {
           moduleToAtoms.set(id, [...list, unitId]);
         }
+        // §4.1 (案 X): unit id でも usage を記録する。planner へ渡す styles は unit id
+        // (collected の key) なので、atom id のみだと全 unit が usage なし扱い
+        // (singleton pack, users=∅) になり jaccard(∅,∅)=1 で min 到達まで全 unit が
+        // merge され、route 分離 chunk が生成されない。
+        recordUsage(graph, unitId, moduleKey(id));
         for (const member of members) {
-          // §38: usage graph へ style -> component (module) の edge を記録する (冪等)。
+          // §38: identity (dedup/provenance/inspector) は atom 単位のまま記録する (冪等)。
           recordUsage(graph, member.atomId, moduleKey(id));
           // §58: 同一 atom の全 origins を provenance として保持する。
           recordSource(graph, member.atomId, id);
@@ -3605,10 +3649,9 @@ export function qstyle(
       for (const [mod, atoms] of moduleToAtoms) {
         manifest[mod] = atoms;
       }
-      // backend 'css-asset': chunk plan を asset 化し (§3.4 R1.2)、CSS asset 自体は
-      // `qstyle:css-asset` plugin が直接 emit する (vite/qwik の CSS 配管に乗せない。
-      // build.cssCodeSplit 強制と無関係になる)。ここでは manifest 生成のための
-      // unit → fileName 逆引きのみ使う。
+      // backend 'css-asset': CSS asset 自体は `qstyle:css-asset` plugin が直接 emit する
+      // (vite/qwik の CSS 配管に乗せない。build.cssCodeSplit 強制と無関係になる)。
+      // ここでは manifest 生成のための unit → fileName 逆引きのみ使う。
       // backend 'qwik-native': CSS asset は pack css module の import graph 経由で
       // vite/qwik が出す (§48。lazy bundle は css も直前読み込み)。ここでは metadata
       // (chunk plan) のみ記録し、直接 emit しない。
@@ -3621,33 +3664,7 @@ export function qstyle(
               [...collected.values()].map((s) => ({ id: s.id, bytes: s.cssText.length })),
               chunkOptions,
             );
-      // route -> modules の逆引きを unit list へ解決する。
-      // css-asset 時はさらに unit → 所属 chunk の fileName へ解決する (§3.4 R1.3)。
-      const routeToAssets = new Map<string, readonly string[]>();
-      for (const route of Object.keys(options.routes ?? {})) {
-        const assets = new Set<string>();
-        for (const modulePath of options.routes?.[route] ?? []) {
-          const key: string = moduleKey(modulePath);
-          for (const [mod, atoms] of moduleToAtoms) {
-            if (moduleKey(mod) === key) {
-              for (const atom of atoms) assets.add(atom);
-            }
-          }
-        }
-        if (assetPlan !== null) {
-          const files = new Set<string>();
-          for (const unitId of assets) {
-            const fileName: string | undefined = assetPlan.unitToFile.get(unitId);
-            if (fileName !== undefined) files.add(fileName);
-          }
-          routeToAssets.set(route, [...files]);
-        } else {
-          routeToAssets.set(route, [...assets]);
-        }
-      }
-      const styleManifest: StyleManifest = buildRouteManifest(routeToAssets, {
-        compilerVersion: VERSION,
-      });
+      const styleManifest: StyleManifest = buildRouteStyleManifest();
       const ctx = this as unknown as { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void };
       ctx.emitFile({
         type: 'asset',
@@ -3733,6 +3750,12 @@ export function qstyle(
     generateBundle(): void {
       if (backend !== 'css-asset') return;
       const plan: CssAssetPlan = buildCssAssetPlan();
+      // R1.4 (§3.4): SSG render 時に @qstyle/qwik 側の QstyleLinks が in-process で
+      // 読めるよう、route manifest (qstyle.routes.json と同一内容) を globalThis へ
+      // 設定する。実行時 global のため undefined 前提のキャストで型を整える
+      // (reader 側の型宣言と乖離しないよう値の構造は manifest serialize 内容と同一)。
+      (globalThis as { __QSTYLE_ROUTES__?: unknown }).__QSTYLE_ROUTES__ =
+        buildRouteStyleManifest();
       const ctx = this as unknown as { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void };
       for (const chunk of plan.chunks) {
         ctx.emitFile({

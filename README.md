@@ -164,18 +164,39 @@ transform 時点で確定しないため)、`ensureModuleStyles` が `qstyle.uni
 を head に追加する (同一 href の二重追加なし、SSR では no-op、fetch 失敗時は
 console.error のみで crash しない)。
 
-route 単位の読み込みは別経路として `virtual:qstyle/route-loader` の
-`loadRouteStyles(route)` が残っている (`qstyle.routes.json` の asset 名解決を利用)。
+route 単位の配信 (実装済み): root layout に `<QstyleLinks />` (`@qstyle/qwik/links`) を
+置くと、現在 route の assets を `<link rel="stylesheet">` として描画する。
+
+- SSG (build 時の in-process render): plugin が `globalThis.__QSTYLE_ROUTES__` に
+  manifest を設定するため、link が静的 HTML に焼かれる
+- SSR runtime / client: `useQstyleRouteStyles()` (QstyleLinks が内部で呼ぶ) が
+  `qstyle.routes.json` を 1 回 fetch して link を注入。client navigation
+  (`useLocation().url.pathname` 変化) ごとに destination route の assets を
+  追加で読み込む (二重 fetch・二重 link なし)
+- prefetch: `<QstyleLinks prefetch="hover" />` で link hover 時に、`"load"` で
+  idle 時に route assets を先読み (default `"none"`)
+
+```tsx
+import { QstyleLinks } from '@qstyle/qwik/links';
+
+export default component$(() => (
+  <>
+    <QstyleLinks prefetch="hover" />
+    <Slot />
+  </>
+));
+```
+
+route 単位の低レベル API として `virtual:qstyle/route-loader` の
+`loadRouteStyles(route)` も残っている (`qstyle.routes.json` の asset 名解決を利用)。
 
 **hosting 推奨**: asset 名は content hash 付きなので
 `Cache-Control: public, max-age=31536000, immutable`
 を `assets/qstyle.*.css` に設定すること (`@qstyle/core` の
 `IMMUTABLE_CACHE_HEADER` に同値を定義済み)。
 
-**未実装** (plan.md R1.4/R1.5): SSR/SSG 向けの `<QstyleLinks />` head link 注入と
-client navigation での自動 route style 取得は未実装。初期表示の head link は
-現在のところ `ensureModuleStyles` (module 評価時) または `loadRouteStyles` の
-手動呼び出しで賄う。
+**未実装**: browser での実機検証 (SSG bake / navigation / FOUC) は plan.md C0
+(Playwright 基盤) 待ち。`options.routes` は手動指定 (route path → module paths)。
 
 ## Inspector
 

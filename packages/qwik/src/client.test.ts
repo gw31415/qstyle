@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as clientModule from './client.js';
 
 /**
- * ensureModuleStyles (plan.md §3.4 R1.6 案 B) の unit test。
+ * ensureModuleStyles (plan.md §3.4 R1.6 案 B) および ensureStylesheet / resolveAssetUrl
+ * (R1.4/R1.5 の link 注入の実体) の unit test。
  * fetch / document を stub して、SSR no-op・fetch 1 回 cache・二重 link 防止を検証する。
  * units index の cache は module singleton なため、vi.resetModules() を呼んだ上で
  * 動的 import により test ごとに新規 module instance を読む。
@@ -12,6 +13,7 @@ interface TestLink {
   rel: string;
   href: string;
   dataset: Record<string, string>;
+  getAttribute: (name: string) => string | null;
   onload: (() => void) | null;
   onerror: (() => void) | null;
 }
@@ -32,13 +34,20 @@ function installDom(): TestDom {
       const href: string = (m[1] ?? '').replace(/%22/g, '"');
       return dom.links.find((l) => l.href === href) ?? null;
     },
-    createElement: (): TestLink => ({
-      rel: '',
-      href: '',
-      dataset: {},
-      onload: null,
-      onerror: null,
-    }),
+    // hasStylesheet が SSR 焼き込み link (root 相対 data-qstyle-href) の比較に使う。
+    querySelectorAll: (_selector: string): TestLink[] => dom.links,
+    createElement: (): TestLink => {
+      const link: TestLink = {
+        rel: '',
+        href: '',
+        dataset: {},
+        getAttribute: (name: string): string | null =>
+          name === 'data-qstyle-href' ? (link.dataset['qstyleHref'] ?? null) : null,
+        onload: null,
+        onerror: null,
+      };
+      return link;
+    },
     head: {
       appendChild: (link: TestLink): TestLink => {
         dom.links.push(link);
@@ -68,10 +77,15 @@ function installUnitsIndex(units: Record<string, readonly string[]>): { fetchCal
   return { fetchCalls: calls };
 }
 
+/** 新規 module instance の client exports を返す (cache 状態を test 間で隔離)。 */
+async function freshClient(): Promise<typeof clientModule> {
+  vi.resetModules();
+  return await import('./client.js');
+}
+
 /** 新規 module instance の ensureModuleStyles を返す (cache 状態を test 間で隔離)。 */
 async function freshEnsureModuleStyles(): Promise<typeof clientModule.ensureModuleStyles> {
-  vi.resetModules();
-  const mod: typeof clientModule = await import('./client.js');
+  const mod: typeof clientModule = await freshClient();
   return mod.ensureModuleStyles;
 }
 
@@ -144,5 +158,43 @@ describe('ensureModuleStyles (R1.6)', () => {
     await ensureModuleStyles(['q_unknown0000', 'q_aaaa1111']);
     expect(dom.links).toHaveLength(1);
     expect(dom.links[0]?.href).toBe('https://example.test/assets/qstyle.a.css');
+  });
+});
+
+describe('ensureStylesheet / resolveAssetUrl (R1.4/R1.5 link 注入の実体)', () => {
+  it('resolveAssetUrl resolves a root-relative asset name against the base', async (): Promise<void> => {
+    const client = await freshClient();
+    installDom();
+    expect(client.resolveAssetUrl('assets/qstyle.a.css')).toBe(
+      'https://example.test/assets/qstyle.a.css',
+    );
+  });
+
+  it('appends a single link for repeated ensureStylesheet calls with the same href', async (): Promise<void> => {
+    const client = await freshClient();
+    const dom: TestDom = installDom();
+    await client.ensureStylesheet('https://example.test/assets/qstyle.a.css');
+    await client.ensureStylesheet('https://example.test/assets/qstyle.a.css');
+    expect(dom.links).toHaveLength(1);
+    expect(dom.links[0]?.rel).toBe('stylesheet');
+    expect(dom.links[0]?.href).toBe('https://example.test/assets/qstyle.a.css');
+  });
+
+  it('treats an SSR-rendered root-relative link (R1.4) as already loaded', async (): Promise<void> => {
+    // R1.4 の <QstyleLinks /> は SSR で data-qstyle-href に root 相対 href を焼く。
+    // server 側では絶対 URL を組めないため、client 側の絶対 URL 注入と文字列は一致しない。
+    // hasStylesheet の base 解決比較がこれを吸収し二重適用を防ぐことを検証する。
+    const client = await freshClient();
+    const dom: TestDom = installDom();
+    dom.links.push({
+      rel: 'stylesheet',
+      href: '/assets/qstyle.a.css',
+      dataset: { qstyleHref: '/assets/qstyle.a.css' },
+      getAttribute: (): string => '/assets/qstyle.a.css',
+      onload: null,
+      onerror: null,
+    });
+    await client.ensureStylesheet('https://example.test/assets/qstyle.a.css');
+    expect(dom.links).toHaveLength(1);
   });
 });

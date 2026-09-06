@@ -21,7 +21,19 @@
       "import": "./dist/client.mjs",
       "require": "./dist/client.cjs"
     },
+    "./links": {
+      "import": "./dist/links.mjs",
+      "require": "./dist/links.cjs"
+    },
+    "./prefetch": {
+      "import": "./dist/prefetch.mjs",
+      "require": "./dist/prefetch.cjs"
+    },
     "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@qwik.dev/core": "^2.0.0-beta.43",
+    "@qwik.dev/router": "^2.0.0-beta.43"
   },
   "scripts": {
     "build": "tsdown",
@@ -34,6 +46,8 @@
     "@qstyle/core": "workspace:^"
   },
   "devDependencies": {
+    "@qwik.dev/core": "^2.0.0-beta.43",
+    "@qwik.dev/router": "^2.0.0-beta.43",
     "@types/node": "^26.4.1",
     "publint": "^0.3.24",
     "tsdown": "catalog:",

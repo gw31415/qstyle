@@ -1738,8 +1738,10 @@ describe('qstyle generateBundle wiring', () => {
     expect(outA).not.toBeNull();
     expect(outB).not.toBeNull();
     // ponytail: graph 経由の最小チェック。同一 atom が両 module の origins を持つ。
+    // §4.1 修正後は unit id も styleToComponents に載るため、provenance (§58) の
+    // 対象は styleToSources の key (member atom のみ recordSource される) に絞る。
     const graph = p.__usageGraph as unknown as Parameters<typeof sourceSignature>[0];
-    const atomIds = [...graph.styleToComponents.keys()].filter((k) => k.startsWith('q_'));
+    const atomIds = [...graph.styleToSources.keys()].filter((k) => k.startsWith('q_'));
     expect(atomIds.length).toBeGreaterThan(0);
     for (const atomId of atomIds) {
       expect(sourceSignature(graph, atomId).slice().sort()).toEqual(['/src/a.tsx', '/src/b.tsx']);
@@ -1870,8 +1872,10 @@ describe('qstyle css-asset backend (plan.md §3.4 R1.1-R1.3/R1.6)', () => {
     );
     expect(cssAssets.length).toBeGreaterThan(0);
     const cssText: string = cssAssets.map((e) => e.source).join('\n');
+    // §4.1 修正後: 異なる module の unit は usage signature が異なるため別 chunk になる
+    // (chunk 内 dedup も chunk 単位)。内容の存在のみ検証する。
     expect(cssText).toMatch(/\.q_[0-9a-f]{8}\{display:flex/);
-    expect(cssText).toMatch(/\.q_[0-9a-f]{8}\{gap:8px\}/);
+    expect(cssText).toMatch(/gap:8px/);
 
     // units index: 各 unit は恰好 1 chunk (fileName) に属し、実在 asset を指す。
     const unitsAsset: Emitted | undefined = first.emitted.find(
@@ -1936,6 +1940,30 @@ describe('qstyle css-asset backend (plan.md §3.4 R1.1-R1.3/R1.6)', () => {
     for (const asset of entry?.assets ?? []) {
       expect(cssFileNames).toContain(asset);
     }
+  });
+
+  it('sets globalThis.__QSTYLE_ROUTES__ for in-process SSG render (§3.4 R1.4)', () => {
+    // plugin 側は書き込みのみ。reader (QstyleLinks) の型とは緩い構造一致で検証する。
+    delete (globalThis as { __QSTYLE_ROUTES__?: unknown }).__QSTYLE_ROUTES__;
+    const { emitted } = buildOnce(
+      { backend: 'css-asset', routes: { '/': ['/src/ca-route.tsx'] } },
+      [
+        {
+          id: '/src/ca-route.tsx',
+          code: `export const R = () => <div css={{ display: 'flex' }} />;`,
+        },
+      ],
+    );
+    const globalRoutes: unknown = (globalThis as { __QSTYLE_ROUTES__?: unknown })
+      .__QSTYLE_ROUTES__;
+    expect(globalRoutes).toBeDefined();
+    // qstyle.routes.json と同一内容 (serialize 前の object)。
+    const routesAsset: Emitted | undefined = emitted.find(
+      (e) => e.fileName === 'qstyle.routes.json',
+    );
+    expect(globalRoutes).toEqual(JSON.parse(routesAsset?.source ?? '{}') as unknown);
+    const entries = (globalRoutes as { entries: { route: string }[] }).entries;
+    expect(entries.map((e) => e.route)).toEqual(['/']);
   });
 
   it('exposes chunk plans (members/bytes/fileName) via __chunkPlans (R1.8 metadata)', () => {

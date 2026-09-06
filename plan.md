@@ -48,8 +48,8 @@ Qwik の style 遅延ロード性を維持しつつ、サイト全体で CSS を
 | semantic dedup | 実装済み | `core/dedup.ts` |
 | safety analysis | 実装済み (実アプリ総合検証は未) | `core/safety.ts` |
 | usage graph | 実装済み | `createUsageGraph` `recordUsage` `recordSource` `recordComponentRoute` `usageSignature` `jaccardSimilarity` (`core/usage.ts`) |
-| chunk planner | 実装済み・asset 化済み (R1.2) | `planChunks` `chunkHash` `assetFileName` (`core/chunk.ts`)。**ただし usage graph との id 不整合あり (§4.1)** |
-| Backend B (css-asset) | **R1.1–R1.3, R1.6 実装済み** | `qstyle:css-asset` plugin (`assets/qstyle.<hash>.css` + `qstyle.units.json` + `qstyle.routes.json` の asset 名解決)、transform の unit stub 注入、`@qstyle/qwik/client` `ensureModuleStyles`。R1.4/1.5/1.7/1.8/1.9 は未 |
+| chunk planner | 実装済み・route 分離実証済み | `planChunks` + unit id usage 配線 (§4.1 修正済み)。2 route fixture で local/shared chunk 分離を自動検証 (CHUNK/HASH-007/008) |
+| Backend B (css-asset) | **R1.1〜R1.3, R1.4〜R1.7 実装済み** | `qstyle:css-asset` plugin、unit stub、`QstyleLinks`/`useQstyleRouteStyles` (`@qstyle/qwik/links`)、prefetch (`@qstyle/qwik/prefetch`)。R1.8/1.9 は未 |
 | route manifest | 雛形 emit のみ | `buildRouteManifest` `serializeManifest` `resolveRouteAssets` `parseManifest` (`core/manifest.ts`)。`routes` option 未設定だと entries 空 |
 | route-loader | 実装済み・未使用 | `ROUTE_LOADER_SOURCE` (`loadRouteStyles`) |
 | transform / pack | 実装済み | `virtual:qstyle/pack/<id>.css`、`ingestUnit` `serializeUnitCss` `unitIdOf` |
@@ -66,14 +66,14 @@ Qwik の style 遅延ロード性を維持しつつ、サイト全体で CSS を
 
 ## 3. R1: Backend B (css-asset) の実装
 
-最重要課題。**R1.1〜R1.3 + R1.6 は実装済み** (後述)。残りは R1.4/1.5/1.7/1.8/1.9。
+最重要課題。**R1.1〜R1.7 は実装済み** (§3.2)。残りは R1.8/1.9 のみ。
 
 ### 3.1 背景・制約
 
 - Qwik optimizer は client build で `build.cssCodeSplit = false` を無条件設定 (`@qwik.dev/core/dist/optimizer.mjs:2720`)。vite/qwik の CSS 配管に乗った CSS はすべて単一 asset に統合され SSR HTML head にインラインされる。
 - **アーキテクチャ決定 (実装済み)**: Backend B は vite/qwik の CSS バンドル配管に一切乗せず、plugin 自身が `generateBundle` で `this.emitFile({type:'asset'})` により直接出す。JS 側に CSS import が存在しないため `cssCodeSplit` と無関係で、chunk 粒度・dedup 適用 (hash 計算前)・file name を完全制御できる。
 
-### 3.2 実装済みの構成 (R1.1〜R1.3 + R1.6)
+### 3.2 実装済みの構成 (R1.1〜R1.7)
 
 - transform (build & `backend: 'css-asset'`): pack css import の代わりに module 先頭へ
   `import { ensureModuleStyles } from '@qstyle/qwik/client'; ensureModuleStyles([...unitIds]);` を注入 (unit id は transform 時点で確定。fileName の遅延バインディングは不要にした — JS bundle hash 完全性を保つため JS への後付け編集は行わない)
@@ -86,27 +86,13 @@ Qwik の style 遅延ロード性を維持しつつ、サイト全体で CSS を
 - fixture: `fixtures/m0-css-asset/` (実 vite build で asset 出力・JS 非混入・units/routes.json 一致を検証)
 - テスト: client 6 + vite plugin 7 + m0-proof 1 = 14 件追加
 - README: css-asset の節を実装に合わせ書き直し、immutable cache header 推奨を追記
+- **R1.4 `<QstyleLinks />`** (`@qstyle/qwik/links`): SSG は in-process の `globalThis.__QSTYLE_ROUTES__` (css-asset plugin が generateBundle で設定) から同期的に link を静的 HTML に焼く。SSR runtime は同期 render の制約上 bake できず client 側で補完。path 解決は純関数 `resolveRouteLinks` (完全一致 + trailing slash 吸収)
+- **R1.5 `useQstyleRouteStyles()`** (links 内部で呼ぶ): `useLocation().url.pathname` を document-idle の visible task で追跡し、navigation ごとに assets を link 注入 (`loadRouteStyles`)。`hasStylesheet` が SSR bake 済み root 相対 link と client 注入の絶対 URL の重複を base 解決比較で防止
+- **R1.7 prefetch** (`@qstyle/qwik/prefetch`): `prefetch="hover"` (pointerover 委譲) / `"load"` (idle) / `"none"` (default)
+- §4.1 usage 配線修正により route 分離 chunk が生成される (local/shared 分離を fixture で自動検証)
+- 実装ノート: qwik package の dist は optimizer を通らないため `component$` ではなく `componentQrl`+`inlinedQrl` (@qwik.dev/core/internal) を使用 (qwik router の prebuilt dist と同じ方式)。`@qwik.dev/core`/`@qwik.dev/router` を peer 依存に追加
 
 ### 3.3 残ステップ
-
-#### R1.4 SSR/SSG head link 注入 — `<QstyleLinks />` (M〜L) ← 次の作業
-
-- 対象: `packages/qwik/src/` (新規 `links.tsx`)、`packages/vite/src/index.ts` (`virtual:qstyle/routes` の load)
-- 変更:
-  - vite 側: `load('virtual:qstyle/routes')` で `export const routes = {...manifest JSON...}` を返す (build 時に manifest から生成。dev では空)
-  - qwik 側: `QstyleLinks` component が `useLocation()` の現在 path で routes を解決し `<link rel="stylesheet" href>` を描画。base URL は `loaderBaseUrl()` と同規則
-  - root layout への設置手順を README に記載。SSG では静的 HTML に `<link>` が焼かれることを fixture build で検証
-- 受け入れ基準: QWK-001/002 相当 (SSR/SSG で style 欠落なし) が fixture で確認できる
-
-#### R1.5 client navigation loader 統合 (M)
-
-- `useLocation().url.pathname` の変更を `useTask$`/`useVisibleTask$` で監視し `loadRouteStyles(route)` (route-loader, 実装済み・未使用) を呼ぶ。fetch 失敗時は console error + 続行 (crash しない)
-- 受け入れ基準: QWK-003/004 相当
-
-#### R1.7 preload / prefetch option (S〜M)
-
-- `QstyleOptions` に `prefetch?: 'none' | 'hover' | 'load'` (default `'none'`)。`'hover'`: link hover 時に destination route の assets を先読み。`'load'`: idle 時に全 route assets 先読み。qwik 側 prefetch 機構との競合時は qwik 側に任せる旨を文書化
-- 受け入れ基準: RTE-006、FOUC 解消の確認
 
 #### R1.8 dev の挙動と Backend 差の明示 (S)
 
@@ -121,14 +107,11 @@ Qwik の style 遅延ロード性を維持しつつ、サイト全体で CSS を
 
 ### 3.4 テストマッピング (更新)
 
-| ステップ | 解除されるテスト |
+| ステップ | 解除されたテスト |
 |---|---|
-| 実装済み (R1.1–1.3, 1.6) | RTE-001/002/003 の manifest 部分 (asset 名解決)、決定性 (build ×2 byte 等価) |
-| R1.4 | QWK-001, QWK-002, RTE-004 |
-| R1.5 | QWK-003, QWK-004, RTE-005, RTE-007 |
-| R1.6 (browser 検証) | QWK-005, QWK-006, QWK-007, RTE-009 — C0.2 Playwright 基盤が必要 |
-| R1.7 | RTE-006, FOUC 判定 |
-| §4.1 usage 配線後 | HASH-007/008 (css-asset 版), RTE-002 (route 分離), PERF-004/005 |
+| 実装済み (R1.1–1.7 + §4.1) | RTE-001/002/003 (build/manifest level)、HASH-007/008 (css-asset 版)、CHUNK-001..006、決定性 (build ×2 byte 等価) |
+| C0.2 Playwright 基盤で browser 検証待ち | QWK-001..007, RTE-004..007, 009, FOUC 判定 (実装はあるが実機検証がまだ) |
+| R1.9 実測 | PERF-004/005 |
 
 ### 3.5 リスクと対処 (更新)
 
@@ -142,29 +125,23 @@ Qwik の style 遅延ロード性を維持しつつ、サイト全体で CSS を
 
 R1.2 が本体。ここでは planner 側の残課題を定義する。
 
-### 4.1 現状 — **usage 配線の id 不整合 (最優先で修正)**
+### 4.1 usage 配線の id 不整合 — **修正済み (案 X)**
 
-`planChunks` (`core/chunk.ts`) は §38 第一段階 (usage signature 完全一致) + min/max sizing + similarity>0 の最小 merge を実装済み。asset 化 (R1.2) で emit には接続済み。
+`ingestUnit` が unit id 単位の `recordUsage` を追加記録するよう修正済み (atom id の記録は provenance/inspector 用に残存)。before (全 unit が min 到達まで merge → 1 chunk) / after (module usage signature で 3 chunk 分離) を `fixtures/route-css-asset/` (2 route + shared component) で実証済み。CHUNK-001..006、HASH-007/008 (css-asset 版)、RTE-001..003 (build/manifest level) を自動テスト化済み。
 
-しかし R1 実装中に発見: **usage graph には atom id で記録される** (`ingestUnit` 内 `recordUsage(member.atomId, ...)`) のに対し **planner へ渡す `styles` は unit id** (`collected` の key)。その結果すべての unit が「未使用 style」扱い (singleton pack, users=∅) となり、`jaccard(∅,∅)=1` で min (1KB) に達するまで全 unit が merge される。決定性・正確性 (§39 dedup の安全ガードは効く) には影響しないが、**route 分離 chunk が一切生成されない**。RTE-002、HASH-007/008 (css-asset 版)、PERF-004/005 はこの修正が前提。
+設計判断 (維持): route edge は merge similarity の users に含めない。含めると min 未満の route-local pack が shared に merge され RTE-001 違反になる恐れがあるため、route-aware merge は §5 (R3) の cost model/threshold とセットで導入する。
 
-修正方針 (いずれか、実装時に検討):
-- 案 X: `ingestUnit` で unit まとめて `recordUsage(unitId, module)` を追加記録 (atom id の記録は provenance/inspector 用に残す)。planner は unit id の usage を見る
-- 案 Y: planner に渡す `styles` を member atom id 単位に展開し、chunk plan の members を unit に逆マップする
-- 案 X の方が graph への追記が単純。`usageSignature`/`groupByUsageSignature` は id 非依存なのでそのまま動く
+### 4.2 実装項目 (残り)
 
-### 4.2 実装項目 (順番)
-
-0. **usage 配線の id 不整合修正** (§4.1) — CHUNK テストと HASH-007/008 (css-asset 版) を添えて
 1. **route signature の活用** (`usage.ts` に `recordComponentRoute` あり):
    - chunk の users に route が含まれる場合、route-local chunk / shared chunk の分類を manifest に記録
    - `shared` 判定 = users が 2 route 以上、または usage signature に複数 component
-3. **cost function v0** (§40 の縮約版、clustering v2 (R3) の前段):
+2. **cost function v0** (§40 の縮約版、clustering v2 (R3) の前段):
    ```text
    chunkCost = bytes + requestOverhead(=512B 仮置き) + unusedRatio * bytes
    ```
    現状の min/max 運用と等価になることを確認してから重みを導入する (いきなり完全式を入れない)
-4. **サイズ閾値の運用**: `DEFAULT_CHUNK_OPTIONS` (1KB / 32KB) をそのまま用い、haven-web 実測で調整。変更は versioned JSON (§12) に記録
+2. **サイズ閾値の運用**: `DEFAULT_CHUNK_OPTIONS` (1KB / 32KB) をそのまま用い、haven-web 実測で調整。変更は versioned JSON (§12) に記録
 
 ### 4.3 完了条件
 
@@ -286,7 +263,7 @@ R1.2 が本体。ここでは planner 側の残課題を定義する。
 
 test ID ベースの判定 (ID 未付与の暗黙カバーはこの限りではない)。
 
-**実装済み**: OBJ-001..018,022..024 / SEL-001..003,008..016,021,022 (008/009/010/015 は不支持の現状固定) / CMP-001..005,007..011,014,015,017,020..022 / TPL-001..005,007..011,013..015,017 (006 は slot 化の現状固定) / DYN-001..010,016,017,019,020,024 / CSS-001..003,006..010,013 / DED-001..004,006..008,011,013 / HASH-001..006,011,012 / HMR-008 / DIA-003,008 / TYP-007 / SEC-005,008 / FLB-006,007,010 / PERF-001,006 / RTE-008
+**実装済み**: OBJ-001..018,022..024 / SEL-001..003,008..016,021,022 (008/009/010/015 は不支持の現状固定) / CMP-001..005,007..011,014,015,017,020..022 / TPL-001..005,007..011,013..015,017 (006 は slot 化の現状固定) / DYN-001..010,016,017,019,020,024 / CSS-001..003,006..010,013 / DED-001..004,006..008,011,013 / HASH-001..006,011,012 / HMR-008 / DIA-003,008 / TYP-007 / SEC-005,008 / FLB-006,007,010 / PERF-001,006 / RTE-001,002,003 (build/manifest level。browser 検証は C0 待ち) / CHUNK-001..006 / links・prefetch 系 (R1.4/1.5/1.7 の unit test)
 
 配置先の目安: 8.1–8.6 → 各 package の既存 test file に追記。8.7/8.8 → vite package + `fixtures/lifecycle`。
 
@@ -559,22 +536,22 @@ bug は最小 fixture に縮小し ID 付き regression test として `packages
 
 # Part E — 優先順位・依存・リスク・判断
 
-## 17. 実行順序と依存グラフ (2026-09-06 更新)
+## 17. 実行順序と依存グラフ (2026-09-06 第2更新)
 
 ```text
-[完了] R1.1〜R1.3 + R1.6 (Backend B 骨格: asset emit / units.json / stub / client helper)
-[完了] unit 系不足分の大半 (§8.1〜8.6 の core/qwik 分 45 件 + 実装バグ 4 件修正)
+[完了] R1.1〜R1.7 (Backend B: asset emit / units.json / stub / QstyleLinks / navigation / prefetch)
+[完了] §4.1 usage 配線修正 (route 分離 chunk 実証、CHUNK/HASH-007/008/RTE-001..003 build level)
+[完了] unit 系不足分の大半 (§8.1〜8.6 + CHUNK 計 55 件超、実装バグ 4 件修正)
 
 次の一手:
-§4.1 usage 配線の id 不整合修正            ← R2 の前提。これがないと route 分離 chunk が出ない
-  └─ R1.4 <QstyleLinks /> (SSR/SSG head link) → R1.5 (client navigation) → R1.7 (prefetch)
-C0.1/C0.2 fixture・Playwright 整備         ← 上記と並行 (QWK-008〜012, DYN-012〜015 は R1 非依存)
-R2 残 (route signature / cost v0) → R3 (clustering v2)
-R1.8 (inspector/README) → R1.9 haven-web 実測 (§4.1 修正後でないと意味がない) → PERF-004/005
+C0.1/C0.2 fixture・Playwright 整備         ← QWK 全般・RTE の browser 検証・FOUC 判定の前提
+  └─ QWK-001..018, RTE-004..007/009, DYN-012..015/021 を回す
+R1.8 (inspector report) → R1.9 haven-web 実測 (css-asset 有効化) → PERF-004/005
+R2 残 (§4.2: route signature 分類 / cost v0) → R3 (clustering v2)
 §8.7/8.8 (HMR/DIA/TYP/SEC/FLB) → browser differential (§11) → PERF 残 → fuzz (P2)
 ```
 
-haven-web 側残作業: `qstyle({ backend: 'css-asset', routes: {...} })` 設定、`<QstyleLinks />` 設置 (R1.4 の後)、css prop 採用の拡大 (実データでの dedup/chunking 検証)。
+haven-web 側残作業: `qstyle({ backend: 'css-asset', routes: {...} })` 設定、`<QstyleLinks />` 設置、css prop 採用の拡大 (実データでの dedup/chunking 検証)。
 
 ## 18. リスク (継続)
 

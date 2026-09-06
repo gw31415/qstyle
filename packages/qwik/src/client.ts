@@ -6,7 +6,9 @@
 // chunk hash の完全性は壊れない (§3.3 データフロー)。
 //
 // SSR / SSG (`typeof document === 'undefined'`) では何もしない。style の HEAD link は
-// R1.4 `<QstyleLinks />` (未実装) が SSR 時に描画する想定で、ここは client (browser) 専用。
+// R1.4 `<QstyleLinks />` (`./links`) が SSR 時に描画し、R1.5 の client navigation loader
+// (`useQstyleRouteStyles`) と R1.7 の prefetch (`./prefetch`) がここで export する
+// `ensureStylesheet` / `resolveAssetUrl` を link 注入の実体として使う。
 
 /** `qstyle.units.json` の shape (vite plugin `qstyle:css-asset` が emit する)。 */
 interface UnitsIndex {
@@ -17,7 +19,7 @@ interface UnitsIndex {
 const UNITS_FILE = 'qstyle.units.json';
 
 /** route-loader (ROUTE_LOADER_SOURCE) の loaderBaseUrl() と同じ base URL 規則。 */
-function clientBaseUrl(): string {
+export function clientBaseUrl(): string {
   try {
     // import.meta.env は vite 系 bundler でのみ定義される。node/cjs では undefined。
     const env: unknown = (import.meta as unknown as { env?: unknown }).env;
@@ -49,10 +51,51 @@ function loadUnitsIndex(): Promise<UnitsIndex | null> {
 /** 読み込み中の <link> promise。同一 href の二重追加 (競合 race) を防ぐ。 */
 const pendingStylesheets = new Map<string, Promise<void>>();
 
-function ensureStylesheet(href: string): Promise<void> {
+/**
+ * asset の root 相対 file name (`assets/qstyle.<hash>.css`) を現在の base で解決した
+ * 絶対 URL へ変換する (R1.5 useQstyleRouteStyles / R1.7 prefetch が利用)。
+ */
+export function resolveAssetUrl(fileName: string): string {
+  return new URL(fileName, clientBaseUrl()).toString();
+}
+
+/**
+ * 既に適用済み (or 読み込み中) の stylesheet link かどうか。
+ * R1.4 の `<QstyleLinks />` が SSR/SSG で焼く link は root 相対の `data-qstyle-href`
+ * (絶対 URL を server 側では組めないため) のため、文字列一致に加えて base 解決後の
+ * URL 比較でも既存 link を判定する (client 側注入との二重適用防止)。
+ */
+function hasStylesheet(href: string): boolean {
+  if (document.querySelector(`link[data-qstyle-href="${href.replace(/"/g, '%22')}"]`) !== null) {
+    return true;
+  }
+  const base: string = clientBaseUrl();
+  const existing: NodeListOf<HTMLLinkElement> = document.querySelectorAll('link[data-qstyle-href]');
+  for (const link of existing) {
+    const marked: string | null = link.getAttribute('data-qstyle-href');
+    if (marked === null) continue;
+    try {
+      if (new URL(marked, base).toString() === href) return true;
+    } catch {
+      // 不正な URL 文字列が入っていた場合は比較から除外するだけ (crash しない)
+    }
+  }
+  return false;
+}
+
+/**
+ * (未読なら) `<link rel="stylesheet">` を head に追加する。R1.5 の client navigation
+ * loader と R1.7 の prefetch が使う link 注入の実体。同一 href (data-qstyle-href 規則、
+ * SSR 焼き込みの root 相対 href も base 解決で一致判定) の二重追加を排除する。
+ */
+export function ensureStylesheet(href: string): Promise<void> {
+  // SSR / server 環境では即 resolve (ensureModuleStyles と同規則)。client 側の
+  // useQstyleRouteStyles / prefetch は browser でしか呼ばないが、export API として
+  // 安全にしておく。
+  if (typeof document === 'undefined') return Promise.resolve();
   const pending: Promise<void> | undefined = pendingStylesheets.get(href);
   if (pending !== undefined) return pending;
-  if (document.querySelector(`link[data-qstyle-href="${href.replace(/"/g, '%22')}"]`) !== null) {
+  if (hasStylesheet(href)) {
     return Promise.resolve();
   }
   const load: Promise<void> = new Promise<void>((resolve: () => void) => {
@@ -90,7 +133,7 @@ export function ensureModuleStyles(unitIds: readonly string[]): Promise<void> {
     const hrefs = new Set<string>();
     for (const unitId of unitIds) {
       for (const fileName of index.units[unitId] ?? []) {
-        hrefs.add(new URL(fileName, clientBaseUrl()).toString());
+        hrefs.add(resolveAssetUrl(fileName));
       }
     }
     return Promise.all([...hrefs].map((href: string): Promise<void> => ensureStylesheet(href))).then(

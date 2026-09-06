@@ -4,7 +4,9 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "@qwik.dev/core"
   },
   "include": ["src"]
 }
