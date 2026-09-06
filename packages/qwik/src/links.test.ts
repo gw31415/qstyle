@@ -297,6 +297,7 @@ describe('QstyleLinks component (R1.4 module 境界)', () => {
     expect(links.QstyleLinks).toBeTypeOf('function');
     expect(links.useQstyleRouteStyles).toBeTypeOf('function');
     expect(links.qstyleRouteBootstrap).toBeTypeOf('function');
+    expect(links.QSTYLE_ROUTE_BOOTSTRAP_SOURCE).toBeTypeOf('string');
   });
 
   it('qstyleRouteBootstrap is self-contained (Q14 guard: no module-scope references)', async (): Promise<void> => {
@@ -326,48 +327,59 @@ describe('QstyleLinks component (R1.4 module 境界)', () => {
     }
   });
 
-  it('qstyleRouteBootstrap is a no-op without the marker (dev: no routes.json fetch)', async (): Promise<void> => {
+  it('QSTYLE_ROUTE_BOOTSTRAP_SOURCE is bundler-immune (no helper calls, no interpolation)', async (): Promise<void> => {
+    // 出荷 artifact は downstream bundler の変換対象外でなければならない。
+    // app build の esbuild (keepNames) が `__name(...)` を注入すると、定義を
+    // 伴わず source だけが HTML に埋め込まれ resume 時に ReferenceError になる
+    // (haven-web preview で実証済み)。template literal / `${` も含まない
+    // (外側が template literal ではないため不要。混入は escape 漏れの兆候)。
+    // qwik が `()=>` + SOURCE の形で function 化するため、先頭は `{`・
+    // 末尾は `}` (文の並びの block) でなければならない。
     const links = await freshLinks();
-    // dev では QstyleLinks が marker を描かない。bootstrap は fetch も history
-    // 監視の設置もしない (dev の routes.json は存在しないため 404 になる)。
-    const fetchCalls: string[] = [];
-    vi.stubGlobal('fetch', (input: unknown): Promise<never> => {
-      fetchCalls.push(String(input));
-      return Promise.reject(new Error('should not fetch'));
-    });
-    vi.stubGlobal('document', {
-      baseURI: 'https://example.test/app/',
-      querySelector: (selector: string): null => {
-        void selector;
-        return null; // marker 無し
-      },
-      querySelectorAll: (): never[] => [],
-      addEventListener: (): void => undefined,
-    });
-    vi.stubGlobal('location', { pathname: '/', origin: 'https://example.test' });
-    const historyStub = {
-      pushState: (): void => undefined,
-      replaceState: (): void => undefined,
-    };
-    vi.stubGlobal('history', historyStub);
-    vi.stubGlobal('window', { addEventListener: (): void => undefined });
-    links.qstyleRouteBootstrap();
-    await new Promise<void>((resolve): void => {
-      setTimeout(resolve, 0);
-    });
-    expect(fetchCalls).toEqual([]);
+    const source: string = links.QSTYLE_ROUTE_BOOTSTRAP_SOURCE;
+    expect(source).toContain('qstyle:prefetch');
+    expect(source).toContain('data-qstyle-base');
+    expect(source.startsWith('function(){')).toBe(true);
+    expect(source.trimEnd().endsWith('}')).toBe(true);
+    // 本番と同じ形 (完全な function 式) で parse できること。文の並びだけでは
+    // object literal と解釈され `Unexpected identifier` の SyntaxError になる。
+    // (haven-web preview で実証済み。構造回帰の固定)。
+    expect(() => new Function(`return (${source})`) as unknown).not.toThrow();
+    for (const forbidden of [
+      '__name',
+      '`',
+      '${',
+      'import(',
+      'import ',
+      'require(',
+      'process.',
+      '__QSTYLE_ROUTES__',
+      '_captures',
+      '</script',
+    ]) {
+      expect(source, `forbidden in shipped source: ${forbidden}`).not.toContain(forbidden);
+    }
   });
 
-  it('qstyleRouteBootstrap injects current route styles and follows pushState navigation', async (): Promise<void> => {
-    const links = await freshLinks();
-    interface StubLink {
-      rel: string;
-      href: string;
-      onload: (() => void) | null;
-      onerror: (() => void) | null;
-      setAttribute: (name: string, value: string) => void;
-      getAttribute: (name: string) => string | null;
-    }
+  interface StubLink {
+    rel: string;
+    href: string;
+    onload: (() => void) | null;
+    onerror: (() => void) | null;
+    setAttribute: (name: string, value: string) => void;
+    getAttribute: (name: string) => string | null;
+  }
+
+  interface NavDom {
+    readonly injected: StubLink[];
+    readonly historyStub: {
+      pushState: (_data: unknown, _unused: string, url?: string) => void;
+      replaceState: (_data: unknown, _unused: string, _url?: string) => void;
+    };
+  }
+
+  /** navigation matrix 用の最小 DOM。初期 pathname を指定できる。 */
+  function installNavDom(initialPathname = '/'): NavDom {
     const injected: StubLink[] = [];
     const makeLink = (): StubLink => {
       const attrs = new Map<string, string>();
@@ -415,7 +427,7 @@ describe('QstyleLinks component (R1.4 module 境界)', () => {
       },
       addEventListener: (): void => undefined,
     });
-    let pathname = '/';
+    let pathname: string = initialPathname;
     vi.stubGlobal('location', {
       get pathname(): string {
         return pathname;
@@ -430,34 +442,136 @@ describe('QstyleLinks component (R1.4 module 境界)', () => {
     };
     vi.stubGlobal('history', historyStub);
     vi.stubGlobal('window', { addEventListener: (): void => undefined });
-    installRoutesManifest(MANIFEST_A);
+    return { injected, historyStub };
+  }
+
+  async function flush(times = 2): Promise<void> {
+    for (let i = 0; i < times; i += 1) {
+      await new Promise<void>((resolve): void => {
+        setTimeout(resolve, 0);
+      });
+    }
+  }
+
+  /**
+   * bootstrap を実行する。`useString` が真なら出荷 artifact
+   * (`QSTYLE_ROUTE_BOOTSTRAP_SOURCE`) を、偽なら参照実装
+   * (`qstyleRouteBootstrap`) を実行する。
+   * 文字列側は qwik 本番 (`$addSyncFn$`: `()=>` + SOURCE の形で function 化)
+   * と同じ形で評価する。`new Function` は test 内のみ (prod の eval ではない)。
+   */
+  function runBootstrap(links: typeof linksModule, useString: boolean): void {
+    if (!useString) {
+      links.qstyleRouteBootstrap();
+      return;
+    }
+    // 本番 (`_qrlSync` の serialize は完全な function) と同じく function 式
+    // として評価し、得られた関数を task として呼び出す。
+    const factory = new Function(
+      `return (${links.QSTYLE_ROUTE_BOOTSTRAP_SOURCE})`,
+    ) as () => () => void;
+    const task: () => void = factory();
+    task();
+  }
+
+  it('qstyleRouteBootstrap is a no-op without the marker (dev: no routes.json fetch)', async (): Promise<void> => {
+    const links = await freshLinks();
+    // dev では QstyleLinks が marker を描かない。bootstrap は fetch も history
+    // 監視の設置もしない (dev の routes.json は存在しないため 404 になる)。
+    const fetchCalls: string[] = [];
+    vi.stubGlobal('fetch', (input: unknown): Promise<never> => {
+      fetchCalls.push(String(input));
+      return Promise.reject(new Error('should not fetch'));
+    });
+    vi.stubGlobal('document', {
+      baseURI: 'https://example.test/app/',
+      querySelector: (selector: string): null => {
+        void selector;
+        return null; // marker 無し
+      },
+      querySelectorAll: (): never[] => [],
+      addEventListener: (): void => undefined,
+    });
+    vi.stubGlobal('location', { pathname: '/', origin: 'https://example.test' });
+    const historyStub = {
+      pushState: (): void => undefined,
+      replaceState: (): void => undefined,
+    };
+    vi.stubGlobal('history', historyStub);
+    vi.stubGlobal('window', { addEventListener: (): void => undefined });
     links.qstyleRouteBootstrap();
     await new Promise<void>((resolve): void => {
       setTimeout(resolve, 0);
     });
-    await new Promise<void>((resolve): void => {
-      setTimeout(resolve, 0);
-    });
-    // 初回適用: '/' の asset 1 件。
-    expect(injected.map((l) => l.href)).toEqual([
-      'https://example.test/app/assets/qstyle.root.css',
-    ]);
-    // pushState navigation で '/a' の assets が追加される (共有 chunk の重複なし)。
-    historyStub.pushState({}, '', '/a');
-    await new Promise<void>((resolve): void => {
-      setTimeout(resolve, 0);
-    });
-    await new Promise<void>((resolve): void => {
-      setTimeout(resolve, 0);
-    });
-    expect(injected.map((l) => l.href).sort()).toEqual(
-      [
-        'https://example.test/app/assets/qstyle.root.css',
-        'https://example.test/app/assets/qstyle.a.css',
-        'https://example.test/app/assets/qstyle.shared.css',
-      ].sort(),
-    );
+    expect(fetchCalls).toEqual([]);
   });
+
+  it('shipped string is a no-op without the marker (dev: no routes.json fetch)', async (): Promise<void> => {
+    const links = await freshLinks();
+    const fetchCalls: string[] = [];
+    vi.stubGlobal('fetch', (input: unknown): Promise<never> => {
+      fetchCalls.push(String(input));
+      return Promise.reject(new Error('should not fetch'));
+    });
+    vi.stubGlobal('document', {
+      baseURI: 'https://example.test/app/',
+      querySelector: (): null => null, // marker 無し
+      querySelectorAll: (): never[] => [],
+      addEventListener: (): void => undefined,
+    });
+    vi.stubGlobal('location', { pathname: '/', origin: 'https://example.test' });
+    vi.stubGlobal('history', {
+      pushState: (): void => undefined,
+      replaceState: (): void => undefined,
+    });
+    vi.stubGlobal('window', { addEventListener: (): void => undefined });
+    runBootstrap(links, true);
+    await flush(1);
+    expect(fetchCalls).toEqual([]);
+  });
+
+  for (const [implName, useString] of [
+    ['reference implementation', false],
+    ['shipped string', true],
+  ] as const) {
+    it(`${implName} injects current route styles and follows pushState navigation`, async (): Promise<void> => {
+      const links = await freshLinks();
+      const { injected, historyStub } = installNavDom();
+      installRoutesManifest(MANIFEST_A);
+      runBootstrap(links, useString);
+      await flush();
+      // 初回適用: '/' の asset 1 件。
+      expect(injected.map((l) => l.href)).toEqual([
+        'https://example.test/app/assets/qstyle.root.css',
+      ]);
+      // pushState navigation で '/a' の assets が追加される (共有 chunk の重複なし)。
+      historyStub.pushState({}, '', '/a');
+      await flush();
+      expect(injected.map((l) => l.href).sort()).toEqual(
+        [
+          'https://example.test/app/assets/qstyle.root.css',
+          'https://example.test/app/assets/qstyle.a.css',
+          'https://example.test/app/assets/qstyle.shared.css',
+        ].sort(),
+      );
+    });
+
+    it(`${implName} resolves [param] patterns on client navigation (RTE-004)`, async (): Promise<void> => {
+      const links = await freshLinks();
+      const { injected } = installNavDom('/item/42');
+      installRoutesManifest({
+        version: 1,
+        entries: [{ route: '/item/[id]', assets: ['assets/qstyle.item.css'] }],
+      });
+      runBootstrap(links, useString);
+      await flush();
+      // exact 不一致でも pattern 照合で解決する (SSR の resolveRouteLinks と等価)。
+      expect(injected.map((l) => l.href)).toEqual([
+        'https://example.test/app/assets/qstyle.item.css',
+      ]);
+    });
+  }
+
 });
 
 describe('prefetchRouteStyles (R1.7)', () => {

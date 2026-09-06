@@ -221,17 +221,207 @@ function assetHref(asset: string): string {
 const PREFETCH_MARKER = 'qstyle:prefetch';
 
 /**
- * R1.5/R1.7: client navigation 監視 + prefetch の実体。`useVisibleTaskQrl` に
- * `_qrlSync` で登録する自己完結 bootstrap。
+ * R1.5/R1.7 の出荷 artifact: client で実行される bootstrap の source。
+ * 手書きの文字列リテラルであり、bundler の変換を一切受けない
+ * (template literal・`${` を含まない。test が保証する)。
  *
- * なぜ sync QRL か: 本 package は qwik optimizer を通らず tsdown で build されるため、
- * `inlinedQrl` タスクは chunk 解決不能で SSR/SSG シリアライズ時に Q14
- * (qrlMissingChunk) で落ちる。sync QRL は fn source が HTML に埋め込まれて
+ * なぜ関数の `.toString()` ではないのか: `_qrlSync(fn)` は fn の source を
+ * そのまま HTML に埋め込むが、app build の bundler (esbuild keepNames 等) が
+ * fn 本体へ `__name(...)` のような helper 呼び出しを注入すると、定義を伴わず
+ * source だけが埋め込まれ、resume 時に `ReferenceError: __name` で落ちる
+ * (haven-web preview で実証済み)。文字列なら downstream の変換対象外のため
+ * この種の壊れ方が構造的に起きない。
+ *
+ * 形式の制約 (qwik の sync QRL 仕様): `_qrlSync(fn, serialized)` の
+ * serialized は完全な function としてそのまま埋め込まれ、client で式として
+ * eval される。文の並びだけでは `{...}` が object literal と解釈され
+ * `Unexpected identifier` になるため、全体を `function(){...}` の無名関数式
+ * で包む。test が `new Function('return (' + SOURCE + ')')` でこの形式を固定する。
+ *
+ * 規律: `qstyleRouteBootstrap` (下の TS 実装。型付きの参照実装) と等価に保つ。
+ * links.test.ts が同一 scenario を両方に流して等価性を固定する。
+ * 変更時は両方を同時に変えること。
+ */
+export const QSTYLE_ROUTE_BOOTSTRAP_SOURCE: string = [
+  'function(){',
+  'var marker = document.querySelector(\'meta[name="qstyle:prefetch"]\');',
+  'if (marker === null) return;',
+  'function markerAttr(name) {',
+  '  return typeof marker.getAttribute === \'function\' ? marker.getAttribute(name) : null;',
+  '}',
+  'var rawBase = markerAttr(\'data-qstyle-base\');',
+  'var basePath = (rawBase !== null && rawBase.charAt(0) === \'/\') ? ((rawBase.charAt(rawBase.length - 1) === \'/\') ? rawBase : rawBase + \'/\') : \'/\';',
+  'var origin = location.origin;',
+  'var base = origin + basePath;',
+  'function toUrl(file) {',
+  '  try { return new URL(file, base).toString(); } catch (e) { return null; }',
+  '}',
+  'var manifestPromise = null;',
+  'function loadManifest() {',
+  '  if (manifestPromise === null) {',
+  '    manifestPromise = fetch(new URL(\'qstyle.routes.json\', base).toString()).then(function (res) { return res.ok ? res.json() : null; }).then(function (value) {',
+  '      if (typeof value !== \'object\' || value === null) return null;',
+  '      if (value.version !== 1 || !Array.isArray(value.entries)) return null;',
+  '      return { entries: value.entries };',
+  '    }).catch(function () { return null; });',
+  '  }',
+  '  return manifestPromise;',
+  '}',
+  'var pending = new Map();',
+  'function hasLink(href) {',
+  '  if (document.querySelector(\'link[data-qstyle-href="\' + href.replace(/"/g, \'%22\') + \'"]\') !== null) return true;',
+  '  var existing = document.querySelectorAll(\'link[data-qstyle-href]\');',
+  '  for (var i = 0; i < existing.length; i++) {',
+  '    var marked = existing[i].getAttribute(\'data-qstyle-href\');',
+  '    if (marked === null) continue;',
+  '    try { if (new URL(marked, base).toString() === href) return true; } catch (e) {}',
+  '  }',
+  '  return false;',
+  '}',
+  'function ensure(href) {',
+  '  if (hasLink(href)) return Promise.resolve();',
+  '  var ongoing = pending.get(href);',
+  '  if (ongoing !== undefined) return ongoing;',
+  '  var load = new Promise(function (resolve) {',
+  '    if (hasLink(href)) { resolve(); return; }',
+  '    var link = document.createElement(\'link\');',
+  '    link.rel = \'stylesheet\';',
+  '    link.href = href;',
+  '    link.setAttribute(\'data-qstyle-href\', href);',
+  '    link.onload = function () { resolve(); };',
+  '    link.onerror = function () { resolve(); };',
+  '    document.head.appendChild(link);',
+  '  });',
+  '  pending.set(href, load);',
+  '  load.then(function () { pending.delete(href); });',
+  '  return load;',
+  '}',
+  'function isPattern(route) {',
+  '  var segs = route.split(\'/\');',
+  '  for (var i = 0; i < segs.length; i++) { if (/^\\[[^\\]/]+\\]$/.test(segs[i])) return true; }',
+  '  return false;',
+  '}',
+  'function trimSlash(p) { return (p.length > 1 && p.charAt(p.length - 1) === \'/\') ? p.slice(0, -1) : p; }',
+  'function matchPattern(pattern, pathname) {',
+  '  var a = trimSlash(pattern).split(\'/\');',
+  '  var b = trimSlash(pathname).split(\'/\');',
+  '  if (a.length !== b.length) return false;',
+  '  for (var i = 0; i < a.length; i++) {',
+  '    if (/^\\[[^\\]/]+\\]$/.test(a[i])) continue;',
+  '    if (a[i] !== b[i]) return false;',
+  '  }',
+  '  return true;',
+  '}',
+  'function assetsFor(entries, pathname) {',
+  '  var path = pathname.length === 0 ? \'/\' : pathname;',
+  '  var candidates = (path === \'/\') ? [\'/\'] : (path.charAt(path.length - 1) === \'/\' ? [path, path.slice(0, -1)] : [path, path + \'/\']);',
+  '  var i, j, entry, assets, out;',
+  '  for (i = 0; i < candidates.length; i++) {',
+  '    for (j = 0; j < entries.length; j++) {',
+  '      entry = entries[j];',
+  '      if (typeof entry !== \'object\' || entry === null) continue;',
+  '      if (entry.route !== candidates[i] || !Array.isArray(entry.assets)) continue;',
+  '      out = [];',
+  '      for (var k = 0; k < entry.assets.length; k++) { if (typeof entry.assets[k] === \'string\') out.push(entry.assets[k]); }',
+  '      return out;',
+  '    }',
+  '  }',
+  '  for (i = 0; i < candidates.length; i++) {',
+  '    for (j = 0; j < entries.length; j++) {',
+  '      entry = entries[j];',
+  '      if (typeof entry !== \'object\' || entry === null) continue;',
+  '      if (typeof entry.route !== \'string\' || !isPattern(entry.route)) continue;',
+  '      if (!Array.isArray(entry.assets)) continue;',
+  '      if (!matchPattern(entry.route, candidates[i])) continue;',
+  '      out = [];',
+  '      for (var k = 0; k < entry.assets.length; k++) { if (typeof entry.assets[k] === \'string\') out.push(entry.assets[k]); }',
+  '      return out;',
+  '    }',
+  '  }',
+  '  return [];',
+  '}',
+  'function applyAssets(assets) {',
+  '  var hrefs = [];',
+  '  for (var i = 0; i < assets.length; i++) {',
+  '    var href = toUrl(assets[i]);',
+  '    if (href !== null && hrefs.indexOf(href) < 0) hrefs.push(href);',
+  '  }',
+  '  Promise.all(hrefs.map(function (h) { return ensure(h); }));',
+  '}',
+  'function applyRoute(pathname) {',
+  '  loadManifest().then(function (manifest) {',
+  '    if (manifest === null) return;',
+  '    applyAssets(assetsFor(manifest.entries, pathname));',
+  '  });',
+  '}',
+  'var historyRef = history;',
+  'var origPushState = historyRef.pushState;',
+  'var origReplaceState = historyRef.replaceState;',
+  'historyRef.pushState = function () {',
+  '  var result = origPushState.apply(this, arguments);',
+  '  applyRoute(location.pathname);',
+  '  return result;',
+  '};',
+  'historyRef.replaceState = function () {',
+  '  var result = origReplaceState.apply(this, arguments);',
+  '  applyRoute(location.pathname);',
+  '  return result;',
+  '};',
+  'window.addEventListener(\'popstate\', function () { applyRoute(location.pathname); });',
+  'applyRoute(location.pathname);',
+  'var strategy = markerAttr(\'content\');',
+  'if (strategy === null) strategy = \'none\';',
+  'if (strategy === \'load\') {',
+  '  var schedule = (typeof requestIdleCallback === \'function\') ? function (cb) { requestIdleCallback(function () { cb(); }); } : function (cb) { setTimeout(cb, 200); };',
+  '  schedule(function () {',
+  '    loadManifest().then(function (manifest) {',
+  '      if (manifest === null) return;',
+  '      var all = [];',
+  '      for (var i = 0; i < manifest.entries.length; i++) {',
+  '        var entry = manifest.entries[i];',
+  '        if (typeof entry !== \'object\' || entry === null) continue;',
+  '        if (!Array.isArray(entry.assets)) continue;',
+  '        for (var j = 0; j < entry.assets.length; j++) { if (typeof entry.assets[j] === \'string\') all.push(entry.assets[j]); }',
+  '      }',
+  '      applyAssets(all);',
+  '    });',
+  '  });',
+  '} else if (strategy === \'hover\') {',
+  '  document.addEventListener(\'pointerover\', function (event) {',
+  '    var target = event.target;',
+  '    if (typeof target !== \'object\' || target === null) return;',
+  '    if (typeof target.closest !== \'function\') return;',
+  '    var anchor = target.closest(\'a[href]\');',
+  '    if (typeof anchor !== \'object\' || anchor === null) return;',
+  '    if (typeof anchor.getAttribute !== \'function\') return;',
+  '    var hrefValue = anchor.getAttribute(\'href\');',
+  '    if (typeof hrefValue !== \'string\' || hrefValue.length === 0) return;',
+  '    var pathname = null;',
+  '    try {',
+  '      var url = new URL(hrefValue, base);',
+  '      if (url.origin === location.origin) pathname = url.pathname;',
+  '    } catch (e) { return; }',
+  '    if (pathname === null) return;',
+  '    applyRoute(pathname);',
+  '  });',
+  '}',
+  '}',
+].join('\n');
+
+/**
+ * R1.5/R1.7: client navigation 監視 + prefetch の実体 (参照実装)。
+ * 実行時には `QSTYLE_ROUTE_BOOTSTRAP_SOURCE` (上の手書き文字列) が
+ * `_qrlSync` の serialize source として HTML に埋め込まれる。
+ * この TS 関数は型付きの参照実装であり、unit test (`links.test.ts`) と
+ * dev での直接実行に使う。両者の等価性は同一 scenario の test で固定する。
+ *
+ * なぜ sync QRL か: `inlinedQrl` タスクは chunk 解決不能で SSR/SSG シリアライズ
+ * 時に Q14 (qrlMissingChunk) で落ちる。sync QRL は source が HTML に埋め込まれて
  * resume されるため server serializable。
  *
  * 自己完結の制約 (破ると client で名前解決できず crash する):
  * - module scope の import / closure 変数を参照しない (DOM + 引数 + local のみ)。
- *   下の source-lint test (`qstyleRouteBootstrap` の toString 検査) が保証する。
+ *   下の source-lint test が関数と文字列の両方に適用される。
  * - 設定 (prefetch 戦略) は `<QstyleLinks />` が描画する meta marker から読む。
  *   (sync QRL は capture を持てないため)
  * - manifest 取得・link 注入の規則は `./client` + `./prefetch` と同値に保つ
@@ -333,14 +523,27 @@ export function qstyleRouteBootstrap(): void {
         : path.endsWith('/')
           ? [path, path.slice(0, -1)]
           : [path, `${path}/`];
+    const pick = (assets: unknown): string[] =>
+      Array.isArray(assets)
+        ? assets.filter((asset: unknown): asset is string => typeof asset === 'string')
+        : [];
     for (const candidate of candidates) {
       for (const entry of entries) {
         if (typeof entry !== 'object' || entry === null) continue;
         const record = entry as { route?: unknown; assets?: unknown };
         if (record.route !== candidate || !Array.isArray(record.assets)) continue;
-        return record.assets.filter(
-          (asset: unknown): asset is string => typeof asset === 'string',
-        );
+        return pick(record.assets);
+      }
+    }
+    // RTE-004: `[param]` pattern 照合 (QSTYLE_ROUTE_BOOTSTRAP_SOURCE と等価に保つ)。
+    for (const candidate of candidates) {
+      for (const entry of entries) {
+        if (typeof entry !== 'object' || entry === null) continue;
+        const record = entry as { route?: unknown; assets?: unknown };
+        if (typeof record.route !== 'string' || !isRoutePattern(record.route)) continue;
+        if (!Array.isArray(record.assets)) continue;
+        if (!matchRoutePattern(record.route, candidate)) continue;
+        return pick(record.assets);
       }
     }
     return [];
@@ -435,11 +638,15 @@ export function qstyleRouteBootstrap(): void {
  * 通常は直接使わない (単体で有効化したい場合のみ export)。
  */
 export function useQstyleRouteStyles(prefetch: RouteStylePrefetch = 'none'): void {
-  // Q14 対応: inlinedQrl タスクは SSR/SSG で serialize 不能のため、自己完結な
-  // sync QRL (`qstyleRouteBootstrap`) を登録する。prefetch 戦略は DOM marker
-  // (`<QstyleLinks />` が描画) 経由で bootstrap が読むため、ここでは引数を使わない。
+  // Q14 対応: inlinedQrl タスクは SSR/SSG で serialize 不能のため sync QRL を
+  // 登録する。serialize される source は `QSTYLE_ROUTE_BOOTSTRAP_SOURCE`
+  // (手書き文字列) を明示指定する — `_qrlSync(fn)` の既定 (`fn.toString()`) は
+  // app build の bundler が helper (`__name` 等) を注入すると壊れる。
+  // prefetch 戦略は DOM marker 経由で bootstrap が読むため、ここでは引数を使わない。
   void prefetch;
-  useVisibleTaskQrl(_qrlSync(qstyleRouteBootstrap), { strategy: 'document-idle' });
+  useVisibleTaskQrl(_qrlSync(qstyleRouteBootstrap, QSTYLE_ROUTE_BOOTSTRAP_SOURCE), {
+    strategy: 'document-idle',
+  });
 }
 
 /** `<QstyleLinks />` の props (componentQrl の Record 制約のため type alias で定義)。 */
