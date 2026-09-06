@@ -1,6 +1,10 @@
 node_modules/
 dist/
 fixtures/lifecycle/server/
+fixtures/lifecycle/baseline/dist/
+fixtures/lifecycle/baseline/server/
+fixtures/lifecycle/baseline/src/
+fixtures/lifecycle/baseline/node_modules/
 *.tsbuildinfo
 coverage/
 playwright-report/

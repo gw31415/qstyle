@@ -1,6 +1,0 @@
-import{a as e}from"./q-CfRRF6cp.js";import{L as t,it as n,q as r,r as i}from"./q-Cf3-siM5.js";var a=r(`s_PJf4K4PL7Oc`),o=e=>e.status||500,s=`p0.status||500`,c=e=>e.message||``,l=`p0.message||""`,u=e=>String(e.status),d=`#006ce9`,f=`#713fc2`;a.s(()=>{let r=e(),i=r.message?`600px`:`300px`,a=r.status<500?d:f,u=`
-			body { color: ${a}; background-color: #fafafa; padding: 30px; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif; }
-			p { max-width: ${i}; margin: 60px auto 30px auto; background: white; border-radius: 4px; box-shadow: 0px 0px 50px -20px ${a}; overflow: hidden; }
-			strong { display: inline-block; padding: 15px; background: ${a}; color: white; }
-			span { display: inline-block; padding: 15px; }
-	`;return t(`p`,null,null,[t(`style`,{dangerouslySetInnerHTML:u},null,null,3,null),t(`strong`,null,null,n(o,[r],s),3,null),` `,t(`span`,null,null,n(c,[r],l),3,null)],1,`vY_0`)});var p=i(a);export{d as _auto_COLOR_400,f as _auto_COLOR_500,o as _auto__hf0,s as _auto__hf0_str,c as _auto__hf1,l as _auto__hf1_str,u as cacheKey,p as default};
