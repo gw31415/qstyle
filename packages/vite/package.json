@@ -1,6 +1,6 @@
 {
   "name": "@qstyle/vite",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Vite plugin that compiles Qwik styles into optimized CSS assets.",
   "license": "Apache-2.0",
   "repository": {

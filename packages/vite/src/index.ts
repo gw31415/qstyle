@@ -2546,6 +2546,14 @@ export function qstyle(
   const devTransformed = new Set<string>();
   /** dev の直近 transform 出力 (HMR の構造変化判定用。buildStart で reset)。 */
   const devCode = new Map<string, string>();
+  /**
+   * 構造変化時の遅延 full-reload の保留タイマー。連続保存でタイマーを
+   * 積み重ねると navigation が多重発火し (不具合 1 と同系の二重 navigation)、
+   * qwik:hmr bridge の chunk import を abort させる。最終編集から
+   * `devReloadDelayMs` 後に 1 回だけ送るよう debounce する。
+   * buildStart で reset (以下 `pendingReloadTimer` の clear)。
+   */
+  let pendingReloadTimer: ReturnType<typeof setTimeout> | undefined;
   /** serve mode では dev パイプライン (per-module CSS + HMR) を使う。 */
   let isDev = false;
   // plan.md §51: buildStart で 1 instance に reset する。plugin 生成直後の
@@ -2872,13 +2880,23 @@ export function qstyle(
         // そこで bridge の判定窓 (500ms) が完全に過ぎてから reload する。
         // 遅延中に qwik 側が自己修復した場合も、reload 後の状態は同一出力の
         // SSR になるため結果は常に整合する (冪等)。
-        setTimeout(() => {
+        // 連続保存では予約済みタイマーを作り直し (debounce)、最終編集から
+        // 遅延後に 1 回だけ送る。多重 navigation は qwik:hmr bridge の chunk
+        // import を abort させる (不具合 1 と同根) ため積み重ねてはならない。
+        // 各保存は qwik 側にも新たな qwik:hmr (独自の 500ms 窓) を発生させる
+        // ので、reload 時点は常に最後の編集基準でなければならない。
+        if (pendingReloadTimer !== undefined) clearTimeout(pendingReloadTimer);
+        pendingReloadTimer = setTimeout(() => {
+          pendingReloadTimer = undefined;
           try {
             sender?.send?.({ type: 'full-reload' });
           } catch {
             // socket shutdown などの best effort 失敗は無視する。
           }
         }, devReloadDelayMs);
+        // Node では保留タイマーで process を生かさない (test 終了の足止め防止)。
+        // ブラウザ的環境の number ハンドルには unref が無いため guarded。
+        (pendingReloadTimer as unknown as { unref?: () => void }).unref?.();
       }
     } catch {
       // best effort のため無視する。
@@ -2990,6 +3008,10 @@ export function qstyle(
       devKeys.clear();
       devTransformed.clear();
       devCode.clear();
+      if (pendingReloadTimer !== undefined) {
+        clearTimeout(pendingReloadTimer);
+        pendingReloadTimer = undefined;
+      }
       unitTagNames.clear();
       condUnitIds.clear();
       cssAssetPlanCache = null;

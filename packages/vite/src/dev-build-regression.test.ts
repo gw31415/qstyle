@@ -496,6 +496,35 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
     await flushReload();
     expect(sentTypes(sent)).toEqual(['update', 'update', 'full-reload']);
   });
+
+  it('HMR-117: 連続した構造変化でも full-reload は1回だけ (debounce)', async () => {
+    // 連続保存ごとにタイマーを積み重ねると navigation が多重発火し、
+    // qwik:hmr bridge の chunk import を abort させる (不具合 1 と同根)。
+    // 最終編集から遅延後に 1 回だけ送らなければならない。
+    const p = devPlugin({ devHmr: { reloadDelayMs: 25 } });
+    const file = '/src/rapid.tsx';
+    expect(
+      p.transform(`export const A = () => <div css={{ display: 'flex' }} />;`, file),
+    ).not.toBeNull();
+    const { server, sent } = trackingServer();
+    await p.handleHotUpdate({
+      file,
+      read: async () =>
+        `export const A = () => <><div css={{ display: 'flex' }} /><div css={{ color: 'red' }} /></>;`,
+      server,
+    });
+    await p.handleHotUpdate({
+      file,
+      read: async () =>
+        `export const A = () => <><div css={{ display: 'flex' }}>x</div><div css={{ color: 'red' }} /></>;`,
+      server,
+    });
+    // css-update は編集ごとに即時、full-reload は遅延中のためまだ来ない。
+    expect(sentTypes(sent)).toEqual(['update', 'update']);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    // debounce により full-reload は1回だけ (2 回送ってはならない)。
+    expect(sentTypes(sent)).toEqual(['update', 'update', 'full-reload']);
+  });
 });
 
 describe('DEV-101〜: configureServer (watcher 保護 + css middleware)', () => {
