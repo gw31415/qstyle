@@ -130,6 +130,18 @@ export interface QstyleOptions {
   readonly routes?: Record<string, readonly string[]> | 'auto' | undefined;
   readonly diagnostics?: 'silent' | 'warning' | 'error' | undefined;
   readonly debug?: boolean | undefined;
+  /**
+   * dev HMR の調整。構造変化 (occurrence 構造の変化) を含む編集では dev alias
+   * がずれるため、確実に整合する状態へ戻すには page reload が要る。reload は
+   * qwik の `qwik:hmr` (bridge) が 500ms 判定を行う**後**に送る。即時送ると
+   * bridge の再 render / chunk import と二重 navigation になり、QRL chunk の
+   * dynamic import が abort して "Importing a module script failed" +
+   * リロード不完了になる (0.1.0 の regression)。
+   */
+  readonly devHmr?: {
+    /** 構造変化検出から full-reload 送信までの遅延 ms (default 700)。 */
+    readonly reloadDelayMs?: number | undefined;
+  } | undefined;
 }
 
 export interface CollectedStyle {
@@ -2503,6 +2515,12 @@ export function qstyle(
   const promotion: 'never' | 'cost-based' | 'always' =
     options.runtimeStyles?.promotion ?? 'always';
   const debug = options.debug ?? false;
+  // dev HMR: 構造変化時の full-reload を qwik:hmr (bridge) の 500ms 判定の
+  // 後へ送るための遅延。0 にすると即時 (単体 test 用)。
+  const devReloadDelayMs: number = Math.max(
+    0,
+    Math.trunc(options.devHmr?.reloadDelayMs ?? 700),
+  );
 
   const collected = new Map<string, CollectedStyle>();
   const moduleToAtoms = new Map<string, string[]>();
@@ -2739,13 +2757,14 @@ export function qstyle(
    *   browser の `<link href="/virtual:qstyle/dev/...">` がリロードなしで差し替わる。
    * - dev の class 名は occurrence 固定の alias (`qd_...`) のため、宣言の増減・
    *   値変更だけでは出力が変わらず css-update のみで反映される。出力が変わった
-   *   場合 (occurrence 構造の変化・style prop の変化・css の増減) の DOM 更新は
-   *   qwik optimizer が送る `qwik:hmr` (bridge) に委ねる。ここで自前の
-   *   `full-reload` を重ねてはいけない: 同一ファイル変更に対して qwik 側も
-   *   `qwik:hmr` を送っており、reload が二重に走ると再 render 中の QRL chunk
-   *   dynamic import が abort し "Importing a module script failed" + リロード
-   *   不完了になる (0.1.1 修正。bridge 適用不能時は qwik 側が単発の fallback
-   *   reload を行うため、reload が完全に消えるわけではない)。
+   *   場合 (occurrence 構造の変化・style prop の変化・css の増減) は alias が
+   *   ずれるため、確実に整合する状態へ戻すには page reload が要る。ただし
+   *   reload は**即時**ではなく `devHmr.reloadDelayMs` (default 700ms) 後に送る:
+   *   同一変更に対し qwik optimizer が `qwik:hmr` を送っており、即時 reload は
+   *   bridge の再 render / chunk import と二重 navigation になり、QRL chunk の
+   *   dynamic import が abort して "Importing a module script failed" +
+   *   リロード不完了になる (0.1.0 の regression)。bridge の 500ms 判定後の
+   *   reload は冪等であり、常に整合した SSR 状態に収束させる。
    * - 無関係ファイルには干渉しない (HMR-008)。
    */
   const refreshDevCss = async (ctx: HmrContext): Promise<void> => {
@@ -2801,6 +2820,10 @@ export function qstyle(
       }
     }
     if (out === null && !wasManaged) return;
+    // 出力が変わった = occurrence 構造が変わった = dev alias がずれる =
+    // DOM 側の作り直しが要る (値のみの編集は出力不変で css-update だけで足りる)。
+    const next: string | undefined = devCode.get(file);
+    const structurallyChanged: boolean = out === null || !wasManaged || prev !== next;
     // virtual css を全部の env graph で無効化する (best effort)。
     const vid: string = devModuleId(file);
     const graphs: readonly unknown[] = [
@@ -2834,12 +2857,29 @@ export function qstyle(
       const timestamp: number =
         typeof ctx.timestamp === 'number' ? ctx.timestamp : Date.now();
       // `<link>` の差し替えを client に通知する (reload の有無にかかわらず無害)。
-      // 構造変化時の DOM 更新は qwik の `qwik:hmr` が担うため、ここで
-      // `full-reload` を重ねてはいけない (関数 header の注記を参照)。
       sender?.send?.({
         type: 'update',
         updates: [{ type: 'css-update', path: url, acceptedPath: url, timestamp }],
       });
+      if (structurallyChanged) {
+        // 構造変化では dev alias がずれるため、確実に整合する状態へ戻すには
+        // page reload が要る。ただし**即時**送ってはいけない: 同一変更に対し
+        // qwik optimizer が `qwik:hmr` を送っており、bridge は再 render と
+        // chunk 再取得 (500ms 判定) を行う。その最中に reload が走ると
+        // navigation が chunk の dynamic import を abort し
+        // "Importing a module script failed" + リロード不完了になる
+        // (0.1.0 の regression。haven-web で実証)。
+        // そこで bridge の判定窓 (500ms) が完全に過ぎてから reload する。
+        // 遅延中に qwik 側が自己修復した場合も、reload 後の状態は同一出力の
+        // SSR になるため結果は常に整合する (冪等)。
+        setTimeout(() => {
+          try {
+            sender?.send?.({ type: 'full-reload' });
+          } catch {
+            // socket shutdown などの best effort 失敗は無視する。
+          }
+        }, devReloadDelayMs);
+      }
     } catch {
       // best effort のため無視する。
     }

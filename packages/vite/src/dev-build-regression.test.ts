@@ -47,17 +47,23 @@ interface HmrPlugin extends Transformable {
 }
 
 const plugin = (
-  options: Parameters<typeof qstyleFactory>[0] = {
+  options: Parameters<typeof qstyleFactory>[0] = {},
+): HmrPlugin =>
+  qstyleFactory({
     backend: 'qwik-native',
     diagnostics: 'silent',
-  },
-): HmrPlugin => qstyleFactory(options)[0] as unknown as HmrPlugin;
+    devHmr: { reloadDelayMs: 0 },
+    ...options,
+  })[0] as unknown as HmrPlugin;
 
-const devPlugin = (options: Parameters<typeof qstyleFactory>[0] = { diagnostics: 'silent' }): HmrPlugin => {
+const devPlugin = (options: Parameters<typeof qstyleFactory>[0] = {}): HmrPlugin => {
   const p = plugin(options);
   p.configResolved({ command: 'serve', mode: 'development' });
   return p;
 };
+
+/** 遅延 full-reload (devHmr.reloadDelayMs) の発火を待つ macro task flush。 */
+const flushReload = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 5));
 
 /** graph 参照・無効化・送信を記録する fake server。 */
 function trackingServer(): {
@@ -154,19 +160,20 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
       expect(t.invalidated).toHaveLength(0);
       expect(t.sent).toHaveLength(0);
     }
-    // 管理済み: 再読込不能 = 更新ありとみなして invalidate + update
-    // (DOM 追随は qwik の qwik:hmr が担う)。
+    // 管理済み: 再読込不能 = 構造変化とみなして invalidate + update +
+    // 遅延 reload (alias 整合の復旧に DOM 作り直しが要るため)。
     const managed = `export const A = () => <div css={{ display: 'flex' }} />;`;
     expect(p.transform(managed, '/src/managed.tsx')).not.toBeNull();
     {
       const t = trackingServer();
       await p.handleHotUpdate({ file: '/src/managed.tsx', read: failing, server: t.server });
       expect(t.invalidated).toHaveLength(1);
-      expect(sentTypes(t.sent)).toEqual(['update']);
+      await flushReload();
+      expect(sentTypes(t.sent)).toEqual(['update', 'full-reload']);
     }
   });
 
-  it('HMR-105: read が無い管理済みファイルは更新扱いで css-update を送る', async () => {
+  it('HMR-105: read が無い管理済みファイルは構造変化とみなして遅延 reload する', async () => {
     const p = devPlugin();
     expect(
       p.transform(`export const A = () => <div css={{ display: 'flex' }} />;`, '/src/noread.tsx'),
@@ -174,10 +181,11 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
     const { server, invalidated, sent } = trackingServer();
     await p.handleHotUpdate({ file: '/src/noread.tsx', server });
     expect(invalidated).toHaveLength(1);
-    expect(sentTypes(sent)).toEqual(['update']);
+    await flushReload();
+    expect(sentTypes(sent)).toEqual(['update', 'full-reload']);
   });
 
-  it('HMR-106: css 削除は virtual css を空にする (DOM の class 除去は qwik:hmr が担う)', async () => {
+  it('HMR-106: css 削除は virtual css を空にし遅延 reload する (link 除去に DOM 更新が要る)', async () => {
     const p = devPlugin();
     const file = '/src/removed.tsx';
     const v1 = p.transform(`export const A = () => <div css={{ display: 'flex' }} />;`, file);
@@ -190,12 +198,13 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
       server,
     });
     expect(invalidated).toHaveLength(1);
-    expect(sentTypes(sent)).toEqual(['update']);
+    await flushReload();
+    expect(sentTypes(sent)).toEqual(['update', 'full-reload']);
     // devCss エントリは消え、link の refetch は空 CSS を返す (404 ではなく)。
     expect(p.load(`virtual:qstyle/dev/${key}`)).toBe('');
   });
 
-  it('HMR-107: css 以外の編集 (テキスト変更) は css-update のみ (DOM は qwik:hmr)', async () => {
+  it('HMR-107: css 以外の編集 (テキスト変更) は出力変化として遅延 reload する', async () => {
     const p = devPlugin();
     const file = '/src/textedit.tsx';
     expect(
@@ -207,12 +216,13 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
       read: async () => `export const A = () => <div css={{ display: 'flex' }}>b</div>;`,
       server,
     });
-    // devCode (変換後 JS) が変わるが、DOM 更新は qwik の qwik:hmr が担うため
-    // qstyle からは css-update のみ送る (0.1.1: 自前 full-reload は廃止)。
-    expect(sentTypes(sent)).toEqual(['update']);
+    // devCode (変換後 JS) が変わるため DOM 更新が要る。css-update は即時、
+    // full-reload は qwik:hmr bridge の判定窓 (500ms) 後に送る。
+    await flushReload();
+    expect(sentTypes(sent)).toEqual(['update', 'full-reload']);
   });
 
-  it('HMR-108: 先頭 occurrence 削除で alias がずれる (DOM 追随は qwik:hmr)', async () => {
+  it('HMR-108: 先頭 occurrence 削除で alias がずれると遅延 reload する (DOM 追随)', async () => {
     const p = devPlugin();
     const file = '/src/shift.tsx';
     const v1 = p.transform(
@@ -230,9 +240,9 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
       read: async () => `export const A = () => <><div css={{ color: 'blue' }} /></>;`,
       server,
     });
-    // occurrence slot が詰まるため残存要素の class が変わる。css は新 alias で
-    // 再生成され、DOM 側は qwik:hmr (chunk 再取得) が追随させる。
-    expect(sentTypes(sent)).toEqual(['update']);
+    // occurrence slot が詰まるため残存要素の class が変わる → reload が要る。
+    await flushReload();
+    expect(sentTypes(sent)).toEqual(['update', 'full-reload']);
     const v2 = p.transform(
       `export const A = () => <><div css={{ color: 'blue' }} /></>;`,
       file,
@@ -240,7 +250,7 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
     const after: string[] = [...(v2?.code.matchAll(/class="([^"]*)"/g) ?? [])].map(
       (m) => m[1] ?? '',
     );
-    // 残存 occurrence は slot 0 に詰まる (v1 先頭と同一 alias)。DOM は qwik:hmr で追随する。
+    // 残存 occurrence は slot 0 に詰まる (v1 先頭と同一 alias)。DOM は reload で追随する。
     expect(after).toEqual([before[0]]);
   });
 
@@ -401,7 +411,7 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
     expect(invalidated).toHaveLength(1);
   });
 
-  it('HMR-114: strict 破壊編集の re-transform 例外は握りつぶして更新経路に回す', async () => {
+  it('HMR-114: strict 破壊編集の re-transform 例外は握りつぶして reload 経路に回す', async () => {
     const p = devPlugin({ optimization: 'strict', diagnostics: 'silent' });
     const file = '/src/strict.tsx';
     expect(
@@ -415,7 +425,8 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
       server,
     });
     expect(invalidated).toHaveLength(1);
-    expect(sentTypes(sent)).toEqual(['update']);
+    await flushReload();
+    expect(sentTypes(sent)).toEqual(['update', 'full-reload']);
   });
 
   it('HMR-115: .jsx も HMR 対象になる', async () => {
@@ -470,7 +481,20 @@ describe('HMR-101〜: handleHotUpdate の分岐網羅', () => {
     expect(containerCalls).toHaveLength(1);
     // devCss は完全パイプラインの出力 (上流変換後の css prop) を反映する。
     expect(p.load(`virtual:qstyle/dev/${key}`)).toContain('color:red');
+    // この編集は値変更 (devCode 不変) のため css-update のみ。即時の
+    // full-reload は送らない ( qwik:hmr との二重 navigation race の元)。
     expect(sentTypes(sent)).toEqual(['update']);
+    // 構造変化 (occurrence 増) を続けて行うと、css-update の即時送信に加え、
+    // 遅延付きの full-reload が**後から** 1 回だけ来る (即時は禁止)。
+    await p.handleHotUpdate({
+      file,
+      read: async () =>
+        `export const A = () => <><div css={{ color: 'red' }} /><div css={{ background: 'blue' }} /></>;`,
+      server,
+    });
+    expect(sentTypes(sent)).toEqual(['update', 'update']);
+    await flushReload();
+    expect(sentTypes(sent)).toEqual(['update', 'update', 'full-reload']);
   });
 });
 
@@ -866,10 +890,10 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
       read: async () => `export const A = () => <div css={{ display: 'flex' }} />;`,
       server,
     });
-    // 未管理として扱われ、css-update を送る (古い devCode 比較はしない。
-    // DOM 側は qwik:hmr が追随させる)。
+    // 未管理として扱われ、出力変化あり → reload する (古い devCode 比較はしない)。
+    await flushReload();
     expect(invalidated).toHaveLength(1);
-    expect(sentTypes(sent)).toEqual(['update']);
+    expect(sentTypes(sent)).toEqual(['update', 'full-reload']);
   });
 
   it('BLD-105: rebuild しても pack css と manifest は同一になる (stale 混入なし)', () => {

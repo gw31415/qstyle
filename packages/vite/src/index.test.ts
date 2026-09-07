@@ -1487,7 +1487,11 @@ describe('qstyle dev mode + CSS HMR', () => {
     }) => Promise<void> | void;
   }
   const devPlugin = (): DevPlugin => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as DevPlugin;
+    const p = qstyle({
+      backend: 'qwik-native',
+      diagnostics: 'silent',
+      devHmr: { reloadDelayMs: 0 },
+    }) as unknown as DevPlugin;
     p.configResolved({ command: 'serve', mode: 'development' });
     return p;
   };
@@ -1592,12 +1596,11 @@ describe('qstyle dev mode + CSS HMR', () => {
     expect(update.updates[0]?.timestamp).toBe(1234);
   });
 
-  it('sends css-update once for newly added css (DOM follows via qwik:hmr)', async () => {
-    // css attribute を持たなかった component への追加では出力が変わるが、
-    // client へは css-update のみ送る。新 class の DOM への反映は
-    // qwik optimizer の `qwik:hmr` (bridge) が担うため、qstyle が自前の
-    // full-reload を送ると二重 navigation で QRL chunk import が abort する
-    // (0.1.1 修正)。
+  it('reloads after a delay for newly added css (alias shift needs a DOM rebuild)', async () => {
+    // css attribute を持たなかった component への追加では出力が変わる (構造変化)。
+    // css-update は即時に送り、full-reload は qwik:hmr bridge の判定窓 (500ms)
+    // が過ぎてから送る。即時 reload は bridge の chunk import と競合し
+    // "Importing a module script failed" + リロード不完了になる (0.1.0 regression)。
     const p = devPlugin();
     const invalidated: unknown[] = [];
     const sent: unknown[] = [];
@@ -1627,9 +1630,12 @@ describe('qstyle dev mode + CSS HMR', () => {
       server,
     });
     expect(invalidated).toHaveLength(1);
-    // css-update のみ (client channel)。
+    // css-update は即時。full-reload は遅延後に 1 回だけ (順序も固定)。
     expect(sent).toHaveLength(1);
     expect((sent[0] as { type: string }).type).toBe('update');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sent).toHaveLength(2);
+    expect((sent[1] as { type: string }).type).toBe('full-reload');
     // devCss が登録済み (link が付いた後の refetch が即座に CSS を返す)。
     const out = p.transform(added, '/src/dev-e.tsx');
     const key: string = (out?.code.match(/virtual:qstyle\/dev\/([\w.]+)/) ?? [])[1] ?? '';
