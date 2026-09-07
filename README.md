@@ -8,6 +8,7 @@ Qwik 向け Style Graph Compiler。`css` prop / `css()` / tagged template で書
 - `@qstyle/qwik` — authoring API (`css` object / tagged template / `StyleHandle`)
 - `@qstyle/core` — Style IR・canonicalization・hash・chunk planning (framework 非依存)
 - `@qstyle/inspector` — atom/residual/legacy のレポート整形
+- `@qstyle/unocss` — Tailwind 方式 `class` の build 時解決 (UnoCSS parse。optional)
 
 動作環境の詳細は [docs/requirements.md](docs/requirements.md) を参照。
 
@@ -36,6 +37,34 @@ export default defineConfig({
 ```tsx
 import { css } from '@qstyle/qwik';
 ```
+
+### Tailwind 方式 `class` の置換 (optional)
+
+`@qstyle/unocss` が自前の Vite plugin (`UnoCSS()`) を出す。
+引数は `@unocss/vite` と同じ物を受け付けるため、関数入替えだけで使える。
+`qstyle()` より前に置くと、`class` ユーティリティを `css` prop へ翻訳し、
+qstyle 本体の配管 (dev/HMR・chunk・asset) に載せる。`@unocss/vite` は不要。
+qstyle 本体はこの plugin の存在を知らない。
+
+```sh
+pnpm add @qstyle/unocss
+```
+
+```ts
+// vite.config.ts — UnoCSS() を入れ替えるだけ。引数は同じ。default import も同じ形
+import UnoCSS from '@qstyle/unocss';
+import presetWind4 from '@unocss/preset-wind4';
+// import UnoCSS from '@unocss/vite';
+plugins: [qwikRouter(), UnoCSS({ presets: [presetWind4()] }), qstyle(), qwikVite()],
+```
+
+```tsx
+<div class="flex gap-4 hover:bg-red-500" />
+// ↓ build/dev とも等価
+<div css={{ display: 'flex', gap: 'calc(var(--spacing) * 4)', '&:hover': { ... } }} />
+```
+
+詳細は [docs/unocss.md](docs/unocss.md)。
 
 ### `css` prop の型 (consumer 側設定)
 
