@@ -48,6 +48,13 @@ export interface ResolveOptions {
    * 返す (関連付け先の要素が無いリテラル走査用)。
    */
   readonly verbatimOnly?: boolean | undefined;
+  /**
+   * verbatim CSS の selector 書き換え表 (token → 短縮 alias)。
+   * 削減モードで JS 側の token を alias に置換した場合に渡す。
+   * matched token の参照のみ書き換え、unmatched (engine 未知・user CSS) は
+   * 原文のまま残す。atom 化 path には影響しない。
+   */
+  readonly aliases?: ReadonlyMap<string, string> | undefined;
 }
 
 /** `uno.config.ts` を UnoCSS 自身の loader で読む (`@unocss/vite` と同一意味論)。
@@ -68,7 +75,14 @@ export async function createUnoResolver(config: UserConfig): Promise<UnoResolver
   return {
     resolve(tokens: readonly string[], opts?: ResolveOptions): Promise<UnoResolveResult> {
       const unique: string[] = [...new Set(tokens)].sort();
-      const key: string = `${opts?.verbatimOnly === true ? 'v\0' : ''}${unique.join('\0')}`;
+      // ponytail: aliases は token の純関数 (aliasForUtilityToken) から作るため、
+      // 同一 token 集合への適用結果は map 実体によらず同一。key には解決集合に
+      // 属する分だけ畳み込む (module 毎の候補集合の違いを吸収する)。
+      const aliasDigest: string =
+        opts?.aliases === undefined
+          ? ''
+          : unique.map((t) => opts.aliases?.get(t) ?? '').join('\0');
+      const key: string = `${opts?.verbatimOnly === true ? 'v\0' : ''}${aliasDigest}\0${unique.join('\0')}`;
       const hit: Promise<UnoResolveResult> | undefined = memo.get(key);
       if (hit !== undefined) return hit;
       const pending: Promise<UnoResolveResult> = resolveTokens(uno, unique, opts);
@@ -465,7 +479,7 @@ async function resolveTokens(
   if (opts?.verbatimOnly === true) {
     return {
       atoms: [],
-      verbatimCss: assembleVerbatim(qualified, defaultText, tokenSet, unmatched),
+      verbatimCss: assembleVerbatim(qualified, defaultText, tokenSet, unmatched, opts?.aliases),
       unmatched: [...unmatched],
       globals: fullGlobals,
     };
@@ -571,7 +585,7 @@ async function resolveTokens(
   if (needsVerbatim) {
     return {
       atoms: [],
-      verbatimCss: assembleVerbatim(qualified, defaultText, tokenSet, unmatched),
+      verbatimCss: assembleVerbatim(qualified, defaultText, tokenSet, unmatched, opts?.aliases),
       unmatched: [...unmatched],
       globals: fullGlobals,
     };
@@ -610,7 +624,7 @@ async function resolveTokens(
     if (resolved === null) {
       return {
         atoms: [],
-        verbatimCss: assembleVerbatim(qualified, defaultText, tokenSet, unmatched),
+        verbatimCss: assembleVerbatim(qualified, defaultText, tokenSet, unmatched, opts?.aliases),
         unmatched: [...unmatched],
         globals: fullGlobals,
       };
@@ -625,7 +639,7 @@ async function resolveTokens(
       if (ai.property !== aj.property && orderRiskProperty(ai.property, aj.property)) {
         return {
           atoms: [],
-          verbatimCss: assembleVerbatim(qualified, defaultText, tokenSet, unmatched),
+          verbatimCss: assembleVerbatim(qualified, defaultText, tokenSet, unmatched, opts?.aliases),
           unmatched: [...unmatched],
           globals: fullGlobals,
         };
@@ -637,14 +651,119 @@ async function resolveTokens(
 }
 
 /**
+ * selector 内の class 参照を alias に書き換える (削減モード用)。
+ * quote 内 (属性値等) は触らない。escape 付き参照は unescape して照合し、
+ * 今回の解決集合に属する matched token のみ置換する
+ * (marker 用 `.group` 等の集合外・unmatched は原文維持。黙って意味を変えない)。
+ */
+function rewriteSelectorAliases(
+  selector: string,
+  aliases: ReadonlyMap<string, string>,
+  tokenSet: ReadonlySet<string>,
+  unmatched: ReadonlySet<string>,
+): string {
+  let out = '';
+  let i = 0;
+  while (i < selector.length) {
+    const ch: string = selector[i] ?? '';
+    if (ch === '"' || ch === "'") {
+      const quote: string = ch;
+      let j: number = i + 1;
+      while (j < selector.length) {
+        const c: string = selector[j] ?? '';
+        if (c === '\\') j += 2;
+        else if (c === quote) {
+          j += 1;
+          break;
+        } else j += 1;
+      }
+      out += selector.slice(i, j);
+      i = j;
+      continue;
+    }
+    if (ch === '.') {
+      const split: { cls: string; rest: string } | null = splitClassRemainder(
+        selector.slice(i),
+      );
+      if (split !== null && split.cls !== '') {
+        const token: string = unescapeClass(split.cls);
+        const alias: string | undefined = token.includes('\\')
+          ? undefined
+          : aliases.get(token);
+        if (alias !== undefined && tokenSet.has(token) && !unmatched.has(token)) {
+          out += `.${alias}`;
+          i += 1 + split.cls.length;
+          continue;
+        }
+      }
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+/** rule slice 内の宣言 block 開始 `{` を探す (quote 外)。無ければ -1。 */
+function ruleBodyOpen(slice: string): number {
+  let quote: string | null = null;
+  for (let i = 0; i < slice.length; i += 1) {
+    const ch: string = slice[i] ?? '';
+    if (quote !== null) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '{') return i;
+  }
+  return -1;
+}
+
+/**
+ * 1 rule を alias 書き換え済み text へ再構築する。
+ * selector のみ置換し、宣言 body は原文のまま。wrapper
+ * (`@media` 等) は外側に掛け直す (現状の verbatim 組立は wrapper を落とすが、
+ * 削減 path では正しさのため保持する)。
+ */
+function rebuildRuleText(
+  rule: RawRule,
+  defaultText: string,
+  aliases: ReadonlyMap<string, string>,
+  tokenSet: ReadonlySet<string>,
+  unmatched: ReadonlySet<string>,
+): string {
+  const slice: string = defaultText.slice(rule.start, rule.end);
+  const open: number = ruleBodyOpen(slice);
+  if (open < 0) return slice;
+  const selectors: string[] = rule.selectors.map((s) =>
+    rewriteSelectorAliases(s, aliases, tokenSet, unmatched),
+  );
+  let inner: string = `${selectors.join(',')}${slice.slice(open)}`;
+  for (let k: number = rule.wrappers.length - 1; k >= 0; k -= 1) {
+    const wrapper = rule.wrappers[k] as CssWrapper;
+    inner =
+      wrapper.prelude === ''
+        ? `@${wrapper.kind}{${inner}}`
+        : `@${wrapper.kind} ${wrapper.prelude}{${inner}}`;
+  }
+  return inner;
+}
+
+/**
  * matched token の rules を出力順に原文連結する (verbatim 用)。
  * unmatched の rules は存在しない。重複 slice は除く。
+ * aliases 付きの場合は selector のみ書き換えて再構築する
+ * (無しの場合と byte 同一にするため、無しの場合は原文 slice をそのまま使う)。
  */
 function assembleVerbatim(
   rules: readonly RawRule[],
   defaultText: string,
   tokenSet: ReadonlySet<string>,
   unmatched: ReadonlySet<string>,
+  aliases?: ReadonlyMap<string, string> | undefined,
 ): string {
   const seen = new Set<string>();
   const parts: string[] = [];
@@ -663,7 +782,11 @@ function assembleVerbatim(
     const key: string = `${rule.start}:${rule.end}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    parts.push(defaultText.slice(rule.start, rule.end));
+    parts.push(
+      aliases === undefined
+        ? defaultText.slice(rule.start, rule.end)
+        : rebuildRuleText(rule, defaultText, aliases, tokenSet, unmatched),
+    );
   }
   return parts.join('\n');
 }

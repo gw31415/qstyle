@@ -6,7 +6,8 @@
 // `@unocss/vite` との入れ替え用に、本家の公開値をそのまま出す。
 // default だけは置換本体 (`UnoCSS`) が取る。
 export { tokenizeClassAttr } from './tokenize.js';
-export { collectLiteralSpans, collectLiteralTokens } from './plugin.js';
+export { collectLiteralSpans, collectLiteralTokens, findDynamicClassExprs } from './plugin.js';
+export { aliasForUtilityToken } from './plugin.js';
 export { createUnoResolver, loadUnoConfig, orderRiskProperty } from './resolve.js';
 export type { UnoGlobals, UnoResolveResult, UnoResolver } from './resolve.js';
 export type { UnoGenerator, UserConfig } from 'unocss';

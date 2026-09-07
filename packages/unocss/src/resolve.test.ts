@@ -169,3 +169,52 @@ describe('resolve', () => {
     expect(out.atoms.filter((a) => a.property === 'line-height')).toHaveLength(1);
   });
 });
+
+describe('resolve aliases', () => {
+  it('rewrites verbatim selectors without changing declarations', async () => {
+    const uno = await resolver();
+    const plain = await uno.resolve(['divide-y']);
+    expect(plain.verbatimCss).toContain('.divide-y');
+    const aliased = await uno.resolve(['divide-y'], {
+      verbatimOnly: true,
+      aliases: new Map([['divide-y', 'qu_12345678']]),
+    });
+    expect(aliased.unmatched).toEqual([]);
+    expect(aliased.verbatimCss).not.toContain('.divide-y');
+    expect(aliased.verbatimCss).toContain('.qu_12345678');
+    // 宣言内容は同一 (border 幅の指定が残る)。
+    expect(aliased.verbatimCss).toContain('border-top-width');
+  });
+
+  it('keeps unmapped and unmatched refs as-is', async () => {
+    const uno = await resolver();
+    // group-hover は祖先 `.group` (unmatched) と対象 token の複合 selector。
+    // alias 表に `group` が含まれていても、当該解決集合に無いため書換えない。
+    const out = await uno.resolve(['group-hover:flex'], {
+      verbatimOnly: true,
+      aliases: new Map([
+        ['group-hover:flex', 'qu_aaaaaaaa'],
+        ['group', 'qu_bbbbbbbb'],
+      ]),
+    });
+    expect(out.unmatched).toEqual([]);
+    expect(out.verbatimCss).toContain('.qu_aaaaaaaa');
+    expect(out.verbatimCss).not.toContain('.qu_bbbbbbbb');
+    // marker の `.group` は unmatched のため原文維持。
+    expect(out.verbatimCss).toContain('.group');
+  });
+
+  it('does not touch unmatched tokens even when aliased', async () => {
+    const uno = await resolver();
+    const out = await uno.resolve(['flex', 'my-card'], {
+      verbatimOnly: true,
+      aliases: new Map([
+        ['flex', 'qu_bbbbbbbb'],
+        ['my-card', 'qu_cccccccc'],
+      ]),
+    });
+    expect(out.unmatched).toEqual(['my-card']);
+    expect(out.verbatimCss).toContain('.qu_bbbbbbbb');
+    expect(out.verbatimCss).not.toContain('.flex');
+  });
+});

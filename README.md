@@ -64,6 +64,11 @@ plugins: [qwikRouter(), UnoCSS({ presets: [presetWind4()] }), qstyle(), qwikVite
 <div css={{ display: 'flex', gap: 'calc(var(--spacing) * 4)', '&:hover': { ... } }} />
 ```
 
+既定 (削減モード) では解決した utility 名を転送物から消す
+(静的 class は `css` へ、動的 class・verbatim 級は短縮 alias `qu_<hash>` へ)。
+実行時に class 名を参照するコードとの非互換はルールとして許容する。
+従来通り class を残す互換モードは `UnoCSS({ preserveClass: true })`。
+
 詳細は [docs/unocss.md](docs/unocss.md)。
 
 ### `css` prop の型 (consumer 側設定)
