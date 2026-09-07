@@ -26,8 +26,29 @@ describe('keyframes at-rule helpers', () => {
   it('parses @font-face / @property keys', () => {
     expect(parseGlobalAtRuleKey('@font-face')).toEqual({ at: 'font-face', prelude: '' });
     expect(parseGlobalAtRuleKey('@property --brand')).toEqual({ at: 'property', prelude: '--brand' });
+    expect(parseGlobalAtRuleKey('@property --brand-color_1')).toEqual({
+      at: 'property',
+      prelude: '--brand-color_1',
+    });
     expect(parseGlobalAtRuleKey('@property brand')).toBeNull();
     expect(parseGlobalAtRuleKey('@font-face x')).toBeNull();
+  });
+
+  it('rejects unsafe @property preludes via the shared custom property validator (release blocker 2)', () => {
+    // declaration / rule 境界を壊す prelude は受理しない。
+    expect(parseGlobalAtRuleKey('@property --x}body{color:red')).toBeNull();
+    expect(parseGlobalAtRuleKey('@property --a;b')).toBeNull();
+    expect(parseGlobalAtRuleKey('@property --a{')).toBeNull();
+    expect(parseGlobalAtRuleKey('@property --a<b')).toBeNull();
+    expect(parseGlobalAtRuleKey('@property --a"b')).toBeNull();
+    expect(parseGlobalAtRuleKey('@property --a b')).toBeNull();
+    // 保守的 ASCII grammar の範囲外。
+    expect(parseGlobalAtRuleKey('@property --1a')).toBeNull();
+    expect(parseGlobalAtRuleKey('@property --a.b')).toBeNull();
+    expect(parseGlobalAtRuleKey('@property --日本')).toBeNull();
+    // 予約 namespace への @property 登録も拒否する。
+    expect(parseGlobalAtRuleKey('@property --qstyle')).toBeNull();
+    expect(parseGlobalAtRuleKey('@property --qstyle-hijack-0')).toBeNull();
   });
 
   it('parses @layer keys (dotted + anonymous)', () => {

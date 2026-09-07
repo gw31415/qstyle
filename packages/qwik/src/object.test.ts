@@ -28,6 +28,38 @@ describe('lowerStyleObject', () => {
     expect(out.atoms[0]?.property).toBe('--my-var');
   });
 
+  it('rejects unsafe custom property names instead of serializing them (release blocker 2)', () => {
+    // `--x}body{...` 等、declaration/rule 境界を壊す名前は atom 化せず residual +
+    // diagnostic に落とす (旧実装は `^--[^\s]+$$` で受理し CSS に到達できた)。
+    const escape = lowerStyleObject({ '--x}body{color:red': 'red' } as never);
+    expect(escape.atoms).toHaveLength(0);
+    expect(escape.residuals).toHaveLength(1);
+    expect(escape.residuals[0]?.reason).toBe('unsupported-syntax');
+    expect(escape.diagnostics.length).toBeGreaterThan(0);
+    for (const key of ['--a;b', '--a{', '--a}', '--a<b', '--a"b', '--a b', '--a\tb']) {
+      const out = lowerStyleObject({ [key]: 'red' } as never);
+      expect(out.atoms, key).toHaveLength(0);
+      expect(out.residuals, key).toHaveLength(1);
+    }
+    // 保守的 ASCII grammar の範囲外 (escape / non-ASCII / 数字開始 / 記号)。
+    for (const key of ['--1a', '--a.b', '--a(b)', '--a\\\\b', '--日本語']) {
+      const out = lowerStyleObject({ [key]: 'red' } as never);
+      expect(out.atoms, key).toHaveLength(0);
+      expect(out.residuals, key).toHaveLength(1);
+    }
+    // 予約 namespace (`--qstyle` / `--qstyle-*`) への user 定義も拒否する。
+    for (const key of ['--qstyle', '--qstyle-hijack-0']) {
+      const out = lowerStyleObject({ [key]: 'red' } as never);
+      expect(out.atoms, key).toHaveLength(0);
+      expect(out.residuals, key).toHaveLength(1);
+      expect(out.residuals[0]?.reason, key).toBe('unsupported-syntax');
+    }
+    // 既存の有効名は維持する。
+    const ok = lowerStyleObject({ '--brand-color': 'red', '--my-Var': 'x', '--a-b_c': 'y' });
+    expect(ok.atoms.map((a) => a.property).sort()).toEqual(['--a-b_c', '--brand-color', '--my-Var']);
+    expect(ok.residuals).toHaveLength(0);
+  });
+
   it('handles unitless / length / zero numbers (OBJ-006/007/008)', () => {
     const out = lowerStyleObject({ opacity: 0.5, gap: 8, margin: 0 });
     const byProp = Object.fromEntries(out.atoms.map((a) => [a.property, a.value]));

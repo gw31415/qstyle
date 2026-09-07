@@ -59,6 +59,15 @@ export type CssProp =
 
 - property 名は camelCase → kebab-case に正規化する (`backgroundColor` → `background-color`)。
   `ms` 始まりのみ小文字 vendor prefix として扱う (`msFlexAlign` → `-ms-flex-align`)。
+- custom property 名は共有 validator (`@qstyle/core` の `isValidCustomPropertyName`)
+  で検証する。保守的 ASCII grammar `^--[A-Za-z_][A-Za-z0-9_-]*$` に一致し、かつ
+  予約 namespace (`--qstyle` / `--qstyle-*`) を含まない名前のみ有効:
+  - 有効な既存名の例: `--brand-color` / `--my-Var` / `--a-b_c` / `--_x`。
+  - 拒否されるもの: `--x}body{...` / `--a;b` / `--a<b` / quote・空白・制御文字混じり、
+    `--a.b` / `--a(b)` / `--1a` 等の記号・数字開始、CSS escape (`--a\30`),
+    non-ASCII (`--日本語`)、および `--qstyle` 予約 namespace。
+  - escape と non-ASCII 名の拒否は意図的 (serialization は名前を escape しないため)。
+    必要になった場合は grammar を拡張するバージョンアップとして扱う。
 - 数値: unitless property (一覧は `@qstyle/core` の `UNITLESS_PROPERTIES`。
   `opacity`・`z-index`・`font-weight`・`line-height`・`flex` 系・`order` 等) はそのまま、
   それ以外の length 系は `px` を補完する (`gap: 8` → `gap:8px`)。`0` は単位なし (`margin: 0` → `margin:0`)。
@@ -71,6 +80,7 @@ export type CssProp =
 - `null` / `undefined` / 真偽値は無視する。`__proto__` / `constructor` / `prototype` キーは無視＋警告する。
 - 次は受け付けず residual (`unsupported-syntax`) + 警告になる:
   - property 名として不正なもの (大文字・空白混じり。`--*` 以外)
+  - 上記 custom property grammar に一致しない `--*` 名 (共有 validator が一元化)
   - `behavior` / `-moz-binding` property、`expression(` / `url(javascript:` を含む値
   - quote・`url()` の外側で `<` `>` `;` `{` `}` を含む値
 
@@ -134,7 +144,9 @@ css({
   フレームは数値順にソートして emit する (`from`=0、`to`=100)。
 - フレーム内・`@font-face` / `@property` 内の宣言は static な string/number のみ。
   interpolation・handle・ネスト混じりは block 全体が residual になる。空 block も residual。
-- `@property` の prelude は `--*` のみ。`@font-face` の prelude は空のみ。
+- `@property` の prelude は有効な custom property 名 (`--*`) のみ。共有 validator
+  (予約 namespace 含む) に一致しない prelude は residual になる。`@font-face` の
+  prelude は空のみ。
 - 出力名は内容 hash でグローバル安定 (`@keyframes qkf_xxxxxxxx`、`qg_xxxxxxxx` 相当の global)。
   同一内容は別名でも同一出力に重複排除される。同名で内容が異なる定義は先勝ち＋警告する。
 - `animation` / `animation-name` 値中の定義名トークン (空白・カンマ区切りの完全一致) は
@@ -193,6 +205,8 @@ spread・comment 混じりは parse 不能として untouched になる。
 ## untouched と residual
 
 最適化不能箇所は書き換えず残し、理由を `ResidualRuleNode.reason` に記録する。
+**untouched は runtime fallback ではない** — Qwik には runtime `css` prop 実装が
+存在しないため、untouched で残った `css={...}` の style は実行時に失われる。
 実際に emit される理由は次の4種:
 
 - `unsupported-selector` — 対応外セレクタ・`&` 再出現等
@@ -203,7 +217,16 @@ spread・comment 混じりは parse 不能として untouched になる。
 (`shorthand-ordering` / `source-order-sensitive` / `third-party-preservation` /
 `unknown` は将来用の予約語彙で、現状 emit されない。)
 
-`diagnostics` option (`silent` / `warning` (既定) / `error`) に従い警告・throw する。
-`optimization: 'strict'` は最適化不能箇所を compile error にする。
+`diagnostics` option (`silent` / `warning` / `error`) に従い警告・throw する。
+既定は **build では `'error'`** (untouched = style 損失のため fail-closed)、
+dev では `'warning'`。`'warning'` / `'silent'` を build で明示指定するのは
+migration 期のみの legacy mode (styles が失われ得る)。詳細は
+[options.md](options.md#diagnostics-build-既定-error--dev-既定-warning)。
+`optimization: 'strict'` は最適化不能箇所を compile error にする
+(コマンドによらず常時)。
 `optimization: 'preserve'` は atomic 化せず宣言順のまま 1 block 化する
 (順序依存ペアは untouched)。
+
+なお、異なる入力が同じ生成 id (class / asset 名 / keyframes 名 / slot 変数名等)
+になった場合は `diagnostics` 設定にかかわらず build が失敗する
+(fail-closed な hash 衝突検出。同一入力の重複は従来どおり dedupe される)。

@@ -1,5 +1,5 @@
 import { canonicalProperty, classSelectors, fnv1aHex, wrapContextAtRules } from './atom.js';
-import { hasInvalidDeclarationChars } from './safety.js';
+import { hasInvalidDeclarationChars, isValidCustomPropertyName } from './safety.js';
 import type {
   OrderingConstraints,
   ParametricAtom,
@@ -68,6 +68,19 @@ export function createParametricAtom(input: CreateParametricAtomInput): Parametr
   const context: RuleContext = input.context ?? {};
   const ordering: OrderingConstraints = input.ordering ?? {};
   const provenance: readonly Provenance[] = input.provenance ?? [];
+
+  // release blocker 2: property 名は serialize されるため、正規経路 (各 lowering の
+  // 入力検証) を通らない呼び出しでも物理的に書けないようにする。custom property は
+  // 共有 validator に一元化 (予約 namespace を含めて拒否)。
+  if (property.startsWith('--')) {
+    if (!isValidCustomPropertyName(property)) {
+      throw new Error(
+        `createParametricAtom: invalid custom property name ${JSON.stringify(property)}`,
+      );
+    }
+  } else if (!/^[A-Za-z-][\w-]*$/.test(property)) {
+    throw new Error(`createParametricAtom: invalid property name ${JSON.stringify(property)}`);
+  }
 
   if (input.slots.length === 0) {
     throw new Error('createParametricAtom: at least one slot is required');

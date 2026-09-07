@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hashParametricAtom,
   hashStaticAtom,
+  isValidCustomPropertyName,
   serializeParametricDecl,
 } from '@qstyle/core';
 import { css, lowerStyleObject } from './index.js';
@@ -16,6 +17,56 @@ describe('lowerTaggedTemplate static', () => {
     const out = tag`display: flex; gap: 8px;`;
     expect(out.atoms).toHaveLength(2);
     expect(out.residuals).toHaveLength(0);
+  });
+
+  it('rejects unsafe custom property names via the shared validator (release blocker 2)', () => {
+    // scanner 構造レベルで壊れる名前 (`}` / quote 等) は従来どおり runtime item =
+    // residual に落ちる。構造は壊れないが grammar 外の名前 (`--a.b` / non-ASCII /
+    // 予約 namespace) は共有 validator が decl 化を拒否する (silent emit しない)。
+    const structural = tag`--x}body{color:red: red;`;
+    expect(structural.atoms).toHaveLength(0);
+    expect(structural.residuals.length).toBeGreaterThan(0);
+    const quoted = tag`--a"b: red;`;
+    expect(quoted.atoms).toHaveLength(0);
+    expect(quoted.residuals.length).toBeGreaterThan(0);
+    // grammar 外 (旧実装は `^--[^\s]+$` で受理してしまい CSS に出ていた)。
+    const dotted = tag`--a.b: red;`;
+    expect(dotted.atoms).toHaveLength(0);
+    expect(dotted.residuals.length).toBeGreaterThan(0);
+    const nonAscii = tag`--日本語: red;`;
+    expect(nonAscii.atoms).toHaveLength(0);
+    expect(nonAscii.residuals.length).toBeGreaterThan(0);
+    // 予約 namespace も拒否する。
+    const reserved = tag`--qstyle-hijack-0: red;`;
+    expect(reserved.atoms).toHaveLength(0);
+    expect(reserved.residuals.length).toBeGreaterThan(0);
+    // 既存の有効名は従来どおり受理する。
+    const ok = tag`--a-b_c: red; --my-Var: blue;`;
+    expect(ok.residuals).toHaveLength(0);
+    expect(ok.atoms.map((a) => a.property).sort()).toEqual(['--a-b_c', '--my-Var']);
+  });
+
+  it('rejects unsafe @property preludes in templates (release blocker 2)', () => {
+    // grammar 外 prelude は global 化せず residual に落ちる。
+    const dotted = tag`
+      @property --a.b { syntax: "*"; }
+    `;
+    expect(dotted.globals).toHaveLength(0);
+    expect(dotted.residuals.length).toBeGreaterThan(0);
+    const reserved = tag`
+      @property --qstyle-hijack { syntax: "*"; }
+    `;
+    expect(reserved.globals).toHaveLength(0);
+    expect(reserved.residuals.length).toBeGreaterThan(0);
+    // `}` 等の構造破壊文字は scanner レベルで落とされるが、壊れた名前が
+    // prelude として出力に残らないことを出力 shape で保証する。
+    const structural = tag`
+      @property --x}y { syntax: "*"; }
+    `;
+    for (const rule of structural.globals) {
+      expect(rule.at === 'font-face' || isValidCustomPropertyName(rule.prelude)).toBe(true);
+    }
+    expect(structural.residuals.length).toBeGreaterThan(0);
   });
 
   it('treats whitespace/comments differences as identical (TPL-002)', () => {

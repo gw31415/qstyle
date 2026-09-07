@@ -5,7 +5,9 @@ import {
   SHORTHAND_MAP,
   assignOrderingGroups,
   classifyDeclaration,
+  isReservedCustomPropertyName,
   isShorthand,
+  isValidCustomPropertyName,
   longhandsOf,
   needsOrderingGroup,
 } from './safety.js';
@@ -226,5 +228,75 @@ describe('classifyDeclaration', () => {
     expect(classifyDeclaration('--my var', 'x')).toEqual({
       residual: 'unsupported-syntax',
     });
+  });
+});
+
+describe('isValidCustomPropertyName (release blocker 2: 共有 validator)', () => {
+  it('既存の有効名は維持する', () => {
+    for (const name of ['--brand-color', '--my-Var', '--a-b_c', '--x', '--_x', '--x1', '--A', '--Q']) {
+      expect(isValidCustomPropertyName(name)).toBe(true);
+      expect(classifyDeclaration(name, 'red')).toBe('atomic');
+    }
+  });
+
+  it('declaration / rule 境界を壊す名前を拒否する', () => {
+    const dangerous = [
+      '--a}body{color:red',
+      '--a;b',
+      '--a{}',
+      '--a}',
+      '{--a',
+      '--a<b',
+      '--a"b',
+      "--a'b",
+      '--a b',
+      '--a\tb',
+      '--a\nb',
+      '--a\x00b',
+      '--a\x07b',
+    ];
+    for (const name of dangerous) {
+      expect(isValidCustomPropertyName(name)).toBe(false);
+      expect(classifyDeclaration(name, 'red')).toEqual({ residual: 'unsupported-syntax' });
+    }
+  });
+
+  it('保守的 ASCII grammar の範囲外 (escape / non-ASCII / 記号 / 数字開始) を拒否する', () => {
+    const rejected = [
+      '--', // prefix のみ
+      '--1a', // 数字開始
+      '---a', // 3 つ目の `-` で始まる ident は保守grammar対象外
+      '--a.b',
+      '--a(b)',
+      '--a\\b', // CSS escape
+      '--a/b',
+      '--a,b',
+      '--a=b',
+      '--a#b',
+      '--日本語',
+      '--a🎉',
+      '--a%20b',
+      'not-custom',
+      '',
+    ];
+    for (const name of rejected) {
+      expect(isValidCustomPropertyName(name)).toBe(false);
+    }
+    // property として classify した場合も residual に落ちる (silent emit しない)。
+    for (const name of ['--1a', '--a.b', '--a\\b', '--日本語', '---a']) {
+      expect(classifyDeclaration(name, 'red')).toEqual({ residual: 'unsupported-syntax' });
+    }
+  });
+
+  it('予約 namespace (`--qstyle` / `--qstyle-*`) を user 定義から拒否する (DYN-024)', () => {
+    expect(isReservedCustomPropertyName('--qstyle')).toBe(true);
+    expect(isReservedCustomPropertyName('--qstyle-abcdef-0')).toBe(true);
+    expect(isReservedCustomPropertyName('--qstyle-')).toBe(true);
+    expect(isReservedCustomPropertyName('--q-x')).toBe(false);
+    expect(isReservedCustomPropertyName('--qstylex')).toBe(false);
+    for (const name of ['--qstyle', '--qstyle-abcdef-0']) {
+      expect(isValidCustomPropertyName(name)).toBe(false);
+      expect(classifyDeclaration(name, 'red')).toEqual({ residual: 'unsupported-syntax' });
+    }
   });
 });

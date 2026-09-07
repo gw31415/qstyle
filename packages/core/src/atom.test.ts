@@ -10,6 +10,18 @@ describe('atom', () => {
     expect(canonicalProperty('--my-var')).toBe('--my-var');
   });
 
+  it('rejects unsafe custom property names at the public atom boundary (release blocker 2)', () => {
+    expect(() =>
+      createStaticAtom({ property: '--x}body{color:red', value: 'red' }),
+    ).toThrow(/invalid custom property name/);
+    expect(() => createStaticAtom({ property: '--qstyle-slot', value: 'red' })).toThrow(
+      /invalid custom property name/,
+    );
+    expect(createStaticAtom({ property: '--brand-color', value: 'red' }).property).toBe(
+      '--brand-color',
+    );
+  });
+
   it('kebab-cases vendor-prefixed properties with meaning intact (OBJ-004)', () => {
     // 大文字始まりの vendor prefix は通常の camelCase 規則で `-` が付く。
     expect(canonicalProperty('WebkitTransform')).toBe('-webkit-transform');

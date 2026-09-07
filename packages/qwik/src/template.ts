@@ -1,4 +1,4 @@
-import { createParametricAtom } from '@qstyle/core';
+import { createParametricAtom, isValidCustomPropertyName } from '@qstyle/core';
 import {
   buildGlobalAtRule,
   buildKeyframesRule,
@@ -119,7 +119,12 @@ function scanItems(scanner: Scanner, inBlock: boolean): ScannedItem[] | null {
       items.push({ kind: 'runtime' });
       return;
     }
-    if (prop.includes('\0') || !/^(?:--[^\s]+|[A-Za-z-][\w-]*)$/.test(prop)) {
+    // release blocker 2: custom property 名は core の共有 validator に一元化する
+    // (`--x}body{...` 等を decl として受理しない)。非 custom は従来の最小 grammar。
+    if (
+      prop.includes('\0') ||
+      !(prop.startsWith('--') ? isValidCustomPropertyName(prop) : /^[A-Za-z-][\w-]*$/.test(prop))
+    ) {
       items.push({ kind: 'runtime' });
       return;
     }

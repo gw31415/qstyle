@@ -1,7 +1,6 @@
 // @qstyle/core — Style IR / canonicalization / hashing / dedup / chunk planning
 // plan.md Part III, IV, VIII, IX の実装起点。Milestone 1 以降で拡張する.
 export const VERSION: string = '0.1.0-m1';
-
 export type {
   AnyAtom,
   AtRuleDecl,
@@ -21,7 +20,7 @@ export type {
   StyleNode,
   ValueTemplatePart,
 } from './ir.js';
-export { canonicalProperty, canonicalValue, classSelectors, createStaticAtom, fnv1aHex, hashStaticAtom, wrapContextAtRules } from './atom.js';
+export { canonicalProperty, canonicalValue, classSelectors, createStaticAtom, fnv1aHex, hashStaticAtom, staticAtomIdentity, wrapContextAtRules } from './atom.js';
 export type { CreateStaticAtomInput } from './atom.js';
 export {
   UNITLESS_PROPERTIES,
@@ -32,14 +31,24 @@ export {
 export { DedupRegistry } from './dedup.js';
 export type { DedupAddResult } from './dedup.js';
 export {
+  RESERVED_CUSTOM_PROPERTY_PREFIX,
+  RESERVED_CUSTOM_PROPERTY_ROOT,
   SHORTHAND_MAP,
   assignOrderingGroups,
   classifyDeclaration,
   hasInvalidDeclarationChars,
+  isReservedCustomPropertyName,
   isShorthand,
+  isValidCustomPropertyName,
   longhandsOf,
   needsOrderingGroup,
 } from './safety.js';
+export { IdentityRegistry, StyleCollisionError } from './collision.js';
+export type {
+  IdentityRegisterOptions,
+  IdentityRegisterResult,
+  StyleCollision,
+} from './collision.js';
 export {
   buildAtRuleDecls,
   buildGlobalAtRule,

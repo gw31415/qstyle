@@ -6,6 +6,8 @@ import { createRequire } from 'node:module';
 import {
   DEFAULT_CHUNK_OPTIONS,
   VERSION,
+  IdentityRegistry,
+  StyleCollisionError,
   assetFileName,
   buildRouteManifest,
   canonicalProperty,
@@ -16,6 +18,7 @@ import {
   fnv1aHex,
   hashParametricAtom,
   hashStaticAtom,
+  isValidCustomPropertyName,
   needsOrderingGroup,
   planChunks,
   recordComponentRoute,
@@ -550,8 +553,14 @@ export interface ParsedStyleLiteral {
 const DYNAMIC_EXPR_RE = /^[A-Za-z_$][\w$]*(?:(?:\.|\?\.)[A-Za-z_$][\w$]*|\[\d+\])*/;
 const DYNAMIC_EXPR_END_RE = /[\s,}]/;
 
-/** CSS property key (`width` / `--x` / `-webkit-transform`) の最小検証。 */
-const CSS_PROPERTY_RE = /^(?:--|-)?[A-Za-z][\w-]*$/;
+/** CSS property key (`width` / `--x` / `-webkit-transform`) の最小検証。
+ * custom property (`--*`) は core の共有 validator に委譲する
+ * (release blocker 2: `--x}body{...` 等を動的 property として受理しない)。 */
+const CSS_PROPERTY_RE = /^-?[A-Za-z][\w-]*$/;
+
+function isValidCssPropertyKey(key: string): boolean {
+  return key.startsWith('--') ? isValidCustomPropertyName(key) : CSS_PROPERTY_RE.test(key);
+}
 
 type ParsedValueResult = {
   readonly hasDynamic: boolean;
@@ -2181,7 +2190,7 @@ function resolveCssExprParts(
     const parsed: ParsedStyleLiteral | null = parseStyleObjectLiteralWithDynamics(text);
     if (parsed === null) return null;
     if (parsed.dynamics.some((d) => d.propPath.includes('.'))) return null;
-    if (parsed.dynamics.some((d) => !CSS_PROPERTY_RE.test(d.propPath))) return null;
+    if (parsed.dynamics.some((d) => !isValidCssPropertyKey(d.propPath))) return null;
     return [{ record: parsed.record, dynamics: parsed.dynamics, conditionals: parsed.conditionals, compounds: parsed.compounds }];
   }
   return null;
@@ -2275,11 +2284,11 @@ function countModuleStructures(
     const parsed = parseStyleObjectLiteralWithDynamics(code.slice(occ.braceOpen, occ.braceClose));
     if (parsed === null) continue;
     for (const d of parsed.dynamics) {
-      if (d.propPath.includes('.') || !CSS_PROPERTY_RE.test(d.propPath)) continue;
+      if (d.propPath.includes('.') || !isValidCssPropertyKey(d.propPath)) continue;
       bump(inlineStructKey(d.propPath, null));
     }
     for (const c of parsed.compounds) {
-      if (c.propPath.includes('.') || !CSS_PROPERTY_RE.test(c.propPath)) continue;
+      if (c.propPath.includes('.') || !isValidCssPropertyKey(c.propPath)) continue;
       bump(inlineStructKey(c.propPath, compoundSkeleton(c.segments)));
     }
   }
@@ -2289,11 +2298,11 @@ function countModuleStructures(
     for (const part of parts) {
       if (part.cond !== undefined || part.handleParametrics !== undefined) continue;
       for (const d of part.dynamics) {
-        if (d.propPath.includes('.') || !CSS_PROPERTY_RE.test(d.propPath)) continue;
+        if (d.propPath.includes('.') || !isValidCssPropertyKey(d.propPath)) continue;
         bump(inlineStructKey(d.propPath, null));
       }
       for (const c of part.compounds) {
-        if (c.propPath.includes('.') || !CSS_PROPERTY_RE.test(c.propPath)) continue;
+        if (c.propPath.includes('.') || !isValidCssPropertyKey(c.propPath)) continue;
         bump(inlineStructKey(c.propPath, compoundSkeleton(c.segments)));
       }
     }
@@ -2477,7 +2486,12 @@ export function qstyle(
   const optimization: OptimizationLevel = options.optimization ?? 'safe';
   // 既定は読み込み速度・キャッシュ優先: content-hash 付き immutable asset + route 分割。
   const backend: BackendKind = options.backend ?? 'css-asset';
-  const diagnosticsMode: 'silent' | 'warning' | 'error' = options.diagnostics ?? 'warning';
+  // release blocker 3: Qwik には runtime `css` prop 実装が無いため、untouched の
+  // `css={...}` は style が黙って消える fallback にはならない。publishable な成果物を
+  // 出す build では既定を 'error' に fail-closed にする。'warning' / 'silent' は
+  // migration 用の legacy mode として明示指定のみ残る (docs/options.md)。
+  // dev (serve) は既定 'warning' のまま (HMR で通常の Qwik path へ復帰できる)。
+  let diagnosticsMode: 'silent' | 'warning' | 'error' = options.diagnostics ?? 'warning';
   checkPeerVersionsOrThrow(diagnosticsMode);
   const strict: boolean = optimization === 'strict';
   // Level 0: parse・minify・exact rule dedup のみで atomic 化しない (§16)。
@@ -2492,6 +2506,12 @@ export function qstyle(
 
   const collected = new Map<string, CollectedStyle>();
   const moduleToAtoms = new Map<string, string[]>();
+  /**
+   * release blocker 1: 生成 identity (unit/block/pack/asset/dev-key/atom/slot) ごとに
+   * canonical content を登録し、異なる入力の同名 id を成果物出力前に失敗させる。
+   * 警告ではなく必ず throw する (diagnostics 設定に依存しない)。
+   */
+  let identities = new IdentityRegistry();
   /** prod: module id -> pack id (pack css は unit set の hash で決定論的に同一視)。 */
   const modulePacks = new Map<string, string>();
   /** prod: pack id -> css text。load(`virtual:qstyle/pack/<id>.css`) が返す。 */
@@ -2597,6 +2617,9 @@ export function qstyle(
       // §39 v1 を chunk 内 (hash 計算前) に適用する — 出力 bytes と hash を一致させる。
       const finalText: string = groupDuplicateCss(joined, meta);
       const fileName: string = `assets/${assetFileName('qstyle', chunkHash(finalText))}`;
+      // release blocker 1: 同一 asset fileName (content hash) に異なる CSS bytes が
+      // 紐付いたら、emit 前に deterministic error にする。
+      identities.register('asset', fileName, finalText, plan.id);
       // R2: usage graph から chunk の route 分類 (route-local / shared / unrouted) を導出。
       const { classification, routes } = classifyChunkUnits(graph, plan.members);
       chunks.push({
@@ -2826,6 +2849,11 @@ export function qstyle(
     configResolved(config: ResolvedConfig): void {
       // serve mode では dev パイプラインを使う (per-module CSS + CSS HMR)。
       isDev = config.command === 'serve';
+      // release blocker 3: build (publishable output) では明示指定がない限り
+      // untouched css prop を compile error にする (fail-closed)。
+      if (options.diagnostics === undefined && config.command === 'build') {
+        diagnosticsMode = 'error';
+      }
       // moduleKey の root 相対化用 (同名 basename の区別。未設定なら basename 動作)。
       rootDir = (config.root ?? '').replace(/\\/g, '/').replace(/\/$/, '');
       // §45: route -> module の逆引きを usage graph へ張る (未指定/'auto' は src/routes 自動検出)。
@@ -2894,6 +2922,7 @@ export function qstyle(
     buildStart(): void {
       collected.clear();
       moduleToAtoms.clear();
+      identities = new IdentityRegistry();
       modulePacks.clear();
       packCss.clear();
       residualLog = [];
@@ -3043,6 +3072,19 @@ export function qstyle(
       const edits: CodeEdit[] = [];
       // untouched にした箇所の理由。strict / error では即 throw し、
       // warning では transform 終了時に 1 行にまとめて出す (DIA-008/009)。
+      //
+      // untouched 分類の監査結果 (release blocker 3):
+      // - Applied: occurrence の css prop が class/style へ書き換えられた (edit 生成)。
+      // - NotNeeded: `css={false}` / 空 object / 全 falsy 値など、css prop が残っても
+      //   適用すべき style が存在しないもの。noteSkipped は呼ばれない。
+      // - StaticFallback: 動的値が `style` attr の inline 値に落ちたもの
+      //   (promotion: 'never' / cost-based の非 promote 分。css prop は残らない)。
+      // - UnsupportedRuntimeStyle: 上記以外の noteSkipped 呼び出しすべて。出力に
+      //   `css` prop が残り、Qwik runtime は css prop を解釈できないため style が
+      //   失われる。build 既定 (diagnostics 'error') では compile error。
+      //   なお handle 登録断念の note (css() の第2引数等) は単体では css prop を
+      //   残さないが、当該 handle を使う occurrence は必ず上記に分類されるため
+      //   同じく失敗扱いにする (保守側)。
       const skippedReasons: string[] = [];
       const noteSkipped = (reason: string): void => {
         if (strict || diagnosticsMode === 'error') {
@@ -3053,16 +3095,58 @@ export function qstyle(
       for (const note of handleNotes) noteSkipped(note);
 
       /**
+       * 1 occurrence 内で同一 slot 変数 id が別 atom に紐付いたら衝突
+       * (release blocker 1: 生成 slot namespace の fail-closed 検出)。
+       * 同一構造の再利用 (同 atom id) は正当。
+       */
+      const makeSlotClaim = (): ((ownerId: string, slotIds: readonly string[]) => void) => {
+        const owners = new Map<string, string>();
+        return (ownerId: string, slotIds: readonly string[]): void => {
+          for (const slotId of slotIds) {
+            const prev: string | undefined = owners.get(slotId);
+            if (prev !== undefined && prev !== ownerId) {
+              throw new StyleCollisionError({
+                namespace: 'slot',
+                id: slotId,
+                firstSource: `${id}#${prev}`,
+                secondSource: `${id}#${ownerId}`,
+                firstContent: prev,
+                secondContent: ownerId,
+              });
+            }
+            owners.set(slotId, ownerId);
+          }
+        };
+      };
+
+      /** decl 文字列から生成 slot 変数 id を抽出する。 */
+      const slotIdsOfDecl = (decl: string): readonly string[] =>
+        [...decl.matchAll(/(--qstyle-[0-9a-f]{6}-\d+)/g)].map((m) => m[1] ?? '');
+
+      /**
        * delivery unit を収集する (plan.md §38: 適用単位で 1 class / 1 rule に merge)。
        * identity (dedup/provenance/usage graph) は atom 単位のまま記録する。
+       * release blocker 1: 収集前に identity 衝突を検出する (同一 id × 異 content は
+       * deterministic error。同一内容の重複は従来どおり dedupe)。
        */
       const ingestUnit = (unitId: string, members: readonly UnitMember[]): void => {
+        const cssText: string = serializeUnitCss(unitId, members);
+        // atom identity: 同一 atomId が異なる宣言/context を運んだら衝突。
+        const slotClaim = makeSlotClaim();
+        for (const member of members) {
+          identities.register('atom', member.atomId, JSON.stringify([member.context, member.decl]), id);
+          slotClaim(member.atomId, slotIdsOfDecl(member.decl));
+        }
+        // unit identity: dev の occurrence 固定 alias は同一 module 再変換で内容が
+        // 変わり得るため update を許す。content-addressed な prod id では異 content =
+        // hash 衝突として即失敗する。
+        identities.register('unit', unitId, cssText, id, { allowUpdate: isDev });
         // dev では同一 alias に新しい cssText を上書きする (alias は編集をまたいで
         // 安定なため。prod は初回確定のまま)。
         if (!collected.has(unitId) || isDev) {
           collected.set(unitId, {
             id: unitId,
-            cssText: serializeUnitCss(unitId, members),
+            cssText,
             sourceId: id,
             members: [...new Set(members.map((m) => m.atomId))].sort(),
           });
@@ -3193,7 +3277,7 @@ export function qstyle(
         const segments: string[] = [];
         const atoms: StaticAtom[] = [];
         for (const c of conditionals) {
-          if (c.propPath.includes('.') || !CSS_PROPERTY_RE.test(c.propPath)) return null;
+          if (c.propPath.includes('.') || !isValidCssPropertyKey(c.propPath)) return null;
           const prop: string = canonicalProperty(c.propPath);
           if (takenProps.has(prop) || seen.has(prop)) return null;
           seen.add(prop);
@@ -3234,8 +3318,22 @@ export function qstyle(
         }));
       };
 
-      /** preserve block 1 件を収集する (exact rule dedup は id で自然に成立する)。 */
-      const ingestBlock = (blockId: string, cssText: string): void => {
+      /**
+       * preserve block 1 件を収集する (exact rule dedup は id で自然に成立する)。
+       * release blocker 1: kind ごとに identity 衝突を検出する。
+       * - 'preserve': dev では occurrence 固定 alias のため同一 module 再変換の
+       *   update を許す。
+       * - 'global': `qkf_*` / `qg_*` は content-addressed (alias なし)。同名異内容は
+       *   hash 衝突として常に失敗する。
+       */
+      const ingestBlock = (
+        blockId: string,
+        cssText: string,
+        kind: 'preserve' | 'global' = 'global',
+      ): void => {
+        identities.register(kind === 'preserve' ? 'preserve-block' : 'global', blockId, cssText, id, {
+          allowUpdate: kind === 'preserve' && isDev,
+        });
         // dev では同一 alias に上書きする (ingestUnit と同じ理由)。
         if (!collected.has(blockId) || isDev) {
           collected.set(blockId, { id: blockId, cssText, sourceId: id });
@@ -3541,8 +3639,8 @@ export function qstyle(
           continue;
         }
         if (
-          [...dynamics, ...compounds].some((d) => !CSS_PROPERTY_RE.test(d.propPath)) ||
-          conditionals.some((d) => !CSS_PROPERTY_RE.test(d.propPath))
+          [...dynamics, ...compounds].some((d) => !isValidCssPropertyKey(d.propPath)) ||
+          conditionals.some((d) => !isValidCssPropertyKey(d.propPath))
         ) {
           noteSkipped('unsupported dynamic property; left untouched');
           continue;
@@ -3692,6 +3790,8 @@ export function qstyle(
           // 宣言が全て inline 化された場合は class を出さない。
           const hasBlock: boolean = blockDecls.length > 0;
           const preserveIds: string[] = hasBlock ? [blockId] : [];
+          const claimSlot = makeSlotClaim();
+          for (const p of parametrics) claimSlot(p.id, p.slotIds);
           const preserveSlotEntries: string[] = parametrics.flatMap((p) =>
             p.slotIds.map((slotId, k) => `'${slotId}': ${p.slotExprs[k] ?? ''}`),
           );
@@ -3709,7 +3809,7 @@ export function qstyle(
           if (!preserveNext) {
             continue;
           }
-          if (hasBlock) ingestBlock(blockId, blockCss);
+          if (hasBlock) ingestBlock(blockId, blockCss, 'preserve');
           ingestAtomUnits(conditional.atoms, devId);
           ingestAuxRules(lowered.keyframes, lowered.globals);
           continue;
@@ -3736,6 +3836,8 @@ export function qstyle(
         ];
         const ids: string[] =
           membersA.length > 0 ? [devId(unitIdOf(membersA.map((m) => m.atomId)))] : [];
+        const claimSlot = makeSlotClaim();
+        for (const p of parametrics) claimSlot(p.id, p.slotIds);
         const slotEntries: string[] = parametrics.flatMap((p) =>
           p.slotIds.map((slotId, k) => `'${slotId}': ${p.slotExprs[k] ?? ''}`),
         );
@@ -3782,6 +3884,9 @@ export function qstyle(
             continue;
           }
           if (parts.length === 0) continue;
+          // release blocker 1: この occurrence 内で同一 slot 変数が別 atom に紐付いたら
+          // 失敗させる (style object の重複 key = 黙って上書きされるため)。
+          const claimOccSlot = makeSlotClaim();
           // 無条件 parts は composition し、条件付きは個別 class として残す (CMP-007)。
           // interpolation 付き template handle は parametric として分離する (M5b 末端)。
           // static 側 (record/handleAtoms) を持つ part は parametric 併持でも composition する。
@@ -3895,6 +4000,7 @@ export function qstyle(
                   important: b.important,
                   context: {},
                 });
+                claimOccSlot(b.id, b.slotIds);
                 for (let k = 0; k < b.slotIds.length; k += 1) {
                   preserveSlotEntries.push(`'${b.slotIds[k] ?? ''}': ${b.slotExprs[k] ?? ''}`);
                 }
@@ -3908,6 +4014,10 @@ export function qstyle(
                     important: atom.important,
                     context: atom.context,
                   });
+                  claimOccSlot(
+                    hashParametricAtom(atom),
+                    atom.slots.map((slot) => slot.id),
+                  );
                   for (const slot of atom.slots) {
                     const expr: string | undefined = pe.slotExprs.get(slot.id);
                     if (expr === undefined) {
@@ -4001,7 +4111,7 @@ export function qstyle(
               pushPreserveAux(part.handleKeyframes ?? [], part.handleGlobals ?? []);
               if (
                 condDynDecls.some(
-                  (d) => d.propPath.includes('.') || !CSS_PROPERTY_RE.test(d.propPath),
+                  (d) => d.propPath.includes('.') || !isValidCssPropertyKey(d.propPath),
                 )
               ) {
                 noteSkipped('unsupported conditional dynamic value; left untouched');
@@ -4025,9 +4135,10 @@ export function qstyle(
                 preserveCondFailed = true;
                 break;
               }
-              const condSpreads: string[] = condBuilt.flatMap((b) =>
-                b.slotIds.map((slotId, k) => `'${slotId}': ${b.slotExprs[k] ?? ''}`),
-              );
+              const condSpreads: string[] = condBuilt.flatMap((b) => {
+                claimOccSlot(b.id, b.slotIds);
+                return b.slotIds.map((slotId, k) => `'${slotId}': ${b.slotExprs[k] ?? ''}`);
+              });
               const condProps: string[] = [
                 ...branchStaticProps,
                 ...condBuilt.map((b) => b.prop),
@@ -4105,10 +4216,13 @@ export function qstyle(
               ingestBlock(
                 preserveBlockIdValue,
                 serializePreserveBlock(preserveBlockIdValue, blockDecls),
+                'preserve',
               );
             }
             for (const group of preserveCondGroups) {
-              if (group.miniBlock !== null) ingestBlock(group.miniBlock.id, group.miniBlock.css);
+              if (group.miniBlock !== null) {
+                ingestBlock(group.miniBlock.id, group.miniBlock.css, 'preserve');
+              }
               for (const p of group.params) {
                 ingestUnit(devId(unitIdOf([p.id])), [
                   { atomId: p.id, context: p.context, decl: p.decl },
@@ -4299,6 +4413,10 @@ export function qstyle(
             }
             if (entryFailed) break;
             for (const atom of pe.atoms) {
+              claimOccSlot(
+                hashParametricAtom(atom),
+                atom.slots.map((slot) => slot.id),
+              );
               for (const slot of atom.slots) {
                 const expr: string | undefined = pe.slotExprs.get(slot.id);
                 if (expr === undefined) {
@@ -4373,7 +4491,7 @@ export function qstyle(
               ...part.compounds.map((c) => ({ propPath: c.propPath, segments: c.segments })),
             ];
             if (
-              dynDecls.some((d) => d.propPath.includes('.') || !CSS_PROPERTY_RE.test(d.propPath))
+              dynDecls.some((d) => d.propPath.includes('.') || !isValidCssPropertyKey(d.propPath))
             ) {
               noteSkipped('unsupported conditional dynamic value; left untouched');
               condFailed = true;
@@ -4431,9 +4549,10 @@ export function qstyle(
             }
             const spreads: string[] = [
               ...condInlineSpreads,
-              ...built.flatMap((b) =>
-                b.slotIds.map((slotId, k) => `'${slotId}': ${b.slotExprs[k] ?? ''}`),
-              ),
+              ...built.flatMap((b) => {
+                claimOccSlot(b.id, b.slotIds);
+                return b.slotIds.map((slotId, k) => `'${slotId}': ${b.slotExprs[k] ?? ''}`);
+              }),
             ];
             condGroups.push({
               cond,
@@ -4497,6 +4616,7 @@ export function qstyle(
           const staticUnitIds: string[] =
             staticMembers.length > 0 ? [devId(unitIdOf(staticMembers.map((m) => m.atomId)))] : [];
           const ids: string[] = staticUnitIds;
+          for (const p of parametrics) claimOccSlot(p.id, p.slotIds);
           const slotEntries: string = parametrics
             .flatMap((p) => p.slotIds.map((slotId, k) => `'${slotId}': ${p.slotExprs[k] ?? ''}`))
             .join(', ');
@@ -4560,6 +4680,9 @@ export function qstyle(
           .join('');
         devCss.set(id, css);
         const key: string = devKeyFor(id);
+        // release blocker 1: dev virtual css key は module id の hash。異なる module が
+        // 同一 key になると片方の CSS が到達不能になるため失敗させる。
+        identities.register('dev-key', key, id, id);
         devKeys.set(key, id);
         devTransformed.add(id);
         edits.push({
@@ -4592,7 +4715,10 @@ export function qstyle(
           // qwik-native: module の全 unit を 1 pack (実 CSS module) にする。import graph 経由で
           // vite/qwik が bundle 単位の css asset を出すため、lazy bundle は直前読み込みに
           // なる (plan.md §48)。pack id は unit set の hash で決定論的に。
-          const packId: string = chunkHash([...packUnitIds].sort().join(','));
+          // release blocker 1: 同一 pack id に異なる unit set が紐付いたら失敗する。
+          const sortedPackUnitIds: readonly string[] = [...packUnitIds].sort();
+          const packId: string = chunkHash(sortedPackUnitIds.join(','));
+          identities.register('pack', packId, sortedPackUnitIds.join(','), id);
           modulePacks.set(id, packId);
           if (!packCss.has(packId)) {
             packCss.set(

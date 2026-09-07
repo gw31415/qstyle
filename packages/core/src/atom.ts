@@ -15,6 +15,26 @@ export function canonicalValue(input: string): string {
   return input.trim().replace(/\s+/g, ' ');
 }
 
+/** 生成 slot 変数 (`--qstyle-<hash6>-<i>`) の予約 namespace。 */
+export const RESERVED_CUSTOM_PROPERTY_ROOT = '--qstyle';
+export const RESERVED_CUSTOM_PROPERTY_PREFIX = '--qstyle-';
+
+/** 生成済み namespace を user 定義から守る。 */
+export function isReservedCustomPropertyName(name: string): boolean {
+  return (
+    name === RESERVED_CUSTOM_PROPERTY_ROOT || name.startsWith(RESERVED_CUSTOM_PROPERTY_PREFIX)
+  );
+}
+
+/**
+ * 共有 custom property 名 validator。
+ * serialization は property 名を escape しないため、入力境界で保守的な ASCII
+ * grammar に限定する。escape・non-ASCII・生成用予約 namespace は拒否する。
+ */
+export function isValidCustomPropertyName(name: string): boolean {
+  return /^--[A-Za-z_][A-Za-z0-9_-]*$/.test(name) && !isReservedCustomPropertyName(name);
+}
+
 export interface CreateStaticAtomInput {
   readonly property: string;
   readonly value: string | number;
@@ -25,9 +45,13 @@ export interface CreateStaticAtomInput {
 }
 
 export function createStaticAtom(input: CreateStaticAtomInput): StaticAtom {
+  const property: string = canonicalProperty(input.property);
+  if (property.startsWith('--') && !isValidCustomPropertyName(property)) {
+    throw new Error(`createStaticAtom: invalid custom property name ${JSON.stringify(property)}`);
+  }
   return {
     kind: 'static-atom',
-    property: canonicalProperty(input.property),
+    property,
     value: serializeCssValue(input.property, input.value),
     important: input.important ?? false,
     context: input.context ?? {},
@@ -37,21 +61,28 @@ export function createStaticAtom(input: CreateStaticAtomInput): StaticAtom {
 }
 
 /**
+ * Semantic hash の入力 (logical identity)。collision 検出 (release blocker 1) は
+ * この文字列を比較対象に使う — hash だけでなく論理入力同士を見る。
+ */
+export function staticAtomIdentity(atom: StaticAtom): string {
+  return JSON.stringify([
+    atom.property,
+    atom.value,
+    atom.important,
+    atom.context,
+    atom.ordering,
+  ]);
+}
+
+/**
  * Semantic hash (plan.md §43)。
  * canonical property / value・important・selector/conditional context・ordering semantics を含める。
  * chunk membership は含めない (style identity と delivery identity の分離, §3.3)。
- * FNV-1a 32bit → 8桁hex。
+ * FNV-1a 32bit → 8桁hex。異なる入力が同一 hash になる場合は IdentityRegistry
+ * (collision.ts) が成果物出力前に失敗させる。
  */
 export function hashStaticAtom(atom: StaticAtom): string {
-  return `q_${fnv1aHex(
-    JSON.stringify([
-      atom.property,
-      atom.value,
-      atom.important,
-      atom.context,
-      atom.ordering,
-    ]),
-  )}`;
+  return `q_${fnv1aHex(staticAtomIdentity(atom))}`;
 }
 
 /** FNV-1a 32bit → 8桁hex。parametric 側と共有する。 */

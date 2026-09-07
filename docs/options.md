@@ -77,11 +77,36 @@ routes: 'auto', // 既定
 routes: { '/': ['/src/routes/index.tsx'] }, // 手動上書き
 ```
 
-## `diagnostics`: `'silent'` | `'warning'` (既定) | `'error'`
+## `diagnostics`: build 既定 `'error'` / dev 既定 `'warning'`
 
 - `'silent'`: 何も出さない。
-- `'warning'` (既定): untouched 箇所を module×理由で session 内1回だけ警告する。
+- `'warning'`: untouched 箇所を module×理由で session 内1回だけ警告する。
 - `'error'`: untouched 箇所で即 throw する。
+
+既定値はコマンドによって変わる:
+
+- **build (`vite build`): `'error'`** — Qwik には runtime `css` prop 実装がないため、
+  untouched で残った `css={...}` は style が黙って消える fallback にはならない。
+  publishable な成果物を出す build は既定で fail-closed になる。
+- **dev (`vite dev`): `'warning'`** — HMR で通常の Qwik path へ復帰できるため。
+
+`'warning'` / `'silent'` は migration 用の **legacy mode** として明示指定のみ残る。
+build でこれらを指定すると untouched の css prop がそのまま出力に残り、
+**その要素の style は実行時に失われる**。CI では既定 (`'error'`) か
+`optimization: 'strict'` を使うこと:
+
+```ts
+// strict CI configuration
+qstyle({ optimization: 'strict', diagnostics: 'error' });
+```
+
+意図的な no-op と証明済みのものは既定でも成功する:
+`css={false}` / `css={{}}` / 全 falsy 値 (`null` / 真偽値) のみの css prop は
+適用すべき style が存在しないため error にならない。
+
+なお **hash 衝突は `diagnostics` 設定に依存せず常に build を失敗させる**
+(異なる入力が同じ生成 id / class / asset 名 / keyframes 名 / slot 変数名になる
+場合、成果物の出力前に deterministic error になる)。
 
 ## `debug`
 

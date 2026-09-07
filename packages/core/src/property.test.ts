@@ -10,10 +10,13 @@ import { describe, expect, it } from 'vitest';
 import {
   DedupRegistry,
   assignOrderingGroups,
+  classifyDeclaration,
   createParametricAtom,
   createStaticAtom,
   hashParametricAtom,
   hashStaticAtom,
+  isReservedCustomPropertyName,
+  isValidCustomPropertyName,
   serializeParametricDecl,
 } from './index.js';
 import type { ParametricAtom, RuntimeValueType, StaticAtom } from './index.js';
@@ -215,7 +218,14 @@ describe('property-based invariants (fast-check)', () => {
       fc.property(
         fc.uniqueArray(mixedSpecArb, { minLength: 2, maxLength: 8 }),
         fc.integer({ min: 1, max: 0x7fffffff }),
-        (specs: readonly MixedSpec[], seed: number): void => {
+        (rawSpecs: readonly MixedSpec[], seed: number): void => {
+          // fc.uniqueArray が構造的に等しい値を重複して生成することがあるため、
+          // baseline (Map key) と shuffled の要素数が食い違わないよう先に dedupe する。
+          const specs: readonly MixedSpec[] = [
+            ...new Map<string, MixedSpec>(
+              rawSpecs.map((spec: MixedSpec): [string, MixedSpec] => [JSON.stringify(spec), spec]),
+            ).values(),
+          ];
           const baseline: Map<string, string> = new Map<string, string>();
           for (const spec of specs) baseline.set(JSON.stringify(spec), idOf(spec));
           // 作成順を shuffle してから id を取っても spec 毎の id は不変。
@@ -230,6 +240,45 @@ describe('property-based invariants (fast-check)', () => {
         },
       ),
       { numRuns: 100 },
+    );
+  });
+
+  it('出力 shape: atomic 判定された property 名は常に受理済み grammar に一致 (release blocker 2)', () => {
+    // 任意の property 名文字列に対し、classifyDeclaration が atomic を返した場合に
+    // 限り、その名前は (a) 非 custom の canonical grammar または (b) 共有 custom
+    // property validator に一致する。不正な名前が serialize 経路に載ることはない。
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.string({ minLength: 0, maxLength: 16 }),
+          fc.stringMatching(/^--[A-Za-z_][A-Za-z0-9_-]*$/),
+          fc.stringMatching(/^--[^\s]+$/),
+        ),
+        (property: string): void => {
+          const verdict = classifyDeclaration(property, 'red');
+          if (verdict !== 'atomic') return;
+          if (property.startsWith('--')) {
+            expect(isValidCustomPropertyName(property)).toBe(true);
+          } else {
+            expect(property).toMatch(/^[a-z-][a-z0-9-]*$/);
+          }
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+
+  it('出力 shape: 有効 custom property 名は常に atomic に判定される', () => {
+    fc.assert(
+      fc.property(
+        fc
+          .stringMatching(/^--[A-Za-z_][A-Za-z0-9_-]*$/)
+          .filter((name: string): boolean => !isReservedCustomPropertyName(name)),
+        (property: string): void => {
+          expect(classifyDeclaration(property, 'red')).toBe('atomic');
+        },
+      ),
+      { numRuns: 300 },
     );
   });
 });

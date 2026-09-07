@@ -1,7 +1,21 @@
 // Safety analysis for safe declaration atomicization (plan.md §17, §18, §93).
 // CSS-* / DED-013 / FLB-010: 判定できないものは residual に落とし、決して黙って並び替えない。
-import { canonicalProperty, fnv1aHex } from './atom.js';
+import {
+  canonicalProperty,
+  fnv1aHex,
+  isReservedCustomPropertyName,
+  isValidCustomPropertyName,
+  RESERVED_CUSTOM_PROPERTY_PREFIX,
+  RESERVED_CUSTOM_PROPERTY_ROOT,
+} from './atom.js';
 import type { ResidualReason, StaticAtom } from './ir.js';
+
+export {
+  isReservedCustomPropertyName,
+  isValidCustomPropertyName,
+  RESERVED_CUSTOM_PROPERTY_PREFIX,
+  RESERVED_CUSTOM_PROPERTY_ROOT,
+} from './atom.js';
 
 /**
  * canonical kebab-case shorthand -> 覆う longhand 一覧 (plan.md §17-2)。
@@ -339,8 +353,14 @@ export function assignOrderingGroups(atoms: readonly StaticAtom[]): StaticAtom[]
 }
 
 const PROPERTY_RE = /^[a-z-][a-z0-9-]*$/;
-/** custom property 名は case-sensitive かつ ident 文字を広く許す (空白のみ不可)。 */
-const CUSTOM_PROPERTY_RE = /^--[^\s]+$/;
+
+/**
+ * custom property 名の保守的 ASCII grammar (release blocker 2)。
+ * `--` + ident (先頭は英字または `_`) に限定し、declaration / rule 境界を壊す
+ * 文字 (`}` `;` `{` `<` quote 等) や escape・non-ASCII を持つ名前は入力時点で
+ * 拒否する。既存の有効名 (`--brand-color` / `--my-Var` / `--a-b_c` 等) は維持する。
+ * escape (`\30 `) と non-ASCII 名の拒否は意図的なもので、docs/css.md に記載する。
+ */
 const FORBIDDEN_VALUE_RE = /expression\(|url\(\s*javascript:/i;
 const FORBIDDEN_PROPERTIES: ReadonlySet<string> = new Set<string>(['behavior', '-moz-binding']);
 const URL_OPEN_RE = /^url\(/i;
@@ -404,9 +424,10 @@ export function classifyDeclaration(
 ): 'atomic' | { residual: ResidualReason } {
   if (property.length === 0 || value.trim().length === 0) return { residual: 'unsupported-syntax' };
   // 大文字 / 空白を含む property は canonical 化せず residual (曖昧な寄せを実装しない)。
-  // custom property (`--*`) のみ case-sensitive な名前をそのまま許す。
+  // custom property (`--*`) のみ case-sensitive な名前をそのまま許す
+  // (名前の検証は共有 validator に一元化する。release blocker 2)。
   if (property.startsWith('--')) {
-    if (!CUSTOM_PROPERTY_RE.test(property)) return { residual: 'unsupported-syntax' };
+    if (!isValidCustomPropertyName(property)) return { residual: 'unsupported-syntax' };
   } else {
     if (!PROPERTY_RE.test(property)) return { residual: 'unsupported-syntax' };
   }

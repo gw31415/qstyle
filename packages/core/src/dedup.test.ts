@@ -68,4 +68,23 @@ describe('dedup', () => {
     // 初回 provenance を保持する
     expect(registry.get(id)?.provenance[0]).toEqual({ source: 'm1.tsx', line: 1, column: 1 });
   });
+
+  it('異なる入力が同一 hash になったら衝突 error を投げる (release blocker 1)', () => {
+    // 既知の FNV-1a 衝突ペア (birthday search で特定した固定値。hash は不変のため
+    // 常に決定的に再現する)。異なる論理入力が黙って dedupe されないことを保証する。
+    const registry = new DedupRegistry();
+    registry.add(createStaticAtom({ property: 'color', value: 'shade-422789' }));
+    expect(() =>
+      registry.add(createStaticAtom({ property: 'color', value: 'shade-639192' })),
+    ).toThrow(/hash collision/);
+    // 衝突 error には生成 id と content fingerprint が載る。
+    try {
+      registry.add(createStaticAtom({ property: 'color', value: 'shade-639192' }));
+      throw new Error('expected collision error');
+    } catch (error) {
+      const message: string = (error as Error).message;
+      expect(message).toContain('atom');
+      expect(message).toContain('q_4c05fbff');
+    }
+  });
 });

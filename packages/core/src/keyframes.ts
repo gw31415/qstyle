@@ -1,5 +1,5 @@
 import { canonicalProperty, fnv1aHex } from './atom.js';
-import { classifyDeclaration } from './safety.js';
+import { classifyDeclaration, isValidCustomPropertyName } from './safety.js';
 import { serializeCssValue } from './units.js';
 import type {
   AtRuleDecl,
@@ -15,7 +15,6 @@ import type {
 
 const KEYFRAMES_NAME_RE = /^[A-Za-z_][\w-]*$/;
 const FRAME_PART_RE = /^(?:from|to|\d+(?:\.\d+)?%)$/;
-const PROPERTY_PRELUDE_RE = /^--[^\s{};]+$/;
 /** `<layer-name>`: `<ident> ('.' <ident>)*`。空 (anonymous layer) も許す。 */
 const LAYER_NAME_RE = /^[A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)*$/;
 
@@ -27,7 +26,9 @@ export function parseKeyframesKey(key: string): string | null {
   return KEYFRAMES_NAME_RE.test(name) ? name : null;
 }
 
-/** `@font-face` / `@property --x` なら種別と prelude を返す。 */
+/** `@font-face` / `@property --x` なら種別と prelude を返す。
+ * `@property` の prelude は共有 custom property validator に一元化する
+ * (release blocker 2: `--x}body{...` 等を CSS へ出さない)。 */
 export function parseGlobalAtRuleKey(
   key: string,
 ): { at: 'font-face' | 'property'; prelude: string } | null {
@@ -36,7 +37,7 @@ export function parseGlobalAtRuleKey(
   const m: RegExpMatchArray | null = /^@property\s+(.+?)\s*$/i.exec(trimmed);
   if (m === null) return null;
   const prelude: string = (m[1] ?? '').trim();
-  return PROPERTY_PRELUDE_RE.test(prelude) ? { at: 'property', prelude } : null;
+  return isValidCustomPropertyName(prelude) ? { at: 'property', prelude } : null;
 }
 
 /** `@layer <name>` なら layer 名 (anonymous は '') を返す。 */
