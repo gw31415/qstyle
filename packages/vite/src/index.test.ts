@@ -1592,10 +1592,12 @@ describe('qstyle dev mode + CSS HMR', () => {
     expect(update.updates[0]?.timestamp).toBe(1234);
   });
 
-  it('reloads once for newly added css (link must enter the HTML)', async () => {
-    // css attribute を持たなかった component への追加では出力が変わるため、
-    // css-update に加えて client channel へ full-reload を送る
-    // (新 link の付与に DOM 更新が要る。re-transform 完了後のため中断しない)。
+  it('sends css-update once for newly added css (DOM follows via qwik:hmr)', async () => {
+    // css attribute を持たなかった component への追加では出力が変わるが、
+    // client へは css-update のみ送る。新 class の DOM への反映は
+    // qwik optimizer の `qwik:hmr` (bridge) が担うため、qstyle が自前の
+    // full-reload を送ると二重 navigation で QRL chunk import が abort する
+    // (0.1.1 修正)。
     const p = devPlugin();
     const invalidated: unknown[] = [];
     const sent: unknown[] = [];
@@ -1625,10 +1627,9 @@ describe('qstyle dev mode + CSS HMR', () => {
       server,
     });
     expect(invalidated).toHaveLength(1);
-    // css-update の後に full-reload (どちらも client channel)。
-    expect(sent).toHaveLength(2);
+    // css-update のみ (client channel)。
+    expect(sent).toHaveLength(1);
     expect((sent[0] as { type: string }).type).toBe('update');
-    expect((sent[1] as { type: string }).type).toBe('full-reload');
     // devCss が登録済み (link が付いた後の refetch が即座に CSS を返す)。
     const out = p.transform(added, '/src/dev-e.tsx');
     const key: string = (out?.code.match(/virtual:qstyle\/dev\/([\w.]+)/) ?? [])[1] ?? '';

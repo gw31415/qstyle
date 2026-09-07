@@ -2739,9 +2739,13 @@ export function qstyle(
    *   browser の `<link href="/virtual:qstyle/dev/...">` がリロードなしで差し替わる。
    * - dev の class 名は occurrence 固定の alias (`qd_...`) のため、宣言の増減・
    *   値変更だけでは出力が変わらず css-update のみで反映される。出力が変わった
-   *   場合 (occurrence 構造の変化・style prop の変化・css の増減) は DOM 側の
-   *   更新が要るため client channel へ `full-reload` を送る (re-transform 完了
-   *   後のため reload 中断は起きない。default HMR の SSR-channel 消失の代替)。
+   *   場合 (occurrence 構造の変化・style prop の変化・css の増減) の DOM 更新は
+   *   qwik optimizer が送る `qwik:hmr` (bridge) に委ねる。ここで自前の
+   *   `full-reload` を重ねてはいけない: 同一ファイル変更に対して qwik 側も
+   *   `qwik:hmr` を送っており、reload が二重に走ると再 render 中の QRL chunk
+   *   dynamic import が abort し "Importing a module script failed" + リロード
+   *   不完了になる (0.1.1 修正。bridge 適用不能時は qwik 側が単発の fallback
+   *   reload を行うため、reload が完全に消えるわけではない)。
    * - 無関係ファイルには干渉しない (HMR-008)。
    */
   const refreshDevCss = async (ctx: HmrContext): Promise<void> => {
@@ -2763,24 +2767,40 @@ export function qstyle(
       return;
     }
     // 先行 re-transform (transform 自身が devCode を維持する)。
-    // ponytail: transform 本体は動かさず plugin 自身の hook を直接呼ぶ
-    // (transform は `this` を使わないため unbound call で安全)。
+    // plugin container 経由で変換し、上流 plugin (@qstyle/unocss の
+    // class → css prop 変換) を含む完全パイプラインの出力と devCss を一致
+    // させる。自プラグインの transform を直接呼ぶと上流変換が抜け、unit /
+    // alias が DOM 側 (完全パイプラインで作り直される chunk re-transform)
+    // と乖離する。乖離した devCss を css-update で配信すると DOM の class
+    // と rule が一致せず、要素から statics が外れて消える (0.1.1 修正)。
+    // container を取れない環境 (単体 test の fake server 等) では従来どおり
+    // 自プラグインを直接呼ぶ (transform は `this` を使わないため unbound
+    // call で安全)。
     const prev: string | undefined = devCode.get(file);
     let out: { code: string } | null = null;
     if (code !== null) {
       try {
-        const rerun = mainPlugin.transform as unknown as
-          | ((code: string, id: string) => { code: string } | null)
-          | undefined;
-        if (typeof rerun === 'function') out = rerun(code, file);
+        const container = (server as unknown as {
+          pluginContainer?: {
+            transform?: (
+              code: string,
+              id: string,
+            ) => Promise<{ code: string } | null> | { code: string } | null;
+          };
+        }).pluginContainer;
+        if (typeof container?.transform === 'function') {
+          out = await container.transform(code, file);
+        } else {
+          const rerun = mainPlugin.transform as unknown as
+            | ((code: string, id: string) => { code: string } | null)
+            | undefined;
+          if (typeof rerun === 'function') out = rerun(code, file);
+        }
       } catch {
         // strict 等の diagnostics throw 時は default HMR に任せる (以下は続行)。
       }
     }
     if (out === null && !wasManaged) return;
-    // 出力が変わった = DOM 側の更新が要る。変わらない = link 差し替えのみで足りる。
-    const next: string | undefined = devCode.get(file);
-    const structurallyChanged: boolean = out === null || !wasManaged || prev !== next;
     // virtual css を全部の env graph で無効化する (best effort)。
     const vid: string = devModuleId(file);
     const graphs: readonly unknown[] = [
@@ -2814,13 +2834,12 @@ export function qstyle(
       const timestamp: number =
         typeof ctx.timestamp === 'number' ? ctx.timestamp : Date.now();
       // `<link>` の差し替えを client に通知する (reload の有無にかかわらず無害)。
+      // 構造変化時の DOM 更新は qwik の `qwik:hmr` が担うため、ここで
+      // `full-reload` を重ねてはいけない (関数 header の注記を参照)。
       sender?.send?.({
         type: 'update',
         updates: [{ type: 'css-update', path: url, acceptedPath: url, timestamp }],
       });
-      if (structurallyChanged) {
-        sender?.send?.({ type: 'full-reload' });
-      }
     } catch {
       // best effort のため無視する。
     }
