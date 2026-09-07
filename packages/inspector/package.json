@@ -1,6 +1,20 @@
 {
   "name": "@qstyle/inspector",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Inspection and reporting utilities for qstyle output.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gw31415/qstyle.git",
+    "directory": "packages/inspector"
+  },
+  "homepage": "https://github.com/gw31415/qstyle#readme",
+  "bugs": {
+    "url": "https://github.com/gw31415/qstyle/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.13"
@@ -26,6 +40,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "tsc --noEmit -p tsconfig.json"
   },
+  "keywords": [
+    "qstyle",
+    "css",
+    "inspector"
+  ],
   "dependencies": {
     "@qstyle/core": "workspace:^"
   },

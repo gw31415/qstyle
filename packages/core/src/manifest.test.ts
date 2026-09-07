@@ -51,7 +51,7 @@ describe('buildRouteManifest', () => {
         ['/settings', ['settings.q_bb.css', 'base.q_aa.css', 'settings.q_bb.css']],
         ['/', ['base.q_aa.css']],
       ]),
-      { compilerVersion: '0.1.0-m1' },
+      { compilerVersion: '0.1.0' },
     );
     expect(manifest.version).toBe(1);
     expect(manifest.entries.map((entry) => entry.route)).toEqual(['/', '/settings']);
@@ -109,7 +109,7 @@ describe('serializeManifest / parseManifest', () => {
         ['/settings', ['forms.q_c.css', 'base.q_a.css']],
         ['/', ['base.q_a.css']],
       ]),
-      { compilerVersion: '0.1.0-m1' },
+      { compilerVersion: '0.1.0' },
     );
     const parsed = parseManifest(serializeManifest(manifest));
     expect(parsed).toEqual(manifest);

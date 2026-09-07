@@ -1,6 +1,20 @@
 {
   "name": "@qstyle/vite",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Vite plugin that compiles Qwik styles into optimized CSS assets.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gw31415/qstyle.git",
+    "directory": "packages/vite"
+  },
+  "homepage": "https://github.com/gw31415/qstyle#readme",
+  "bugs": {
+    "url": "https://github.com/gw31415/qstyle/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.13"
@@ -44,6 +58,9 @@
     "vitest": "catalog:"
   },
   "keywords": [
+    "qstyle",
+    "qwik",
+    "css",
     "vite-plugin",
     "rolldown-plugin"
   ]

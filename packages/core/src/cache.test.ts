@@ -3,7 +3,7 @@ import { MemoryCache, computeCacheKey, invalidateBySource, safeParse } from './c
 
 const baseInput = {
   sourceHash: 'hash-a',
-  compilerVersion: '0.1.0-m1',
+  compilerVersion: '0.1.0',
   configHash: 'cfg-1',
   frontendVersion: 'fe-1',
   targetBrowsers: 'chrome>=120',

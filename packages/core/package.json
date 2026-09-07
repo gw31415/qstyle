@@ -1,6 +1,20 @@
 {
   "name": "@qstyle/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Framework-independent style IR, canonicalization, hashing, and chunk planning for qstyle.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gw31415/qstyle.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/gw31415/qstyle#readme",
+  "bugs": {
+    "url": "https://github.com/gw31415/qstyle/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.13"
@@ -26,6 +40,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "tsc --noEmit -p tsconfig.json"
   },
+  "keywords": [
+    "qstyle",
+    "css",
+    "style-compiler"
+  ],
   "devDependencies": {
     "@types/node": "^26.4.1",
     "fast-check": "^4.9.0",
