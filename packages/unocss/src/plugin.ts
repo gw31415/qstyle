@@ -2045,17 +2045,23 @@ export function UnoCSS(options?: QstyleUnoOptions | string): QstyleUnoPlugin {
         const translated: string = atomsToObject(resolved.atoms);
         const existing: CssProp | null = findCssProp(head);
         if (existing !== null) {
-          // 既存 css の後に追記する (composition は後勝ちのため翻訳が勝つ)。
+          // 属性の書き順で勝敗を決める (qstyle の composition は後勝ち)。
+          // css が先・class が後 → class が勝つ: css={[inner, translated]}。
+          // class が先・css が後 → css が勝つ: css={[translated, inner]}。
+          // 順序が取れない場合も css を勝たせる (`<` が偽になる側に倒す)。
           // ponytail: paren で包まない (composition parser が object/ternary を
           // 直接受理するため。包むと parse 不能になる)。
           const inner: string = code.slice(
             lt + existing.braceOpen + 1,
             lt + existing.braceClose - 1,
           );
+          const classWins: boolean = existing.kwStart < attr.start;
           edits.push({
             start: lt + existing.kwStart,
             end: lt + existing.braceClose,
-            newText: `css={[${inner}, ${translated}]}`,
+            newText: classWins
+              ? `css={[${inner}, ${translated}]}`
+              : `css={[${translated}, ${inner}]}`,
           });
           cssEditedHeads.add(lt);
         } else {
@@ -2196,14 +2202,19 @@ export function UnoCSS(options?: QstyleUnoOptions | string): QstyleUnoPlugin {
           const translated: string = atomsToObject(staticResolved.atoms);
           const existing: CssProp | null = findCssProp(head);
           if (existing !== null) {
+            // 静的 class 経路と同一規則: 属性の書き順で勝敗を決める
+            // (composition は後勝ち)。順序不明時も css を勝たせる。
             const inner: string = code.slice(
               lt + existing.braceOpen + 1,
               lt + existing.braceClose - 1,
             );
+            const classWins: boolean = existing.kwStart < dyn.kwStart;
             edits.push({
               start: lt + existing.kwStart,
               end: lt + existing.braceClose,
-              newText: `css={[${inner}, ${translated}]}`,
+              newText: classWins
+                ? `css={[${inner}, ${translated}]}`
+                : `css={[${translated}, ${inner}]}`,
             });
           } else {
             const tagName: RegExpMatchArray | null = /^<[A-Za-z][\w.-]*/.exec(head);

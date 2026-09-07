@@ -478,6 +478,41 @@ describe('UnoCSS plugin', () => {
     expect(out?.code).toContain('display: "flex"');
   });
 
+  it('lets a later css prop win over an earlier class (source order)', async () => {
+    // class が先・css が後 → css が勝つ。composition は後勝ちのため
+    // 既存 css (inner) が配列の後ろに来なければならない。
+    const p = setup();
+    const out = await p.transform(
+      `export const A = () => <div class="flex" css={{ display: 'block' }}>x</div>;`,
+      `${FIXTURE_DIR}order-css-wins.tsx`,
+    );
+    expect(out).not.toBeNull();
+    expect(out?.code).toContain('css={[');
+    const code: string = out?.code ?? '';
+    const translatedAt: number = code.indexOf('display: "flex"');
+    const innerAt: number = code.indexOf(`'block'`);
+    expect(translatedAt).toBeGreaterThanOrEqual(0);
+    expect(innerAt).toBeGreaterThanOrEqual(0);
+    // 翻訳 (class 由来) が先・既存 css が後 = css が勝つ。
+    expect(translatedAt).toBeLessThan(innerAt);
+  });
+
+  it('lets a later class win over an earlier css prop (source order)', async () => {
+    // css が先・class が後 → class が勝つ。既存 css (inner) が配列の前。
+    const p = setup();
+    const out = await p.transform(
+      `export const A = () => <div css={{ display: 'block' }} class="flex">x</div>;`,
+      `${FIXTURE_DIR}order-class-wins.tsx`,
+    );
+    expect(out).not.toBeNull();
+    const code: string = out?.code ?? '';
+    const translatedAt: number = code.indexOf('display: "flex"');
+    const innerAt: number = code.indexOf(`'block'`);
+    expect(translatedAt).toBeGreaterThanOrEqual(0);
+    expect(innerAt).toBeGreaterThanOrEqual(0);
+    expect(innerAt).toBeLessThan(translatedAt);
+  });
+
   it('merges into an existing css prop containing a template (no duplicate css)', async () => {
     const p = setup();
     const code = [
