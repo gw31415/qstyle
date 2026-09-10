@@ -165,7 +165,7 @@ keyframes 名は内容 hash (`qkf_xxxxxxxx`) に確定し、同一内容は重�
 - [docs/requirements.md](docs/requirements.md) — 動作環境・インストール・対応バージョン
 - [docs/css.md](docs/css.md) — 書ける CSS の範囲とサポート境界 (値・ネスト・keyframes・動的値・composition・untouched 条件)
 - [docs/options.md](docs/options.md) — plugin オプションリファレンス
-- [docs/delivery.md](docs/delivery.md) — backend・virtual modules・route 単位配信・hosting
+- [docs/delivery.md](docs/delivery.md) — CSS 配信・virtual modules・hosting
 - [docs/dev.md](docs/dev.md) — dev/HMR の動作・diagnostics・inspector・legacy hooks
 - [docs/development.md](docs/development.md) — 開発コマンド・テスト・browser test・benchmark
 

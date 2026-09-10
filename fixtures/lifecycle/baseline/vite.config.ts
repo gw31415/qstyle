@@ -16,12 +16,6 @@ export default defineConfig({
   plugins: [qwikCity(), qwikVite()],
   resolve: {
     alias: {
-      '@qstyle/qwik/client': path.resolve(
-        here,
-        '../../../packages/qwik/dist/client.mjs',
-      ),
-      '@qstyle/qwik/links': path.resolve(here, '../../../packages/qwik/dist/links.qwik.mjs'),
-      '@qstyle/qwik/prefetch': path.resolve(here, '../../../packages/qwik/dist/prefetch.mjs'),
       '@qstyle/qwik': path.resolve(here, '../../../packages/qwik/dist/index.mjs'),
     },
   },

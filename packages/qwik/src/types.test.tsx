@@ -7,9 +7,7 @@
 //
 // TYP-008/013: `css` prop は consumer 側 module augmentation
 // (README「css prop の型」) で付与する。本 test file 内で同一の augmentation を
-// 行い、(a) prop が StyleHandle を受けること (b) augmentation が package 全体の
-// compile (links.tsx が @qwik.dev/core/internal を直接 import している) と衝突
-// しないこと、を検証する。
+// 行い、prop が StyleHandle を受けることを検証する。
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,8 +17,6 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { isStyleHandle } from './compose.js';
 import { css } from './index.js';
 import type { CssProp, StyleHandle, StyleObject } from './index.js';
-import { QstyleLinks } from './links.js';
-import type { QstyleLinksProps } from './links.js';
 
 declare module '@qwik.dev/core/internal' {
   interface HTMLElementAttrs {
@@ -187,8 +183,6 @@ describe('TYP: authoring API 型の固定', () => {
         'index.d.cts',
         ['css', 'StyleHandle', 'CssProp', 'lowerStyleObject', 'lowerTaggedTemplate'],
       ],
-      ['client.d.mts', ['ensureModuleStyles', 'ensureStylesheet', 'resolveAssetUrl']],
-      ['links.qwik.d.mts', ['QstyleLinks']],
     ];
 
     it('主要 API 型が dist の .d.ts に含まれる', () => {
@@ -220,19 +214,11 @@ describe('TYP: authoring API 型の固定', () => {
 
   it('TYP-013: css prop augmentation は package 全体 compile と衝突しない', () => {
     // augmentation (冒頭の declare module) は package 全体の tsc compile に載る。
-    // 同一 compile 内で @qwik.dev/core/internal を直接使う links.tsx (QstyleLinks) と
-    // 共存することを型レベルで確認する (tsc --noEmit が green なら衝突なし)。
+    // tsc --noEmit が green なら衝突なし。
     expectTypeOf<HTMLElementAttrs['css']>().toEqualTypeOf<CssProp | undefined>();
-    const props: QstyleLinksProps = {};
-    const renderAugmented = (): JSXOutput => (
-      <QstyleLinks prefetch="hover" {...props} />
-    );
     const renderTogether = (): JSXOutput => (
-      <main css={css({ display: 'flex' })}>
-        <QstyleLinks prefetch="hover" {...props} />
-      </main>
+      <main css={css({ display: 'flex' })} />
     );
-    expectTypeOf(renderAugmented).toBeFunction();
     expectTypeOf(renderTogether).toBeFunction();
   });
 });

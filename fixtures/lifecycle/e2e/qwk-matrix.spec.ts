@@ -130,12 +130,12 @@ test('QWK-016: missing route does not corrupt style state', async ({ page }) => 
   expect(await computedColor(page, 'home-title')).toBe('rgb(46, 139, 87)');
 });
 
-test('QWK-017: qstyle links precede body content in SSR HTML', async ({ request }) => {
+test('QWK-017: stylesheets precede body content in SSR HTML', async ({ request }) => {
   // streaming SSR 順序: stylesheet link が head 内 (body より前) にある。
   const response = await request.get('/');
   expect(response.ok()).toBe(true);
   const html: string = await response.text();
-  const firstLink: number = html.indexOf('data-qstyle-href');
+  const firstLink: number = html.indexOf('rel="stylesheet"');
   const bodyOpen: number = html.indexOf('<body');
   expect(firstLink).toBeGreaterThan(-1);
   expect(bodyOpen).toBeGreaterThan(-1);

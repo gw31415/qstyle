@@ -17,9 +17,8 @@ const { router, staticFile } = createQwikRouter({
   render,
   static: {
     root: distDir,
-    // 本番 hosting と同じく static asset は immutable にする (C0.3 の reload
-    // cache-hit 検証用。qstyle.routes.json 等の非 hash file も含まれるが、
-    // fixture では build 毎に browser context を作り直すため無害)。
+    // 本番 hosting と同じく static asset は immutable にする
+    // (C0.3 の reload 検証用)。
     cacheControl: 'public, max-age=31536000, immutable',
   },
 });

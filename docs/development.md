@@ -20,11 +20,11 @@ pnpm --filter @qstyle/vite test
 
 主なスイート (`packages/vite/src`):
 
-- `index.test.ts` — transform・dev/HMR・generateBundle・css-asset backend
+- `index.test.ts` — transform・dev/HMR・generateBundle
 - `b2-coverage.test.ts` — transform 挙動・security・determinism 系
 - `b2-perf.test.ts` — PERF 回帰 (緩い assert＋計測 log)
 - `dev-build-regression.test.ts` — HMR 分岐・configureServer・build 境界の回帰
-- `dedup.test.ts` / `m0-proof.test.ts` / `route-asset-proof.test.ts`
+- `dedup.test.ts` / `m0-proof.test.ts`
 
 ## Browser test (fixtures/lifecycle)
 

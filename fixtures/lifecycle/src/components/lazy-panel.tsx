@@ -1,7 +1,7 @@
 // QWK-005/006/007/015 用の lazy component。qwik は component$ ごとに chunk を
 // 分割するため、この module は home の初期 JS に含まれず render された時点で
-// 初めて fetch される (= この module に注入された ensureModuleStyles も直前に
-// 動く)。内部にさらに別 module の lazy (LazyInner) を持つ (QWK-015 nested lazy)。
+// 初めて fetch される (pack css import も vite が chunk と一緒に直前読み込みする)。
+// 内部にさらに別 module の lazy (LazyInner) を持つ (QWK-015 nested lazy)。
 import { component$, useSignal } from '@qwik.dev/core';
 import { LazyInner } from './lazy-inner';
 

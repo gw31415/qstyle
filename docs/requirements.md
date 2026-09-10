@@ -11,7 +11,7 @@
 | peer | 要件 | 備考 |
 | --- | --- | --- |
 | `@qwik.dev/core` | `^2.0.0-beta.43` (major 2) | `@qstyle/vite`・`@qstyle/qwik` が要求。範囲外は diagnostics に従い警告/throw (黙って通さない) |
-| `@qwik.dev/router` | `^2.0.0-beta.43` (major 2) | `@qstyle/qwik` が要求 (`QstyleLinks` 等の route 連携用) |
+| `@qwik.dev/router` | 不要 | route 連携は Qwik 標準 (head/CSS 配管) に任せる |
 | `vite` | `^8.0.0` (major 8) | `@qstyle/vite` が要求 |
 
 ## インストール

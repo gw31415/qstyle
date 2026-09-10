@@ -29,11 +29,10 @@ const qstyle = (options: Parameters<typeof qstyleFactory>[0]): Transformable =>
   qstyleFactory(options)[0] as unknown as Transformable;
 
 const plugin = (): Transformable =>
-  qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as Transformable;
+  qstyle({ diagnostics: 'silent' }) as unknown as Transformable;
 
 const parametricPlugin = (): Transformable =>
   qstyle({
-    backend: 'qwik-native',
     diagnostics: 'silent',
     runtimeStyles: { promotion: 'always' },
   }) as unknown as Transformable;
@@ -112,7 +111,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
   });
 
   it('SEL-004: `& > child` combinator selector is compiled with suffix', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const out = p.transform(
       `export const A = () => <div css={{ '& > svg': { width: 16 } }} />;`,
       '/src/sel004.tsx',
@@ -123,7 +122,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
   });
 
   it('SEL-005: `& + sibling` / `& ~ sibling` combinator selectors are compiled', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const outA = p.transform(
       `export const A = () => <div css={{ '& + sibling': { color: 'red' } }} />;`,
       '/src/sel005a.tsx',
@@ -140,7 +139,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
   });
 
   it('SEL-006: multi-word descendant selector (`& div span`) is compiled', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const out = p.transform(
       `export const A = () => <div css={{ '& div span': { display: 'block' } }} />;`,
       '/src/sel006.tsx',
@@ -151,7 +150,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
   });
 
   it('SEL-007: attribute selector (`& [data-x]`) is compiled', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const out = p.transform(
       `export const A = () => <div css={{ '& [data-x]': { color: 'red' } }} />;`,
       '/src/sel007.tsx',
@@ -204,7 +203,7 @@ describe('qstyle B-2 transform 挙動系 (OBJ/SEL)', () => {
     );
     expect(packCssOf(p2, out2?.code ?? '')).toMatch(/\.q_[0-9a-f]{8}\{color:red;z-index:1\}/);
     // dev は source 順 (既存 test と同じ pipeline で対比を固定)。
-    const dev = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as Transformable & {
+    const dev = qstyle({ diagnostics: 'silent' }) as unknown as Transformable & {
       configResolved: (config: { command: string; mode: string }) => void;
     };
     dev.configResolved({ command: 'serve', mode: 'development' });
@@ -276,7 +275,7 @@ describe('qstyle B-2 composition / template / dynamics', () => {
     expect(p.transform(moduleA, '/src/cmp018-a.tsx')).toBeNull();
     expect(p.transform(moduleB, '/src/cmp018-b.tsx')).toBeNull();
     // diagnostic は actionable (error mode で cross-module 理由が出る)。
-    const err = qstyle({ backend: 'qwik-native', diagnostics: 'error' }) as unknown as Transformable;
+    const err = qstyle({ diagnostics: 'error' }) as unknown as Transformable;
     expect(() => err.transform(moduleA, '/src/cmp018-c.tsx')).toThrow(/across modules/);
     expect(() => err.transform(moduleB, '/src/cmp018-d.tsx')).toThrow(/across modules/);
   });
@@ -419,7 +418,7 @@ describe('qstyle B-2 composition / template / dynamics', () => {
 
 describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
   it('SEC-001: statically hostile declaration values are rejected as residual', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     // value 内の declaration/rule 境界を壊す文字列は classify で拒否される。
     expect(
       p.transform(
@@ -437,7 +436,7 @@ describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
   });
 
   it('SEC-002: values containing </style> are rejected', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     expect(
       p.transform(
         `export const A = () => <div css={{ content: '</style><script>x</script>' }} />;`,
@@ -473,7 +472,7 @@ describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
   });
 
   it('SEC-004: url(javascript:...) values are rejected', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     expect(
       p.transform(
         `export const A = () => <div css={{ backgroundImage: 'url(javascript:alert(1))' }} />;`,
@@ -520,7 +519,7 @@ describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
       ),
     ).toBeNull();
     // diagnostic は出る (error mode で観測)。
-    const err = qstyle({ backend: 'qwik-native', diagnostics: 'error' }) as unknown as Transformable;
+    const err = qstyle({ diagnostics: 'error' }) as unknown as Transformable;
     expect(() =>
       err.transform(
         withImport('export const A = () => <div css={css`&:hover { color: red;`} />;'),
@@ -531,7 +530,6 @@ describe('qstyle B-2 security / fallback 系 (SEC/FLB)', () => {
 
   it('FLB-003: runtime-only structures inline into the style attribute under promotion never', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'never' },
     }) as unknown as Transformable;
@@ -599,13 +597,13 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
     return found;
   };
 
-  /** build 相当の配線: buildStart -> transforms -> main/cssAsset の generateBundle。 */
+  /** build 相当の配線: buildStart -> transforms -> main の generateBundle。 */
   const buildOnce = (
     options: Parameters<typeof qstyleFactory>[0],
     modules: readonly { readonly id: string; readonly code: string }[],
-  ): { emitted: Emitted[]; codes: string[] } => {
-    const [main, cssAsset] = pluginsOf(options, 'qstyle', 'qstyle:css-asset');
-    if (main === undefined || cssAsset === undefined) throw new Error('plugin not found');
+  ): { emitted: Emitted[]; codes: string[]; packCss: Record<string, string> } => {
+    const [main] = pluginsOf(options, 'qstyle');
+    if (main === undefined) throw new Error('plugin not found');
     const buildStart = main['buildStart'] as () => void;
     const transform = main['transform'] as (
       code: string,
@@ -614,35 +612,52 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
     const mainGenerate = main['generateBundle'] as (
       this: { emitFile: (f: Emitted) => void },
     ) => void;
-    const cssGenerate = cssAsset['generateBundle'] as (
-      this: { emitFile: (f: Emitted) => void },
-    ) => void;
     buildStart();
     const emitted: Emitted[] = [];
     const emit = (f: Emitted): void => {
       emitted.push(f);
     };
     const codes: string[] = [];
+    const packCss: Record<string, string> = {};
+    const load = main['load'] as (id: string) => string | null;
     for (const mod of modules) {
       const out = transform(mod.code, mod.id);
       codes.push(out?.code ?? '');
+      const m: RegExpMatchArray | null =
+        /import "virtual:qstyle\/pack\/(q_[0-9a-f]+)\.css"/.exec(out?.code ?? '');
+      if (m?.[1] !== undefined) {
+        packCss[m[1]] = load(`virtual:qstyle/pack/${m[1]}.css`) ?? '';
+      }
     }
     mainGenerate.call({ emitFile: emit });
-    cssGenerate.call({ emitFile: emit });
-    return { emitted, codes };
+    return { emitted, codes, packCss };
   };
 
-  const cssFileNamesOf = (run: { emitted: Emitted[] }): string[] =>
-    run.emitted
-      .filter((e) => /^assets\/qstyle\.q_[0-9a-f]+\.css$/.test(e.fileName))
-      .map((e) => e.fileName)
-      .sort();
+  /** manifest (qstyle-manifest.json) の parses。modulePacks と packs を返す。 */
+  const manifestOf = (run: { emitted: Emitted[] }): {
+    modulePacks: ReadonlyMap<string, string>;
+    packs: ReadonlyMap<string, string>;
+  } => {
+    const manifest = JSON.parse(
+      run.emitted.find((e) => e.fileName === 'qstyle-manifest.json')?.source ?? '{}',
+    ) as {
+      modulePacks?: readonly (readonly [string, string])[];
+      packs?: readonly { readonly id: string; readonly cssText: string }[];
+    };
+    return {
+      modulePacks: new Map(manifest.modulePacks ?? []),
+      packs: new Map((manifest.packs ?? []).map((p) => [p.id, p.cssText] as const)),
+    };
+  };
 
-  it('HASH-007: route A local change keeps route B chunk hash stable', () => {
-    // 用法が重ならない 3 unit (home-local / about-local / shared) は merge されず
-    // 3 chunk になる (similarity 0)。A の宣言変更は A の chunk のみ変える。
+  /** pack id の unique sorted list (pack = unit set の hash で決定論的)。 */
+  const packIdsOf = (run: { emitted: Emitted[] }): string[] =>
+    [...new Set(manifestOf(run).modulePacks.values())].sort();
+
+  it('HASH-007: route A local change keeps route B pack hash stable', () => {
+    // 用法が重ならない 3 unit set (home-local / about-local / shared) は別 pack
+    // になる。A の宣言変更は A の pack のみ変える。
     const options = {
-      backend: 'css-asset',
       routes: {
         '/': ['/src/home-a.tsx', '/src/home-b.tsx', '/src/home-c.tsx'],
         '/about': ['/src/about-a.tsx', '/src/about-b.tsx', '/src/about-c.tsx'],
@@ -664,26 +679,25 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
     );
     const first = buildOnce({ ...options }, modulesV1);
     const second = buildOnce({ ...options }, modulesV2);
-    const namesOf = (run: { emitted: Emitted[] }): string[] => cssFileNamesOf(run);
+    const namesOf = (run: { emitted: Emitted[] }): string[] => packIdsOf(run);
     expect(namesOf(first)).toHaveLength(3);
     expect(namesOf(second)).toHaveLength(3);
-    // 共有・about の chunk は不変、home-local のみ変わる。
+    // 共有・about の pack は不変、home-local のみ変わる。
     const same = (file: string): boolean => namesOf(second).includes(file);
     const homeV1: string[] = namesOf(first).filter((file) => !same(file));
     expect(homeV1).toHaveLength(1);
     for (const file of namesOf(first)) {
       if (file !== homeV1[0]) expect(namesOf(second)).toContain(file);
     }
-    // 変わった chunk の中身は blue。
-    const changed: Emitted | undefined = second.emitted.find(
-      (e) => e.fileName === namesOf(second).find((f) => f !== homeV1[0] && !namesOf(first).includes(f)),
+    // 変わった pack の中身は blue。
+    const changedId: string | undefined = namesOf(second).find(
+      (f) => f !== homeV1[0] && !namesOf(first).includes(f),
     );
-    expect(changed?.source).toContain('color:blue');
+    expect(second.packCss[changedId ?? '']).toContain('color:blue');
   });
 
-  it('HASH-008: shared atom change invalidates only the shared chunk', () => {
+  it('HASH-008: shared atom change invalidates only the shared pack', () => {
     const options = {
-      backend: 'css-asset',
       routes: {
         '/': ['/src/home-a.tsx', '/src/home-b.tsx'],
         '/about': ['/src/about-a.tsx', '/src/about-b.tsx'],
@@ -711,68 +725,60 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
     );
     const first = buildOnce({ ...options }, modulesV1);
     const second = buildOnce({ ...options }, modulesV2);
-    expect(cssFileNamesOf(first)).toHaveLength(3);
-    expect(cssFileNamesOf(second)).toHaveLength(3);
-    // route-local (red/green) の chunk は不変、shared のみ変わる。
-    const kept: string[] = cssFileNamesOf(first).filter((file) =>
-      cssFileNamesOf(second).includes(file),
+    expect(packIdsOf(first)).toHaveLength(3);
+    expect(packIdsOf(second)).toHaveLength(3);
+    // route-local (red/green) の pack は不変、shared のみ変わる。
+    const kept: string[] = packIdsOf(first).filter((file) =>
+      packIdsOf(second).includes(file),
     );
     expect(kept).toHaveLength(2);
-    const changedFile: string | undefined = cssFileNamesOf(second).find(
-      (file) => !cssFileNamesOf(first).includes(file),
+    const changedId: string | undefined = packIdsOf(second).find(
+      (file) => !packIdsOf(first).includes(file),
     );
-    const changed: Emitted | undefined = second.emitted.find(
-      (e) => e.fileName === changedFile,
-    );
-    expect(changed?.source).toContain('dotted');
+    expect(second.packCss[changedId ?? '']).toContain('dotted');
   });
 
-  it('HASH-009: identical module content at different paths yields identical css asset names', () => {
+  it('HASH-009: identical module content at different paths yields identical pack ids', () => {
     const code = `export const A = () => <div css={{ display: 'flex', gap: 8 }} />;`;
-    // 同一内容を別 directory に置いた build どうしで css asset hash は同一。
+    // 同一内容を別 directory に置いた build どうしで pack id は同一。
     const first = buildOnce(
-      { backend: 'css-asset', routes: { '/': ['/src/feature-a/card.tsx'] } },
+      { routes: { '/': ['/src/feature-a/card.tsx'] } },
       [{ id: '/src/feature-a/card.tsx', code }],
     );
     const second = buildOnce(
-      { backend: 'css-asset', routes: { '/': ['/src/nested/deep/card.tsx'] } },
+      { routes: { '/': ['/src/nested/deep/card.tsx'] } },
       [{ id: '/src/nested/deep/card.tsx', code }],
     );
-    expect(cssFileNamesOf(second)).toEqual(cssFileNamesOf(first));
-    expect(cssFileNamesOf(first)).toHaveLength(1);
+    expect(packIdsOf(second)).toEqual(packIdsOf(first));
+    expect(packIdsOf(first)).toHaveLength(1);
     // moduleKey は basename 正規化: route path を basename 指定しても解決する。
+    // (chunk 分類が basename 指定の route を正しく拾うことを manifest で確認)
     const third = buildOnce(
-      { backend: 'css-asset', routes: { '/': ['card.tsx'] } },
+      { routes: { '/': ['card.tsx'] } },
       [{ id: '/src/ui/card.tsx', code }],
     );
-    const routesAsset: Emitted | undefined = third.emitted.find(
-      (e) => e.fileName === 'qstyle.routes.json',
-    );
-    const manifest = JSON.parse(routesAsset?.source ?? '{}') as {
-      entries: { route: string; assets: string[] }[];
-    };
-    expect(manifest.entries[0]?.assets.length).toBeGreaterThan(0);
-    for (const asset of manifest.entries[0]?.assets ?? []) {
-      expect(cssFileNamesOf(third)).toContain(asset);
-    }
+    const manifest = JSON.parse(
+      third.emitted.find((e) => e.fileName === 'qstyle-manifest.json')?.source ?? '{}',
+    ) as { chunkPlans: { classification: string; routes: string[]; members: string[] }[] };
+    const home = manifest.chunkPlans.find((c) => c.routes.includes('/'));
+    expect(home?.classification).toBe('route-local');
+    expect(home?.members.length).toBeGreaterThan(0);
   });
 
   it('R2: same-basename modules in different dirs resolve to distinct routes', () => {
     // Qwik City 規約 (`about/index.tsx`) では basename が衝突するため、route option
     // は root 相対 path で区別する (configResolved で root を渡すと moduleKey が
-    // root 相対化される)。
-    const [main, cssAsset] = pluginsOf(
+    // root 相対化される)。chunk 分類 (manifest chunkPlans) で確認する。
+    const [main] = pluginsOf(
       {
-        backend: 'css-asset',
         routes: {
           '/': ['src/routes/index.tsx'],
           '/about': ['src/routes/about/index.tsx'],
         },
       },
       'qstyle',
-      'qstyle:css-asset',
     );
-    if (main === undefined || cssAsset === undefined) throw new Error('plugin not found');
+    if (main === undefined) throw new Error('plugin not found');
     (
       main['configResolved'] as (config: { command: string; mode: string; root: string }) => void
     )({ command: 'build', mode: 'production', root: '/app' });
@@ -796,28 +802,18 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
     (main['generateBundle'] as (this: { emitFile: (f: Emitted) => void }) => void).call({
       emitFile: emit,
     });
-    (cssAsset['generateBundle'] as (this: { emitFile: (f: Emitted) => void }) => void).call({
-      emitFile: emit,
-    });
-    const routesAsset: Emitted | undefined = emitted.find(
-      (e) => e.fileName === 'qstyle.routes.json',
+    const manifest = JSON.parse(
+      emitted.find((e) => e.fileName === 'qstyle-manifest.json')?.source ?? '{}',
+    ) as { chunkPlans: { classification: string; routes: string[]; members: string[] }[] };
+    const byRoute = new Map<string, { classification: string; members: string[] }>(
+      manifest.chunkPlans
+        .filter((c) => c.routes.length === 1)
+        .map((c) => [c.routes[0] as string, c] as [string, { classification: string; members: string[] }]),
     );
-    const manifest = JSON.parse(routesAsset?.source ?? '{}') as {
-      entries: { route: string; assets: string[] }[];
-    };
-    const byRoute = new Map<string, string[]>(
-      manifest.entries.map((e) => [e.route, e.assets] as [string, string[]]),
-    );
-    // 混線なし: 各 route 1 asset、別 file、内容も対応する。
-    expect(byRoute.get('/')?.length).toBe(1);
-    expect(byRoute.get('/about')?.length).toBe(1);
-    const homeAsset: string = byRoute.get('/')?.[0] ?? '';
-    const aboutAsset: string = byRoute.get('/about')?.[0] ?? '';
-    expect(homeAsset).not.toBe(aboutAsset);
-    const cssOf = (fileName: string): string =>
-      emitted.find((e) => e.fileName === fileName)?.source ?? '';
-    expect(cssOf(homeAsset)).toContain('color:red');
-    expect(cssOf(aboutAsset)).toContain('color:blue');
+    // 混線なし: 各 route が route-local に分類される。
+    expect(byRoute.get('/')?.classification).toBe('route-local');
+    expect(byRoute.get('/about')?.classification).toBe('route-local');
+    expect(byRoute.get('/')?.members).not.toEqual(byRoute.get('/about')?.members);
   });
 
   it('HASH-010: object literal formatting differences do not change unit identity', () => {
@@ -852,7 +848,7 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
   });
 
   it('DED-009: @layer nest is compiled with a layer wrapper', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     const out = p.transform(
       `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,
       '/src/ded009.tsx',
@@ -863,7 +859,7 @@ describe('qstyle B-2 determinism / dedup 系 (HASH/DED)', () => {
   });
 
   it('CSS-012: @layer order is preserved in the wrapper, not miscompiled', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as ResidualPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as ResidualPlugin;
     // layer 指定は wrapper として素直に出力する (順序の解釈は CSS に委ねる)。
     const out = p.transform(
       `export const A = () => <div css={{ '@layer base': { color: 'red' } }} />;`,

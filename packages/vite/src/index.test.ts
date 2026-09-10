@@ -29,12 +29,12 @@ function packCssOf(p: { load: (id: string) => string | null }, code: string): st
 
 describe('qstyle vite plugin (M0)', () => {
   it('exposes vite plugin name', () => {
-    const p = qstyle({ backend: 'qwik-native' });
+    const p = qstyle({});
     expect(p.name).toBe('qstyle');
   });
 
   it('rewrites single string-literal css prop to atom class', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
@@ -50,7 +50,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('leaves complex css props untouched', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     // spread / call / ternary / bare handle は parse 不能または residual のため untouched。
@@ -69,7 +69,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('rewrites multi-declaration css props', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
@@ -88,7 +88,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('rewrites &:hover nested styles with pseudo context', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
@@ -101,7 +101,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('emits descendant selector atoms for & svg (SEL-021)', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
     };
@@ -113,7 +113,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges with a pre-existing class attribute', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const code = `export const A = () => <div class="legacy" css={{ display: 'flex' }} />;`;
@@ -124,7 +124,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges into a pre-existing className attribute without dropping it', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     // className 値を落とすと :where(.g-on) 等の既存 class 依存が壊れる (実バグ回帰)。
@@ -138,7 +138,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges into a className expression via array wrap (keyword preserved)', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -152,7 +152,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges into an existing class={...} expression via array wrap', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -167,7 +167,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges with a static class attribute written after the css prop', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -182,7 +182,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('merges with a class expression written after the css prop', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -196,7 +196,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('keeps the tag end scan safe when a later attribute contains >', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     const out = p.transform(
@@ -210,7 +210,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('only merges css when an explicit class follows all spread props', () => {
-    const p = qstyle({ backend: 'qwik-native', debug: false }) as unknown as {
+    const p = qstyle({ debug: false }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     expect(
@@ -251,7 +251,7 @@ describe('qstyle vite plugin (M0)', () => {
   });
 
   it('ignores files without css prop', () => {
-    const p = qstyle({ backend: 'qwik-native' }) as unknown as {
+    const p = qstyle({}) as unknown as {
       transform: (code: string, id: string) => unknown;
     };
     expect(p.transform(`export const x = 1;`, '/src/b.tsx')).toBeNull();
@@ -378,7 +378,7 @@ describe('qstyle vite plugin dynamics (M5c)', () => {
   }
   // parametric 機構の検証のため promotion:'always' を明示する (default cost-based は単発を inline 化する)。
   const plugin = (): Transformable =>
-    qstyle({ backend: 'qwik-native', debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
+    qstyle({ debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
 
   /** 出力 code 内の class 属性から atom id 一覧を取る。 */
   function classIds(code: string): string[] {
@@ -472,7 +472,7 @@ describe('qstyle css() handles + composition (M3)', () => {
   }
   // parametric 機構の検証のため promotion:'always' を明示する。
   const plugin = (): Transformable =>
-    qstyle({ backend: 'qwik-native', debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
+    qstyle({ debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
   const withImport = (body: string): string => `import { css } from '@qstyle/qwik';\n${body}`;
 
   /** 出力 code 内の class 属性から atom id 一覧を取る。 */
@@ -752,7 +752,6 @@ describe('qstyle css() handles + composition (M3)', () => {
 
   it('reports an actionable reason for cross-module handles (CMP-017 boundary)', () => {
     const errPlugin = qstyle({
-      backend: 'qwik-native',
       diagnostics: 'error',
       runtimeStyles: { promotion: 'always' },
     }) as unknown as {
@@ -807,7 +806,7 @@ describe('qstyle static template handles (M4)', () => {
     transform: (code: string, id: string) => { code: string; map: null } | null;
     load: (id: string) => string | null;
   }
-  const plugin = (): Transformable => qstyle({ backend: 'qwik-native', debug: false }) as unknown as Transformable;
+  const plugin = (): Transformable => qstyle({ debug: false }) as unknown as Transformable;
   const withImport = (body: string): string => `import { css } from '@qstyle/qwik';\n${body}`;
 
   function classIds(code: string): string[] {
@@ -1015,7 +1014,7 @@ describe('qstyle finite ternary values (DYN-016)', () => {
     transform: (code: string, id: string) => { code: string; map: null } | null;
     load: (id: string) => string | null;
   }
-  const plugin = (): Transformable => qstyle({ backend: 'qwik-native', debug: false }) as unknown as Transformable;
+  const plugin = (): Transformable => qstyle({ debug: false }) as unknown as Transformable;
 
   it('expands static ternary values to runtime class choice without CSS vars', () => {
     const p = plugin();
@@ -1068,7 +1067,7 @@ describe('qstyle finite ternary values (DYN-016)', () => {
 
 describe('qstyle legacy hooks coexistence (§24)', () => {
   it('tracks useStyles/useStylesScoped provenance without rewriting', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as {
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       readonly __legacyStyles: readonly {
         module: string;
@@ -1102,7 +1101,7 @@ describe('qstyle legacy hooks coexistence (§24)', () => {
   });
 
   it('records global hooks and unresolvable css paths', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as {
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       readonly __legacyStyles: readonly { hook: string; local: string; cssPath: string | null }[];
     };
@@ -1120,7 +1119,7 @@ describe('qstyle compound template values (§23/DYN-006)', () => {
   }
   // parametric 機構の検証のため promotion:'always' を明示する。
   const plugin = (): Transformable =>
-    qstyle({ backend: 'qwik-native', debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
+    qstyle({ debug: false, runtimeStyles: { promotion: 'always' } }) as unknown as Transformable;
 
   function classIds(code: string): string[] {
     const m: RegExpMatchArray | null = /class="([^"]*)"/.exec(code);
@@ -1204,7 +1203,7 @@ describe('qstyle scale bounds (PERF-001/003 unit)', () => {
   }
 
   it('dedups 100 identical static styles to one atom', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as Transformable;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as Transformable;
     for (let i = 0; i < 100; i += 1) {
       const out = p.transform(
         `export const A${i} = () => <div css={{ display: 'flex', gap: 8 }} />;`,
@@ -1219,7 +1218,6 @@ describe('qstyle scale bounds (PERF-001/003 unit)', () => {
 
   it('shares one parametric structure across 1000 dynamic widths', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
     }) as unknown as Transformable;
@@ -1236,7 +1234,6 @@ describe('qstyle scale bounds (PERF-001/003 unit)', () => {
 
   it('keeps singleton dynamics inline under explicit cost-based promotion', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'cost-based' },
     }) as unknown as Transformable;
@@ -1261,7 +1258,6 @@ describe('qstyle promotion modes (§32)', () => {
   }
   const never = (): Transformable =>
     qstyle({
-      backend: 'qwik-native',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'never' },
     }) as unknown as Transformable;
@@ -1318,7 +1314,6 @@ describe('qstyle promotion modes (§32)', () => {
 
   it('promotes module-shared structures under explicit cost-based', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'cost-based' },
     }) as unknown as Transformable;
@@ -1337,20 +1332,6 @@ describe('qstyle promotion modes (§32)', () => {
   });
 });
 
-describe('qstyle route-loader virtual module (css-asset)', () => {
-  it('serves a loader that fetches the manifest and injects links', () => {
-    const p = qstyle({ backend: 'css-asset', diagnostics: 'silent' }) as unknown as {
-      load: (id: string) => string | null;
-    };
-    const code: string | null = p.load('virtual:qstyle/route-loader');
-    expect(code).not.toBeNull();
-    expect(code).toContain('loadRouteStyles');
-    expect(code).toContain('qstyle.routes.json');
-    expect(code).toContain('resolveRouteAssets');
-    expect(code).toContain('rel');
-    expect(code).toContain('stylesheet');
-  });
-});
 
 describe('qstyle source maps (VLQ + edit tracking)', () => {
   interface Transformable {
@@ -1427,7 +1408,7 @@ describe('qstyle source maps (VLQ + edit tracking)', () => {
   });
 
   it('maps generated class attributes to the original css prop line', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as Transformable;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as Transformable;
     const code = [
       `export const A = () => (`,
       `  <div`,
@@ -1488,7 +1469,6 @@ describe('qstyle dev mode + CSS HMR', () => {
   }
   const devPlugin = (): DevPlugin => {
     const p = qstyle({
-      backend: 'qwik-native',
       diagnostics: 'silent',
       devHmr: { reloadDelayMs: 0 },
     }) as unknown as DevPlugin;
@@ -1728,7 +1708,7 @@ describe('qstyle dev mode + CSS HMR', () => {
 
 describe('qstyle residual log (DIA-003)', () => {
   it('collects residual reasons for unsafe selectors', () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as {
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
       load: (id: string) => string | null;
       readonly __residuals: readonly { reason: string; cssText: string }[];
@@ -1746,7 +1726,6 @@ describe('qstyle residual log (DIA-003)', () => {
 describe('qstyle options validation + diagnostics', () => {
   it('rejects unknown option values with actionable errors (FLB-006)', () => {
     expect(() => qstyle({ optimization: 'bogus' as never })).toThrow(/unknown optimization/);
-    expect(() => qstyle({ backend: 'x' as never })).toThrow(/unknown backend/);
     expect(() => qstyle({ diagnostics: 'y' as never })).toThrow(/unknown diagnostics/);
     expect(() => qstyle({ runtimeStyles: { promotion: 'z' as never } })).toThrow(
       /unknown runtimeStyles.promotion/,
@@ -1761,7 +1740,6 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('emits one class per occurrence without atomicization in preserve mode', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1784,7 +1762,6 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('dedups identical blocks and groups contexts in preserve mode', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1806,7 +1783,6 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('keeps dynamic values as var refs inside preserve blocks', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1827,7 +1803,6 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('leaves order-sensitive declarations untouched in preserve mode', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1846,7 +1821,6 @@ describe('qstyle options validation + diagnostics', () => {
 
   it('concatenates composition in author order in preserve mode', () => {
     const p = qstyle({
-      backend: 'qwik-native',
       optimization: 'preserve',
       diagnostics: 'silent',
       runtimeStyles: { promotion: 'always' },
@@ -1867,7 +1841,7 @@ describe('qstyle options validation + diagnostics', () => {
   });
 
   it('strict mode turns untouched occurrences into compile errors (§61)', () => {
-    const p = qstyle({ backend: 'qwik-native', optimization: 'strict' }) as unknown as {
+    const p = qstyle({ optimization: 'strict' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     expect(() =>
@@ -1876,13 +1850,13 @@ describe('qstyle options validation + diagnostics', () => {
   });
 
   it('diagnostics error mode throws, silent mode stays quiet (DIA-008)', () => {
-    const errPlugin = qstyle({ backend: 'qwik-native', diagnostics: 'error' }) as unknown as {
+    const errPlugin = qstyle({ diagnostics: 'error' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     expect(() =>
       errPlugin.transform(`export const A = () => <div css={{ ...base }} />;`, '/src/e.tsx'),
     ).toThrow(/\[qstyle\]/);
-    const silent = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as {
+    const silent = qstyle({ diagnostics: 'silent' }) as unknown as {
       transform: (code: string, id: string) => { code: string; map: null } | null;
     };
     expect(
@@ -1893,7 +1867,7 @@ describe('qstyle options validation + diagnostics', () => {
   it('warns once per module × reason across re-transforms (DIA-009)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = qstyle({ backend: 'qwik-native', diagnostics: 'warning' }) as unknown as {
+      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
         transform: (code: string, id: string) => { code: string; map: null } | null;
       };
       const code = `export const A = () => <div css={{ ...base }} />;`;
@@ -1912,7 +1886,7 @@ describe('qstyle options validation + diagnostics', () => {
   it('unsupported dynamic property names a reason (DIA-001)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = qstyle({ backend: 'qwik-native', diagnostics: 'warning' }) as unknown as {
+      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
         transform: (code: string, id: string) => { code: string; map: null } | null;
       };
       expect(
@@ -1933,7 +1907,7 @@ describe('qstyle options validation + diagnostics', () => {
   it('unsupported selectors name a reason (DIA-002)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = qstyle({ backend: 'qwik-native', diagnostics: 'warning' }) as unknown as {
+      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
         transform: (code: string, id: string) => { code: string; map: null } | null;
       };
       expect(
@@ -1952,7 +1926,7 @@ describe('qstyle options validation + diagnostics', () => {
   it('malformed template CSS names a reason (DIA-004)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = qstyle({ backend: 'qwik-native', diagnostics: 'warning' }) as unknown as {
+      const p = qstyle({ diagnostics: 'warning' }) as unknown as {
         transform: (code: string, id: string) => { code: string; map: null } | null;
       };
       expect(
@@ -1976,7 +1950,7 @@ describe('qstyle generateBundle wiring', () => {
       readonly source: string;
     }
     const runOnce = (): { emitted: string[]; packCss: string } => {
-      const p = qstyle({ backend: 'qwik-native', routes: { '/': ['/src/a.tsx'] } }) as unknown as {
+      const p = qstyle({ routes: { '/': ['/src/a.tsx'] } }) as unknown as {
         buildStart: () => void;
         transform: (code: string, id: string) => { code: string; map: null } | null;
         generateBundle: (this: { emitFile: (f: { fileName: string; source: string }) => void }) => void;
@@ -1999,13 +1973,14 @@ describe('qstyle generateBundle wiring', () => {
     expect(second.packCss).toBe(first.packCss);
     // CSS asset は pack css module 経由で vite 側が出す (直接 emit しない)。
     expect(first.packCss).toMatch(/\.q_[0-9a-f]{8}\{display:flex\}/);
-    expect(first.emitted.some((e) => e.startsWith('qstyle.routes.json'))).toBe(true);
+    // emit されるのは qstyle-manifest.json (metadata) のみ。routes.json は廃止。
+    expect(first.emitted.some((e) => e.startsWith('qstyle.routes.json'))).toBe(false);
     expect(first.emitted.some((e) => e.startsWith('qstyle-manifest.json'))).toBe(true);
   });
 
   it('records provenance sources for deduped atoms across modules', async () => {
     const { sourceSignature } = await import('@qstyle/core');
-    const p = qstyle({ backend: 'qwik-native' }) as unknown as {
+    const p = qstyle({}) as unknown as {
       buildStart: () => void;
       transform: (code: string, id: string) => { code: string; map: null } | null;
       readonly __usageGraph: { styleToComponents: Map<string, Set<string>> };
@@ -2028,308 +2003,6 @@ describe('qstyle generateBundle wiring', () => {
   });
 });
 
-describe('qstyle css-asset backend (plan.md §3.4 R1.1-R1.3/R1.6)', () => {
-  interface Emitted {
-    readonly fileName: string;
-    readonly source: string;
-  }
-
-  /** qstyle() の戻り配列から名前で plugin を取り出す。同一 instance の plugin 群は
-   * closure 状態 (collected / graph / unit tags) を共有するため、必ず同じ戻り値から取る。 */
-  const pluginsOf = (
-    options: Parameters<typeof qstyleFactory>[0],
-    ...names: readonly string[]
-  ): Record<string, unknown>[] => {
-    const plugins = qstyleFactory(options) as unknown as readonly Record<string, unknown>[];
-    const found: Record<string, unknown>[] = [];
-    for (const name of names) {
-      const plugin: Record<string, unknown> | undefined = plugins.find(
-        (p) => p['name'] === name,
-      );
-      if (plugin === undefined) throw new Error(`plugin ${name} not found`);
-      found.push(plugin);
-    }
-    return found;
-  };
-
-  /** noUncheckedIndexedAccess 下の取り出し用 (見つからなければ test 失敗)。 */
-  const req = (p: Record<string, unknown> | undefined): Record<string, unknown> => {
-    if (p === undefined) throw new Error('plugin not found');
-    return p;
-  };
-
-  /** build 相当の配線: buildStart -> transforms -> main/cssAsset の generateBundle。 */
-  const buildOnce = (
-    options: Parameters<typeof qstyleFactory>[0],
-    modules: readonly { readonly id: string; readonly code: string }[],
-  ): { emitted: Emitted[]; codes: string[] } => {
-    // main と cssAsset は同一 qstyle() instance から取る (closure 状態の共有)。
-    const plugins: Record<string, unknown>[] = pluginsOf(options, 'qstyle', 'qstyle:css-asset');
-    const main: Record<string, unknown> = req(plugins[0]);
-    const cssAsset: Record<string, unknown> = req(plugins[1]);
-    const buildStart = main['buildStart'] as () => void;
-    const transform = main['transform'] as (
-      code: string,
-      id: string,
-    ) => { code: string } | null;
-    const mainGenerate = main['generateBundle'] as (
-      this: { emitFile: (f: Emitted) => void },
-    ) => void;
-    const cssGenerate = cssAsset['generateBundle'] as (
-      this: { emitFile: (f: Emitted) => void },
-    ) => void;
-    buildStart();
-    const emitted: Emitted[] = [];
-    const emit = (f: Emitted): void => {
-      emitted.push(f);
-    };
-    const codes: string[] = [];
-    for (const mod of modules) {
-      const out = transform(mod.code, mod.id);
-      codes.push(out?.code ?? '');
-    }
-    mainGenerate.call({ emitFile: emit });
-    cssGenerate.call({ emitFile: emit });
-    return { emitted, codes };
-  };
-
-  it('injects ensureModuleStyles(unit ids) instead of pack css import (R1.6)', () => {
-    const main: Record<string, unknown> = req(pluginsOf({ backend: 'css-asset' }, 'qstyle')[0]);
-    const transform = main['transform'] as (
-      code: string,
-      id: string,
-    ) => { code: string } | null;
-    const out = transform(
-      `export const A = () => <div css={{ display: 'flex' }} />;`,
-      '/src/ca-a.tsx',
-    );
-    expect(out).not.toBeNull();
-    expect(out?.code).toContain(`import { ensureModuleStyles } from '@qstyle/qwik/client';`);
-    expect(out?.code).toMatch(/^ensureModuleStyles\(\["q_[0-9a-f]{8}"\]\);/m);
-    expect(out?.code).not.toContain('virtual:qstyle/pack/');
-  });
-
-  it('keeps the dev pipeline under css-asset (serve は backend によらず現状維持)', () => {
-    const main: Record<string, unknown> = req(
-      pluginsOf({ backend: 'css-asset', diagnostics: 'silent' }, 'qstyle')[0],
-    );
-    const configResolved = main['configResolved'] as (config: {
-      command: string;
-      mode: string;
-    }) => void;
-    configResolved({ command: 'serve', mode: 'development' });
-    const transform = main['transform'] as (
-      code: string,
-      id: string,
-    ) => { code: string } | null;
-    const out = transform(
-      `export const A = () => <div css={{ display: 'flex' }} />;`,
-      '/src/ca-dev.tsx',
-    );
-    expect(out).not.toBeNull();
-    expect(out?.code).toContain('virtual:qstyle/dev/');
-    expect(out?.code).not.toContain('ensureModuleStyles');
-  });
-
-  it('emits hashed css assets + qstyle.units.json deterministically (R1.1/R1.2)', () => {
-    const modules = [
-      { id: '/src/ca-a.tsx', code: `export const A = () => <div css={{ display: 'flex' }} />;` },
-      {
-        id: '/src/ca-b.tsx',
-        code: `export const B = () => <div css={{ display: 'flex', gap: 8 }} />;`,
-      },
-    ];
-    const first = buildOnce({ backend: 'css-asset' }, modules);
-    const second = buildOnce({ backend: 'css-asset' }, modules);
-    const sig = (run: { emitted: Emitted[] }): string[] =>
-      run.emitted.map((e) => `${e.fileName}:${e.source}`).sort();
-    // HASH-001 (css-asset 版): 同一入力で byte-for-byte 同一。
-    expect(sig(second)).toEqual(sig(first));
-
-    const cssAssets: Emitted[] = first.emitted.filter(
-      (e) => /^assets\/qstyle\.q_[0-9a-f]+\.css$/.test(e.fileName),
-    );
-    expect(cssAssets.length).toBeGreaterThan(0);
-    const cssText: string = cssAssets.map((e) => e.source).join('\n');
-    // §4.1 修正後: 異なる module の unit は usage signature が異なるため別 chunk になる
-    // (chunk 内 dedup も chunk 単位)。内容の存在のみ検証する。
-    expect(cssText).toMatch(/\.q_[0-9a-f]{8}\{display:flex/);
-    expect(cssText).toMatch(/gap:8px/);
-
-    // units index: 各 unit は恰好 1 chunk (fileName) に属し、実在 asset を指す。
-    const unitsAsset: Emitted | undefined = first.emitted.find(
-      (e) => e.fileName === 'qstyle.units.json',
-    );
-    expect(unitsAsset).toBeDefined();
-    const units: Record<string, string[]> = (
-      JSON.parse(unitsAsset?.source ?? '{}') as { units: Record<string, string[]> }
-    ).units;
-    expect(Object.keys(units)).toHaveLength(2);
-    for (const fileNames of Object.values(units)) {
-      expect(fileNames).toHaveLength(1);
-      expect(first.emitted.map((e) => e.fileName)).toContain(fileNames[0]);
-    }
-    // qwik-native 由来の emit は残る (manifest 2 件)。
-    expect(
-      first.emitted.filter((e) => e.fileName === 'qstyle.routes.json' || e.fileName === 'qstyle-manifest.json'),
-    ).toHaveLength(2);
-  });
-
-  it('applies §39 v1 dedup inside a chunk before hashing (R1.2)', () => {
-    // 同一 module 内の 2 css prop は usage signature が一致するため同一 chunk になる。
-    const code = `export const M = () => (<section><div css={{ display: 'flex' }} /><div css={{ display: 'flex', gap: 8 }} /></section>);`;
-    const { emitted } = buildOnce({ backend: 'css-asset' }, [
-      { id: '/src/ca-m.tsx', code },
-    ]);
-    const cssAssets: Emitted[] = emitted.filter(
-      (e) => /^assets\/qstyle\.q_[0-9a-f]+\.css$/.test(e.fileName),
-    );
-    expect(cssAssets).toHaveLength(1);
-    const css: string = cssAssets[0]?.source ?? '';
-    // 共有 decl は group selector 化され、chunk 内に 1 回だけ現れる。
-    expect(css).toMatch(/\.q_[0-9a-f]{8},\.q_[0-9a-f]{8}\{display:flex\}\.q_[0-9a-f]{8}\{gap:8px\}/);
-    expect(css.split('display:flex').length - 1).toBe(1);
-  });
-
-  it('resolves route manifest assets to emitted file names (R1.3)', () => {
-    const modules = [
-      {
-        id: '/src/ca-route.tsx',
-        code: `export const R = () => <div css={{ display: 'flex' }} />;`,
-      },
-    ];
-    const { emitted } = buildOnce(
-      { backend: 'css-asset', routes: { '/': ['/src/ca-route.tsx'] } },
-      modules,
-    );
-    const routesAsset: Emitted | undefined = emitted.find(
-      (e) => e.fileName === 'qstyle.routes.json',
-    );
-    expect(routesAsset).toBeDefined();
-    const manifest = JSON.parse(routesAsset?.source ?? '{}') as {
-      entries: { route: string; assets: string[] }[];
-    };
-    expect(manifest.entries).toHaveLength(1);
-    const entry = manifest.entries[0];
-    expect(entry?.route).toBe('/');
-    const cssFileNames: string[] = emitted
-      .filter((e) => /^assets\/qstyle\.q_[0-9a-f]+\.css$/.test(e.fileName))
-      .map((e) => e.fileName);
-    expect(entry?.assets.length).toBeGreaterThan(0);
-    for (const asset of entry?.assets ?? []) {
-      expect(cssFileNames).toContain(asset);
-    }
-  });
-
-  it('sets globalThis.__QSTYLE_ROUTES__ for in-process SSG render (§3.4 R1.4)', () => {
-    // plugin 側は書き込みのみ。reader (QstyleLinks) の型とは緩い構造一致で検証する。
-    delete (globalThis as { __QSTYLE_ROUTES__?: unknown }).__QSTYLE_ROUTES__;
-    const { emitted } = buildOnce(
-      { backend: 'css-asset', routes: { '/': ['/src/ca-route.tsx'] } },
-      [
-        {
-          id: '/src/ca-route.tsx',
-          code: `export const R = () => <div css={{ display: 'flex' }} />;`,
-        },
-      ],
-    );
-    const globalRoutes: unknown = (globalThis as { __QSTYLE_ROUTES__?: unknown })
-      .__QSTYLE_ROUTES__;
-    expect(globalRoutes).toBeDefined();
-    // qstyle.routes.json と同一内容 (serialize 前の object)。
-    const routesAsset: Emitted | undefined = emitted.find(
-      (e) => e.fileName === 'qstyle.routes.json',
-    );
-    expect(globalRoutes).toEqual(JSON.parse(routesAsset?.source ?? '{}') as unknown);
-    const entries = (globalRoutes as { entries: { route: string }[] }).entries;
-    expect(entries.map((e) => e.route)).toEqual(['/']);
-  });
-
-  it('exposes chunk plans (members/bytes/fileName) via __chunkPlans (R1.8 metadata)', () => {
-    const plugins: Record<string, unknown>[] = pluginsOf(
-      { backend: 'css-asset' },
-      'qstyle',
-      'qstyle:css-asset',
-    );
-    const main: Record<string, unknown> = req(plugins[0]);
-    const cssAsset: Record<string, unknown> = req(plugins[1]);
-    const buildStart = main['buildStart'] as () => void;
-    const transform = main['transform'] as (
-      code: string,
-      id: string,
-    ) => { code: string } | null;
-    const generate = cssAsset['generateBundle'] as (
-      this: { emitFile: (f: Emitted) => void },
-    ) => void;
-    buildStart();
-    transform(
-      `export const A = () => <div css={{ display: 'flex' }} />;`,
-      '/src/ca-meta.tsx',
-    );
-    generate.call({ emitFile: (): void => undefined });
-    const plans = cssAsset['__chunkPlans'] as {
-      id: string;
-      members: readonly string[];
-      bytes: number;
-      fileName: string;
-    }[];
-    expect(plans.length).toBeGreaterThan(0);
-    for (const plan of plans) {
-      expect(plan.id).toMatch(/^pack_[0-9a-f]{6}$/);
-      expect(plan.members.length).toBeGreaterThan(0);
-      expect(plan.fileName).toMatch(/^assets\/qstyle\.q_[0-9a-f]+\.css$/);
-    }
-  });
-
-  it('logs backend + chunk plan report on generateBundle when debug (R1.8 report 表示)', () => {
-    const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    try {
-      buildOnce(
-        { backend: 'css-asset', debug: true },
-        [{ id: '/src/ca-report.tsx', code: `export const A = () => <div css={{ display: 'flex' }} />;` }],
-      );
-      const logged: string = spy.mock.calls
-        .map((args) => args.map((a) => String(a)).join(' '))
-        .join('\n');
-      expect(logged).toContain('chunk report (backend: css-asset');
-      expect(logged).toMatch(/assets\/qstyle\.q_[0-9a-f]+\.css/);
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  it('qstyle:dedup does not touch css-asset output (§3.4 R1.1 実行順依存)', () => {
-    const dedupPlugin: Record<string, unknown> = req(
-      pluginsOf({ backend: 'css-asset' }, 'qstyle:dedup')[0],
-    );
-    const generate = dedupPlugin['generateBundle'] as (
-      this: unknown,
-      options: unknown,
-      bundle: Record<string, unknown>,
-    ) => void;
-    interface MutableAsset {
-      type: string;
-      fileName: string;
-      source: string;
-    }
-    const qstyleAsset: MutableAsset = {
-      type: 'asset',
-      fileName: 'assets/qstyle.q_dead.css',
-      source: '.q_aaaaaaaa{color:red}.q_bbbbbbbb{color:red}',
-    };
-    const viteAsset: MutableAsset = {
-      type: 'asset',
-      fileName: 'assets/style.css',
-      source: '.q_cccccccc{color:red}.q_dddddddd{color:red}',
-    };
-    generate.call(undefined, {}, { q: qstyleAsset, v: viteAsset });
-    // css-asset の出力は emit 前 (hash 計算前) dedup 済みのため無編集。
-    expect(qstyleAsset.source).toBe('.q_aaaaaaaa{color:red}.q_bbbbbbbb{color:red}');
-    // vite 配管由来の CSS には従来どおり適用される。
-    expect(viteAsset.source).not.toBe('.q_cccccccc{color:red}.q_dddddddd{color:red}');
-    expect(viteAsset.source).toContain('.q_cccccccc,.q_dddddddd{color:red}');
-  });
-});
 
 describe('serializeAtomCss with suffix and layer', () => {
   it('serializes suffix, comma lists and layer wrappers', () => {
@@ -2361,7 +2034,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   };
 
   it('emits @keyframes with rewritten animation references in the pack', () => {
-    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
+    const p = pluginOf({ diagnostics: 'silent' });
     const out = p.transform(
       `export const A = () => <div css={{ '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } }, animation: 'fade 1s' }} />;`,
       '/src/kf1.tsx',
@@ -2374,7 +2047,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('resolves keyframes defined in a separate occurrence of the same module', () => {
-    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
+    const p = pluginOf({ diagnostics: 'silent' });
     const out = p.transform(
       `export const A = () => <><div css={{ '@keyframes fade': { from: { opacity: 0 } } }} /><div css={{ animationName: 'fade' }} /></>;`,
       '/src/kf2.tsx',
@@ -2387,7 +2060,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('emits @font-face globals into the pack', () => {
-    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
+    const p = pluginOf({ diagnostics: 'silent' });
     const out = p.transform(
       `export const A = () => <div css={{ '@font-face': { fontFamily: 'MyFont', src: 'url(/a.woff2)' }, color: 'red' }} />;`,
       '/src/ff1.tsx',
@@ -2399,7 +2072,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('leaves dynamic animation with local keyframes untouched', () => {
-    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
+    const p = pluginOf({ diagnostics: 'silent' });
     expect(
       p.transform(
         `export const A = () => <div css={{ '@keyframes fade': { from: { opacity: 0 } }, animationName: props.name }} />;`,
@@ -2409,7 +2082,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('dedups identical keyframes across modules by content hash', () => {
-    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'silent' });
+    const p = pluginOf({ diagnostics: 'silent' });
     const kf = `'@keyframes fade': { from: { opacity: 0 } }`;
     const outA = p.transform(
       `export const A = () => <div css={{ ${kf}, animation: 'fade 1s' }} />;`,
@@ -2434,7 +2107,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 
   it('warns and uses the first definition on conflicting keyframes names', () => {
-    const p = pluginOf({ backend: 'qwik-native', diagnostics: 'warning' });
+    const p = pluginOf({ diagnostics: 'warning' });
     const out = p.transform(
       `export const A = () => <><div css={{ '@keyframes fade': { from: { opacity: 0 } }, animation: 'fade 1s' }} /><div css={{ '@keyframes fade': { from: { opacity: 1 } }, animation: 'fade 2s' }} /></>;`,
       '/src/kfconf.tsx',
@@ -2446,7 +2119,7 @@ describe('qstyle keyframes and globals (transform)', () => {
   });
 });
 
-describe('qstyle performance defaults (backend css-asset / promotion always / routes auto)', () => {
+describe('qstyle performance defaults (pack css import / promotion always / routes auto)', () => {
   interface Transformable {
     transform: (code: string, id: string) => { code: string; map: null } | null;
     load: (id: string) => string | null;
@@ -2454,14 +2127,15 @@ describe('qstyle performance defaults (backend css-asset / promotion always / ro
   const def = (): Transformable =>
     qstyleFactory({ diagnostics: 'silent' })[0] as unknown as Transformable;
 
-  it('defaults to css-asset delivery (ensureModuleStyles, no pack import)', () => {
+  it('delivers styles via pack css import (no client runtime)', () => {
     const out = def().transform(
       `export const A = () => <div css={{ display: 'flex' }} />;`,
       '/src/dflt-a.tsx',
     );
     expect(out).not.toBeNull();
-    expect(out?.code).toContain(`from '@qstyle/qwik/client'`);
-    expect(out?.code).not.toContain('virtual:qstyle/pack/');
+    expect(out?.code).toContain('virtual:qstyle/pack/');
+    expect(out?.code).not.toContain(`from '@qstyle/qwik/client'`);
+    expect(out?.code).not.toContain('ensureModuleStyles');
   });
 
   it('defaults to always promotion (singleton dynamic becomes a class)', () => {
@@ -2562,17 +2236,19 @@ describe('qstyle performance defaults (backend css-asset / promotion always / ro
       expect(out).not.toBeNull();
       const emitted: { fileName: string; source: string }[] = [];
       main.generateBundle.call({ emitFile: (f) => emitted.push(f) });
+      // routes.json は廃止。route 分類は qstyle-manifest.json の chunkPlans に残る。
       const manifest = JSON.parse(
-        emitted.find((e) => e.fileName === 'qstyle.routes.json')?.source ?? '{}',
-      ) as { entries: { route: string; assets: string[] }[] };
-      const home = manifest.entries.find((e) => e.route === '/');
-      expect(home?.assets.length).toBeGreaterThan(0);
+        emitted.find((e) => e.fileName === 'qstyle-manifest.json')?.source ?? '{}',
+      ) as { chunkPlans: { classification: string; routes: string[]; members: string[] }[] };
+      const home = manifest.chunkPlans.find((c) => c.routes.includes('/'));
+      expect(home?.classification).toBe('route-local');
+      expect(home?.members.length).toBeGreaterThan(0);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  it('auto routes include transitively imported components in the manifest', () => {
+  it('auto routes classify transitively imported components in the manifest', () => {
     const root: string = mkdtempSync(join(tmpdir(), 'qstyle-autochain-'));
     try {
       mkdirSync(join(root, 'src/routes'), { recursive: true });
@@ -2581,7 +2257,7 @@ describe('qstyle performance defaults (backend css-asset / promotion always / ro
       const absCard: string = join(root, 'src/components/card.tsx').replace(/\\/g, '/');
       writeFileSync(absEntry, 'export default 1;\n');
       writeFileSync(absCard, 'export default 1;\n');
-      const [main] = qstyleFactory({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as [
+      const [main] = qstyleFactory({ diagnostics: 'silent' }) as unknown as [
         {
           configResolved: (config: { command: string; mode: string; root: string }) => void;
           buildStart: () => void;
@@ -2623,12 +2299,13 @@ describe('qstyle performance defaults (backend css-asset / promotion always / ro
         }),
       });
       const manifest = JSON.parse(
-        emitted.find((e) => e.fileName === 'qstyle.routes.json')?.source ?? '{}',
-      ) as { entries: { route: string; assets: string[] }[] };
-      const home = manifest.entries.find((e) => e.route === '/');
-      // entry 自身の unit と、連鎖先 card の unit がどちらも載る。
-      expect(home?.assets.length).toBeGreaterThan(1);
-      expect(home?.assets).toContain(cardUnit?.[1] as string);
+        emitted.find((e) => e.fileName === 'qstyle-manifest.json')?.source ?? '{}',
+      ) as { chunkPlans: { classification: string; routes: string[]; members: string[] }[] };
+      const home = manifest.chunkPlans.find(
+        (c) => c.routes.includes('/') && c.members.includes(cardUnit?.[1] as string),
+      );
+      // entry の unit と連鎖先 card の unit がどちらも '/' 配下の chunk に載る。
+      expect(home?.classification).toBe('route-local');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

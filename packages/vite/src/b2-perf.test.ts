@@ -40,11 +40,10 @@ const qstyle = (options: Parameters<typeof qstyleFactory>[0]): Transformable =>
   qstyleFactory(options)[0] as unknown as Transformable;
 
 const plugin = (): Transformable =>
-  qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as Transformable;
+  qstyle({ diagnostics: 'silent' }) as Transformable;
 
 const parametricPlugin = (): Transformable =>
   qstyle({
-    backend: 'qwik-native',
     diagnostics: 'silent',
     runtimeStyles: { promotion: 'always' },
   }) as unknown as Transformable;
@@ -133,7 +132,7 @@ describe('qstyle PERF 系 (vite transform level)', () => {
   );
 
   it('PERF-007: a local module edit does not invalidate other modules devCss', async () => {
-    const p = qstyle({ backend: 'qwik-native', diagnostics: 'silent' }) as unknown as DevPlugin;
+    const p = qstyle({ diagnostics: 'silent' }) as unknown as DevPlugin;
     p.configResolved({ command: 'serve', mode: 'development' });
     const devCssOf = (code: string): string => {
       const key: string = (code.match(/virtual:qstyle\/dev\/([\w.]+)/) ?? [])[1] ?? '';
@@ -232,17 +231,14 @@ describe('qstyle PERF 系 (vite transform level)', () => {
   it(
     'PERF-009: 100k occurrence scale serialize/dedup completes within the guard',
     () => {
-      const plugins = qstyleFactory({ backend: 'css-asset', diagnostics: 'silent' }) as unknown as (
+      const plugins = qstyleFactory({ diagnostics: 'silent' }) as unknown as (
         | Record<string, unknown>
         | undefined
       )[];
       const main: Record<string, unknown> | undefined = plugins.find(
         (x) => x?.['name'] === 'qstyle',
       );
-      const cssAsset: Record<string, unknown> | undefined = plugins.find(
-        (x) => x?.['name'] === 'qstyle:css-asset',
-      );
-      if (main === undefined || cssAsset === undefined) throw new Error('plugin not found');
+      if (main === undefined) throw new Error('plugin not found');
       const buildStart = main['buildStart'] as () => void;
       const transform = main['transform'] as (
         code: string,
@@ -251,11 +247,8 @@ describe('qstyle PERF 系 (vite transform level)', () => {
       const mainGenerate = main['generateBundle'] as (
         this: { emitFile: (f: { fileName: string; source: string }) => void },
       ) => void;
-      const cssGenerate = cssAsset['generateBundle'] as (
-        this: { emitFile: (f: { fileName: string; source: string }) => void },
-      ) => void;
 
-      // 100k occurrence (同一宣言)。serialize/dedup 配線 (css-asset generateBundle) まで通す。
+      // 100k occurrence (同一宣言)。serialize/dedup 配線 (generateBundle) まで通す。
       const elements: string = Array.from(
         { length: 100_000 },
         (_, i) => `<div css={{ color: 'red' }} key={i} />`,
@@ -270,20 +263,14 @@ describe('qstyle PERF 系 (vite transform level)', () => {
         emitted.push(f);
       };
       mainGenerate.call({ emitFile: emit });
-      cssGenerate.call({ emitFile: emit });
       const ms: number = Date.now() - started;
       console.log(`[PERF-009] 100k occurrences transform+serialize+dedup: ${ms}ms`);
       expect(out).not.toBeNull();
       expect(ms).toBeLessThan(60_000);
-      // 出力 CSS は occurrence 数に比例しない (1 rule)。
-      const cssAssets = emitted.filter((e) => /^assets\/qstyle\.q_[0-9a-f]+\.css$/.test(e.fileName));
-      expect(cssAssets).toHaveLength(1);
-      expect((cssAssets[0]?.source.match(/color:red/g) ?? []).length).toBe(1);
-      const unitsAsset = emitted.find((e) => e.fileName === 'qstyle.units.json');
-      const units: Record<string, string[]> = (
-        JSON.parse(unitsAsset?.source ?? '{}') as { units: Record<string, string[]> }
-      ).units;
-      expect(Object.keys(units)).toHaveLength(1);
+      // 出力 CSS は occurrence 数に比例しない (1 rule)。pack css 経由で確認する。
+      const load = main['load'] as (id: string) => string | null;
+      const pack: string = packCssOf({ load }, out?.code ?? '');
+      expect((pack.match(/color:red/g) ?? []).length).toBe(1);
     },
     120_000,
   );
@@ -309,7 +296,6 @@ describe('qstyle PERF 系 (vite transform level)', () => {
     measure(parametricPlugin(), 'always');
     measure(
       qstyle({
-        backend: 'qwik-native',
         diagnostics: 'silent',
         runtimeStyles: { promotion: 'never' },
       }) as unknown as Transformable,

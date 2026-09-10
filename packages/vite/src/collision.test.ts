@@ -36,9 +36,6 @@ const KEYFRAMES_PAIR = { a: 'step-32921', b: 'step-694620', name: 'qkf_f29b9284'
 /** 既知の pack-level 衝突ペア (unit set hash が同一になる別々の unit)。 */
 const PACK_PAIR = { a: 'tone-117446', b: 'tone-122155', packId: 'q_65d91672' } as const;
 
-/** 既知の chunk-level 衝突ペア (serialize 済み chunk CSS の content hash が同一)。 */
-const ASSET_PAIR = { a: 'tint-40895', b: 'tint-57799' } as const;
-
 const colorModule = (value: string): string =>
   `export const A = () => <div css={{ color: '${value}' }} />;`;
 
@@ -48,7 +45,7 @@ const keyframesModule = (value: string): string => `export const A = () => (
 
 describe('collision detection: unit collection (release blocker 1)', () => {
   it('同一入力の重複は dedupe され成功する', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native' });
+    const [main] = pluginsOf({});
     const outA = main.transform(colorModule('red'), '/src/dup-a.tsx');
     const outB = main.transform(colorModule('red'), '/src/dup-b.tsx');
     expect(outA).not.toBeNull();
@@ -60,7 +57,7 @@ describe('collision detection: unit collection (release blocker 1)', () => {
   });
 
   it('異なる入力が同一 atom/unit id になったら transform が失敗する (既知ペア)', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native' });
+    const [main] = pluginsOf({});
     expect(main.transform(colorModule(ATOM_PAIR.a), '/src/col-a.tsx')).not.toBeNull();
     expect(() => main.transform(colorModule(ATOM_PAIR.b), '/src/col-b.tsx')).toThrow(
       /hash collision/,
@@ -78,7 +75,7 @@ describe('collision detection: unit collection (release blocker 1)', () => {
   });
 
   it('入力順に依存せず、後から登録した側で必ず失敗する', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native' });
+    const [main] = pluginsOf({});
     expect(main.transform(colorModule(ATOM_PAIR.b), '/src/col-b.tsx')).not.toBeNull();
     expect(() => main.transform(colorModule(ATOM_PAIR.a), '/src/col-a.tsx')).toThrow(
       /hash collision/,
@@ -86,7 +83,7 @@ describe('collision detection: unit collection (release blocker 1)', () => {
   });
 
   it('buildStart で registry は reset される (incremental build で決定的に再検出)', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native' });
+    const [main] = pluginsOf({});
     main.buildStart();
     expect(main.transform(colorModule(ATOM_PAIR.a), '/src/col-a.tsx')).not.toBeNull();
     expect(() => main.transform(colorModule(ATOM_PAIR.b), '/src/col-b.tsx')).toThrow(
@@ -104,7 +101,7 @@ describe('collision detection: unit collection (release blocker 1)', () => {
   });
 
   it('diagnostics: silent でも衝突は警告化されず失敗する', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native', diagnostics: 'silent' });
+    const [main] = pluginsOf({ diagnostics: 'silent' });
     expect(main.transform(colorModule(ATOM_PAIR.a), '/src/col-silent-a.tsx')).not.toBeNull();
     expect(() => main.transform(colorModule(ATOM_PAIR.b), '/src/col-silent-b.tsx')).toThrow(
       /hash collision/,
@@ -112,7 +109,7 @@ describe('collision detection: unit collection (release blocker 1)', () => {
   });
 
   it('dev の occurrence 固定 alias は同一 module の再変換 (HMR) で更新され衝突扱いしない', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native' });
+    const [main] = pluginsOf({});
     main.configResolved({ command: 'serve', mode: 'development', root: '/app' });
     main.buildStart();
     const first = main.transform(colorModule('red'), '/src/hmr.tsx');
@@ -128,9 +125,9 @@ describe('collision detection: unit collection (release blocker 1)', () => {
   });
 });
 
-describe('collision detection: global rules / packs / assets', () => {
+describe('collision detection: global rules / packs', () => {
   it('異なる内容の keyframes が同名 (qkf_*) になったら失敗する (既知ペア)', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native' });
+    const [main] = pluginsOf({});
     expect(main.transform(keyframesModule(KEYFRAMES_PAIR.a), '/src/kf-a.tsx')).not.toBeNull();
     expect(() => main.transform(keyframesModule(KEYFRAMES_PAIR.b), '/src/kf-b.tsx')).toThrow(
       /hash collision/,
@@ -144,13 +141,13 @@ describe('collision detection: global rules / packs / assets', () => {
   });
 
   it('同一内容の keyframes は別 module でも dedupe される', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native' });
+    const [main] = pluginsOf({});
     expect(main.transform(keyframesModule('fade-x'), '/src/kf-dup-a.tsx')).not.toBeNull();
     expect(main.transform(keyframesModule('fade-x'), '/src/kf-dup-b.tsx')).not.toBeNull();
   });
 
   it('異なる unit set が同一 pack id になったら失敗する (qwik-native, 既知ペア)', () => {
-    const [main] = pluginsOf({ backend: 'qwik-native' });
+    const [main] = pluginsOf({});
     expect(main.transform(colorModule(PACK_PAIR.a), '/src/pack-a.tsx')).not.toBeNull();
     let message: string = '';
     try {
@@ -162,22 +159,5 @@ describe('collision detection: global rules / packs / assets', () => {
     expect(message).toContain(PACK_PAIR.packId);
     expect(message).toContain('/src/pack-a.tsx');
     expect(message).toContain('/src/pack-b.tsx');
-  });
-
-  it('異なる chunk CSS が同一 asset fileName になったら emit 前に失敗する (css-asset, 既知ペア)', () => {
-    const [main] = pluginsOf({
-      backend: 'css-asset',
-      routes: { '/x': ['asset-a.tsx'], '/y': ['asset-b.tsx'] },
-    });
-    main.configResolved({ command: 'build', mode: 'production', root: '/app' });
-    main.buildStart();
-    expect(main.transform(colorModule(ASSET_PAIR.a), '/app/src/asset-a.tsx')).not.toBeNull();
-    expect(main.transform(colorModule(ASSET_PAIR.b), '/app/src/asset-b.tsx')).not.toBeNull();
-    const emitted: { fileName: string; source: string }[] = [];
-    expect(() =>
-      main.generateBundle.call({ emitFile: (f) => emitted.push(f) }),
-    ).toThrow(/hash collision/);
-    // 失敗した build は publishable な成果物を 1 つも出さない。
-    expect(emitted).toHaveLength(0);
   });
 });

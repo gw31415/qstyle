@@ -62,17 +62,6 @@ await build({
   logLevel: 'warn',
   mode: 'production',
 });
-// SSG worker (child process) への route manifest 受け渡し (QWK-002 link bake 用)。
-// in-process の globalThis は worker に届かないが env は継承される。base build の
-// 成果物 (adapter build と決定論的同一内容) を env に積む。entry.ssr.tsx が読む。
-try {
-  const routesJson = path.resolve(fixtureRoot, 'dist', 'qstyle.routes.json');
-  if (fs.existsSync(routesJson)) {
-    process.env.QSTYLE_ROUTES_JSON = fs.readFileSync(routesJson, 'utf8');
-  }
-} catch {
-  // QSTYLE_OFF=1 (対照実験) では成果物が出ない。無ければ SSG bake なしで続行。
-}
 // SSR server bundle (server/)。base の client build の後に積む。
 // adapter config は base を extend するため qstyle plugin も再走するが、
 // 同一入力からは同一内容になる (HASH-002) ため成果物は安定。
@@ -97,12 +86,4 @@ if (process.env.QSTYLE_SSG === '0') {
   await serverBuilder.build(ssrEnv);
 } else {
   await serverBuilder.buildApp();
-}
-// adapter build の ssr env では main plugin の generateBundle 成果物
-// (qstyle.routes.json 等) が出ないため、base build の決定論的同一内容を配る。
-// entry.ssr.tsx が server bundle 脇の manifest を読んで SSG/SSR の link 焼きに使う。
-for (const file of ['qstyle.routes.json', 'qstyle-manifest.json']) {
-  const from = path.resolve(fixtureRoot, 'dist', file);
-  if (!fs.existsSync(from)) continue; // QSTYLE_OFF=1 (対照実験) では成果物が出ない
-  fs.copyFileSync(from, path.resolve(fixtureRoot, 'server', file));
 }

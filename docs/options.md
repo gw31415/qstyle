@@ -3,7 +3,6 @@
 ```ts
 qstyle({
   optimization: 'safe',
-  backend: 'css-asset',
   runtimeStyles: {
     strategy: 'custom-property',
     fallback: 'inline',
@@ -32,14 +31,6 @@ qstyle({
 - `'safe'` (既定): 最適化不能箇所は residual/untouched に落とし、`diagnostics` に従い警告する。
 - `'strict'`: 最適化不能箇所を compile error にする。
 
-## `backend`: `'qwik-native'` | `'css-asset'` (既定)
-
-- `'qwik-native'`: module 単位の pack CSS を Vite/Qwik の CSS 配管に乗せる。
-- `'css-asset'` (既定): plugin 自身が chunk 単位の content-hash 付き CSS asset を直接 emit する。
-  読み込み速度・キャッシュ優先のため既定。route 単位分割 + immutable asset になる。
-  build のみに影響し、dev (serve) は `qwik-native` と同じ per-module CSS＋HMR のまま。
-  詳細は [delivery.md](delivery.md)。
-
 ## `runtimeStyles`
 
 - `strategy: 'custom-property'` (固定): 動的値は CSS カスタムプロパティに分離する。
@@ -55,7 +46,8 @@ qstyle({
 
 ## `chunking`
 
-`css-asset` backend の chunk 分割と、`qwik-native` の chunk plan 記録に使う。
+manifest (qstyle-manifest.json) の chunk plan 記録に使う。配信自体は
+vite/qwik 標準配管のため、この設定で出力を変えることはない。
 
 - `strategy: 'usage-cluster'` (固定): usage graph の類似度で clustering する。
 - `minChunkBytes` (既定 1024) / `maxChunkBytes` (既定 32768): chunk の byte 上下限。
@@ -70,7 +62,8 @@ route path → その route が描画する module path の list、または `'a
 さらに build 時の module graph を辿り、各 entry から import 連鎖で到達する
 component (static/dynamic 不問) をその route に含める。手動指定時は連鎖展開せず
 指定のまま使う。root 不明・dir 不在時は entries 空。
-`[param]` 形式の pattern は manifest 照合で解決される。
+manifest の chunk 分類 (route-local / shared / unrouted) の metadata にのみ使う。
+配信 (CSS の出し分け) には影響しない。
 
 ```ts
 routes: 'auto', // 既定

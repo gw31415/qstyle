@@ -35,14 +35,14 @@ const devPlugin = (options: Parameters<typeof qstyleFactory>[0] = {}): Transform
 
 describe('release build の既定は fail-closed (release blocker 3)', () => {
   it('spread を含む css prop は compile error になる (既定 diagnostics = error)', () => {
-    const p = buildPlugin({ backend: 'qwik-native' });
+    const p = buildPlugin({});
     expect(() =>
       p.transform(`export const A = () => <div css={{ ...base }} />;`, '/src/rel-1.tsx'),
     ).toThrow(/\[qstyle\] \/src\/rel-1\.tsx: /);
   });
 
   it('call 式の動的値は compile error になる', () => {
-    const p = buildPlugin({ backend: 'qwik-native' });
+    const p = buildPlugin({});
     expect(() =>
       p.transform(
         `export const A = () => <div css={{ display: getWidth() }} />;`,
@@ -52,7 +52,7 @@ describe('release build の既定は fail-closed (release blocker 3)', () => {
   });
 
   it('未解決 (cross-module) handle 参照は compile error になる', () => {
-    const p = buildPlugin({ backend: 'qwik-native' });
+    const p = buildPlugin({});
     expect(() =>
       p.transform(
         `import { base } from './styles';\nexport const A = () => <div css={base} />;`,
@@ -62,7 +62,7 @@ describe('release build の既定は fail-closed (release blocker 3)', () => {
   });
 
   it('動的 animation とローカル @keyframes の併用は compile error になる', () => {
-    const p = buildPlugin({ backend: 'qwik-native' });
+    const p = buildPlugin({});
     expect(() =>
       p.transform(
         `export const A = () => <div css={{ '@keyframes spin': { from: { opacity: 0 }, to: { opacity: 1 } }, animation: props.dur }} />;`,
@@ -72,7 +72,7 @@ describe('release build の既定は fail-closed (release blocker 3)', () => {
   });
 
   it('不正な custom property 名は residual 経由で compile error になる (release blocker 2 との連動)', () => {
-    const p = buildPlugin({ backend: 'qwik-native' });
+    const p = buildPlugin({});
     expect(() =>
       p.transform(
         `export const A = () => <div css={{ '--x}body{color:red': 'red' }} />;`,
@@ -82,7 +82,7 @@ describe('release build の既定は fail-closed (release blocker 3)', () => {
   });
 
   it('サポート済みの static / dynamic 値は build 既定でも成功する', () => {
-    const p = buildPlugin({ backend: 'qwik-native' });
+    const p = buildPlugin({});
     const staticOut = p.transform(
       `export const A = () => <div css={{ display: 'flex' }} />;`,
       '/src/rel-ok-1.tsx',
@@ -97,7 +97,7 @@ describe('release build の既定は fail-closed (release blocker 3)', () => {
   });
 
   it('genuinely no-op な css prop は成功する (NotNeeded 分類)', () => {
-    const p = buildPlugin({ backend: 'qwik-native' });
+    const p = buildPlugin({});
     // falsy 値のみ (適用すべき style が存在しない)。
     expect(p.transform(`export const A = () => <div css={false} />;`, '/src/noop-1.tsx')).toBeNull();
     expect(p.transform(`export const A = () => <div css={{}} />;`, '/src/noop-2.tsx')).toBeNull();
@@ -121,7 +121,7 @@ describe('legacy warning mode と dev の互換性', () => {
   it("明示指定した diagnostics: 'warning' は legacy mode として動作し styles が失われ得る旨を警告する", () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = buildPlugin({ backend: 'qwik-native', diagnostics: 'warning' });
+      const p = buildPlugin({ diagnostics: 'warning' });
       const out = p.transform(
         `export const A = () => <div css={{ ...base }} />;`,
         '/src/legacy-1.tsx',
@@ -135,7 +135,7 @@ describe('legacy warning mode と dev の互換性', () => {
   });
 
   it("明示指定した diagnostics: 'silent' も legacy として成功する", () => {
-    const p = buildPlugin({ backend: 'qwik-native', diagnostics: 'silent' });
+    const p = buildPlugin({ diagnostics: 'silent' });
     expect(
       p.transform(`export const A = () => <div css={{ ...base }} />;`, '/src/legacy-2.tsx'),
     ).toBeNull();
@@ -144,7 +144,7 @@ describe('legacy warning mode と dev の互換性', () => {
   it('dev (serve) の既定は従来どおり warning (HMR で復帰できる)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const p = devPlugin({ backend: 'qwik-native' });
+      const p = devPlugin({});
       const out = p.transform(
         `export const A = () => <div css={{ ...base }} />;`,
         '/src/dev-1.tsx',
@@ -157,7 +157,7 @@ describe('legacy warning mode と dev の互換性', () => {
   });
 
   it("明示指定の diagnostics: 'error' は dev でも従来どおり throw する (DIA-008 互換)", () => {
-    const p = devPlugin({ backend: 'qwik-native', diagnostics: 'error' });
+    const p = devPlugin({ diagnostics: 'error' });
     expect(() =>
       p.transform(`export const A = () => <div css={{ ...base }} />;`, '/src/dev-2.tsx'),
     ).toThrow(/\[qstyle\]/);

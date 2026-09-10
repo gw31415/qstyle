@@ -9,7 +9,7 @@ const here: string = path.dirname(fileURLToPath(import.meta.url));
 const jsxRuntime: string = path.resolve(here, 'src/jsx-runtime.ts');
 
 export default defineConfig({
-  plugins: [qstyle({ backend: 'qwik-native' })],
+  plugins: [qstyle()],
   resolve: {
     alias: {
       'react/jsx-runtime': jsxRuntime,

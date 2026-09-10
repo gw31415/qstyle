@@ -50,7 +50,6 @@ const plugin = (
   options: Parameters<typeof qstyleFactory>[0] = {},
 ): HmrPlugin =>
   qstyleFactory({
-    backend: 'qwik-native',
     diagnostics: 'silent',
     devHmr: { reloadDelayMs: 0 },
     ...options,
@@ -822,7 +821,6 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     options: Parameters<typeof qstyleFactory>[0],
   ): {
     main: HmrPlugin;
-    cssAsset: HmrPlugin;
     dedup: { generateBundle: (options: unknown, bundle: Record<string, unknown>) => void };
   } {
     const found = qstyleFactory(options) as unknown as HmrPlugin[];
@@ -835,7 +833,6 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     };
     return {
       main: byName('qstyle'),
-      cssAsset: byName('qstyle:css-asset'),
       dedup: byName('qstyle:dedup') as unknown as {
         generateBundle: (options: unknown, bundle: Record<string, unknown>) => void;
       },
@@ -852,8 +849,8 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     };
   }
 
-  it('BLD-101: 空 build でも manifest 系は壊れず css-asset は何も出さない', () => {
-    const { main, cssAsset } = generateOf({ backend: 'css-asset', diagnostics: 'silent' });
+  it('BLD-101: 空 build でも manifest は壊れない', () => {
+    const { main } = generateOf({ diagnostics: 'silent' });
     main.buildStart();
     // css の無い module は transform null。
     expect(
@@ -861,24 +858,14 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     ).toBeNull();
     const { emitted, emitFile } = collectEmit();
     main.generateBundle.call({ emitFile });
-    cssAsset.generateBundle.call({ emitFile });
     const names: string[] = emitted.map((e) => e.fileName).sort();
-    // chunk が無くても manifest 系 + 空の units index は出す。css 本体は出さない。
-    expect(names).toEqual(['qstyle-manifest.json', 'qstyle.routes.json', 'qstyle.units.json']);
+    // manifest (metadata) のみ出す。css 本体は出さない。
+    expect(names).toEqual(['qstyle-manifest.json']);
     expect(names.filter((n) => n.startsWith('assets/'))).toHaveLength(0);
-    const routes = JSON.parse(
-      emitted.find((e) => e.fileName === 'qstyle.routes.json')?.source ?? '{}',
-    ) as { version: number; routes: unknown };
-    expect(routes.version).toBe(1);
-    const units = JSON.parse(
-      emitted.find((e) => e.fileName === 'qstyle.units.json')?.source ?? '{}',
-    ) as { version: number; units: unknown };
-    expect(units.version).toBe(1);
-    expect(units.units).toEqual({});
   });
 
   it('BLD-102: qwik-native の generateBundle は asset を直接出さない (配管に委ねる)', () => {
-    const { main } = generateOf({ backend: 'qwik-native', diagnostics: 'silent' });
+    const { main } = generateOf({ diagnostics: 'silent' });
     main.buildStart();
     expect(
       main.transform(`export const A = () => <div css={{ display: 'flex' }} />;`, '/src/n.tsx'),
@@ -886,9 +873,10 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     const { emitted, emitFile } = collectEmit();
     main.generateBundle.call({ emitFile });
     const names: string[] = emitted.map((e) => e.fileName);
+    // runtime 用 artifact (units/routes) は出さない。metadata のみ。
     expect(names).not.toContain('qstyle.units.json');
+    expect(names).not.toContain('qstyle.routes.json');
     expect(names.filter((n) => n.startsWith('assets/qstyle.'))).toHaveLength(0);
-    expect(names).toContain('qstyle.routes.json');
     expect(names).toContain('qstyle-manifest.json');
   });
 
@@ -952,8 +940,8 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     expect(second.registry).toBe(first.registry);
   });
 
-  it('BLD-106: css-asset の units.json は収集 unit を漏れなく指す', () => {
-    const { main, cssAsset } = generateOf({ backend: 'css-asset', diagnostics: 'silent' });
+  it('BLD-106: manifest packs は収集 unit を漏れなく含む', () => {
+    const { main } = generateOf({ diagnostics: 'silent' });
     main.buildStart();
     expect(
       main.transform(`export const A = () => <div css={{ display: 'flex' }} />;`, '/src/u1.tsx'),
@@ -963,22 +951,24 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     ).not.toBeNull();
     const { emitted, emitFile } = collectEmit();
     main.generateBundle.call({ emitFile });
-    cssAsset.generateBundle.call({ emitFile });
-    const units = JSON.parse(
-      emitted.find((e) => e.fileName === 'qstyle.units.json')?.source ?? '{}',
-    ) as { version: number; units: Record<string, string[]> };
-    expect(units.version).toBe(1);
     const manifest = JSON.parse(
       emitted.find((e) => e.fileName === 'qstyle-manifest.json')?.source ?? '{}',
-    ) as { manifest: Record<string, string[]> };
+    ) as {
+      manifest: Record<string, string[]>;
+      packs: { readonly id: string; readonly cssText: string }[];
+    };
     const allUnits: string[] = Object.values(manifest.manifest).flat();
     expect(allUnits.length).toBeGreaterThan(0);
-    for (const unit of allUnits) {
-      expect(units.units[unit]).toBeDefined();
-      // 指す先の asset が実際に emit されている。
-      for (const file of units.units[unit] ?? []) {
-        expect(emitted.some((e) => e.fileName === file)).toBe(true);
+    const packedUnits = new Set<string>();
+    for (const pack of manifest.packs) {
+      for (const unit of allUnits) {
+        if (pack.cssText.includes(`.${unit}{`) || pack.cssText.includes(`.${unit},`)) {
+          packedUnits.add(unit);
+        }
       }
+    }
+    for (const unit of allUnits) {
+      expect(packedUnits.has(unit)).toBe(true);
     }
   });
 
@@ -997,7 +987,7 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
   });
 
   it('BLD-108: dedup plugin は非 string source と非 css asset を素通しする', () => {
-    const { dedup } = generateOf({ backend: 'qwik-native', diagnostics: 'silent' });
+    const { dedup } = generateOf({ diagnostics: 'silent' });
     const cssObj = { type: 'asset', fileName: 'assets/app.css', source: '.q_aaaaaaaa{color:red}' };
     const bufObj = {
       type: 'asset',

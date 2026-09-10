@@ -2,8 +2,7 @@
 
 ## dev (serve 時)
 
-global dedup・chunking を行わず、module 単位の CSS をそのまま適用する。
-backend (`qwik-native` / `css-asset`) によらず dev パイプラインは同一
+global dedup・chunking を行わず、module 単位の CSS をそのまま適用する
 (per-module CSS＋HMR)。
 
 - transform 出力の class 名は occurrence 固定の alias (`qd_<file>_<slot>_<n>`)。

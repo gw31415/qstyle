@@ -8,8 +8,6 @@ import {
   VERSION,
   IdentityRegistry,
   StyleCollisionError,
-  assetFileName,
-  buildRouteManifest,
   canonicalProperty,
   chunkHash,
   classSelectors,
@@ -26,7 +24,6 @@ import {
   recordUsage,
   serializeGlobalAtRuleCss,
   serializeKeyframesCss,
-  serializeManifest,
   serializeParametricCss,
   serializeParametricDecl,
   wrapContextAtRules,
@@ -42,18 +39,15 @@ import type {
   RuleContext,
   RuntimeSlotNode,
   StaticAtom,
-  StyleManifest,
   TemplatePartInput,
   TemplateSlotInput,
   UsageGraph,
 } from '@qstyle/core';
 import { composeCssProp, lowerStyleObject, lowerTaggedTemplate } from '@qstyle/qwik';
-import { buildChunkReport, formatChunkReport } from '@qstyle/inspector';
 import { groupDuplicateCss } from './dedup.js';
 import type { StyleHandle, StyleObject } from '@qstyle/qwik';
 
 export type OptimizationLevel = 'preserve' | 'safe' | 'strict';
-export type BackendKind = 'qwik-native' | 'css-asset';
 
 /**
  * FLB-008/009: サポートする peer major。範囲外は diagnostics に従い警告/throw
@@ -106,7 +100,6 @@ export function checkPeerVersions(versions: {
 
 export interface QstyleOptions {
   readonly optimization?: OptimizationLevel | undefined;
-  readonly backend?: BackendKind | undefined;
   readonly runtimeStyles?: {
     readonly strategy?: 'custom-property' | undefined;
     readonly fallback?: 'inline' | undefined;
@@ -153,27 +146,11 @@ export interface CollectedStyle {
 }
 
 /**
- * css-asset backend の出力 chunk 1 件 (plan.md §3.4 R1.1/R1.2)。
- * `fileName` は最終 serialize (chunk 内 dedup 適用後) bytes の content hash から決まる。
+ * chunk (unit の集合) の route 分類。manifest (qstyle-manifest.json) の
+ * chunkPlans メタデータ用。users が張る route が 1 つなら route-local、
+ * 複数なら shared、未配線なら unrouted。
  */
 export type ChunkClassification = 'route-local' | 'shared' | 'unrouted';
-
-export interface CssAssetChunk {
-  /** ChunkPlan と同じ pack id (member 集合のみから導出)。 */
-  readonly id: string;
-  /** sorted unit ids。 */
-  readonly members: readonly string[];
-  /** unit css の合計 bytes (plan 計算用。dedup 後の bytes ではない)。 */
-  readonly bytes: number;
-  /** `assets/qstyle.<hash>.css` — emit される asset 名。 */
-  readonly fileName: string;
-  /** 最終 CSS text (§39 v1 dedup 適用済み)。emit される内容そのもの。 */
-  readonly cssText: string;
-  /** R2: chunk の route 分類。users が張る route が 1 つなら route-local、複数なら shared。 */
-  readonly classification: ChunkClassification;
-  /** R2: chunk の unit を使う component 群が張る route の sorted union (未配線なら空)。 */
-  readonly routes: readonly string[];
-}
 
 /**
  * FLB-008/009 の配線。peer (`@qwik.dev/core`, `vite`) の package.json から
@@ -293,13 +270,6 @@ export function closeRouteModules(
     out[route] = [...seen].sort();
   }
   return out;
-}
-
-/** css-asset backend の build 計画。unit → fileName の逆引き index を持つ (§3.4 R1.3)。 */
-export interface CssAssetPlan {
-  readonly chunks: readonly CssAssetChunk[];
-  /** 各 unit は恰好 1 chunk に属する。 */
-  readonly unitToFile: ReadonlyMap<string, string>;
 }
 
 /**
@@ -449,56 +419,6 @@ function devModuleId(moduleId: string): string {
 
 /** residual log の上限 (inspector 表示・メモリ発散防止。ponytail: 十分大きい固定値)。 */
 const MAX_RESIDUAL_LOG = 256;
-
-/**
- * css-asset backend 用の route style loader (`virtual:qstyle/route-loader`)。
- * build 時に emit される `qstyle.routes.json` を読み、route に必要な hashed assets を
- * `<link rel="stylesheet">` で注入する。manifest 解決の純粋部は `@qstyle/core` の
- * resolveRouteAssets に委ねる。自動 head 差し込み (SSR/SSG 連携) は framework adapter の責務。
- */
-const ROUTE_LOADER_SOURCE: string = `import { resolveRouteAssets } from '@qstyle/core';
-
-const MANIFEST_FILE = 'qstyle.routes.json';
-
-function loaderBaseUrl() {
-  try {
-    const base = import.meta.env?.BASE_URL ?? '/';
-    return new URL(base, document.baseURI).toString();
-  } catch {
-    return '/';
-  }
-}
-
-function ensureStylesheet(href) {
-  if (document.querySelector('link[data-qstyle-href="' + href.replace(/"/g, '%22') + '"]')) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve, reject) => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
-    link.dataset.qstyleHref = href;
-    link.onload = () => resolve();
-    link.onerror = () => reject(new Error('[qstyle] failed to load ' + href));
-    document.head.appendChild(link);
-  });
-}
-
-/** route に必要な style assets を読み込む。既読 asset は再 fetch しない。 */
-export async function loadRouteStyles(route) {
-  const manifestUrl = new URL(MANIFEST_FILE, loaderBaseUrl()).toString();
-  const res = await fetch(manifestUrl);
-  if (!res.ok) {
-    throw new Error('[qstyle] failed to fetch ' + MANIFEST_FILE + ': ' + res.status);
-  }
-  const manifest = await res.json();
-  const assets = resolveRouteAssets(manifest, route);
-  const base = loaderBaseUrl();
-  const hrefs = assets.map((asset) => new URL(asset, base).toString());
-  await Promise.all(hrefs.map(ensureStylesheet));
-  return hrefs;
-}
-`;
 
 function resolveQstyleId(id: string): string | null {
   // dev の `<link href="/virtual:qstyle/...">` は先頭 '/' 付き URL としてブラウザから
@@ -2378,12 +2298,6 @@ function validateQstyleOptions(options: QstyleOptions): void {
       `[qstyle] unknown optimization ${JSON.stringify(optimization)}; expected 'preserve', 'safe' or 'strict'.`,
     );
   }
-  const backend: string = options.backend ?? 'css-asset';
-  if (backend !== 'qwik-native' && backend !== 'css-asset') {
-    throw new Error(
-      `[qstyle] unknown backend ${JSON.stringify(backend)}; expected 'qwik-native' or 'css-asset'.`,
-    );
-  }
   const diagnostics: string = options.diagnostics ?? 'warning';
   if (diagnostics !== 'silent' && diagnostics !== 'warning' && diagnostics !== 'error') {
     throw new Error(
@@ -2457,7 +2371,7 @@ function validateQstyleOptions(options: QstyleOptions): void {
 /**
  * qstyle Vite plugin — Milestone 2 object-syntax lowering (plan.md §89)
  * + Milestone 3 css() handle / composition lowering (plan.md §90)。
- * - virtual modules: registry / pack/<id> / manifest / residuals / route-loader,
+ * - virtual modules: registry / pack/<id> / manifest / residuals,
  *   dev/<hash>.css (serve 時のみ)
  * - serve (dev): 同一 lowering を per-module CSS としてそのまま適用する
   *   (global dedup・chunking・manifest なし)。virtual css 経由で Vite の CSS HMR が効く。
@@ -2466,9 +2380,8 @@ function validateQstyleOptions(options: QstyleOptions): void {
  * - transform: .tsx/.jsx 内の css={{ ... }} を balanced-brace scan で抽出し、
  *   安全に parse できる object literal のみ @qstyle/qwik の lowerStyleObject
  *   で atom 化→hash→ class へ rewrite し、モジュール先頭へ side-effect
- *   import "virtual:qstyle/pack/HASH" を注入する (backend 'qwik-native' の場合)。
- *   backend 'css-asset' の場合は pack import の代わりに client helper
- *   `ensureModuleStyles([...unitIds])` を注入する (§3.4 R1.6 案 B)。
+ *   import "virtual:qstyle/pack/HASH" を注入する。import graph 経由で
+ *   vite/qwik の標準 CSS 配管に載るため、qstyle 固有の client runtime は不要。
  *   既存 class 属性があれば追記する。
  *   M5c: identifier / member chain の値は ParametricAtom (slot var) 化し、
  *   class へ追記した上で既存/新規 style prop へ代入を merge する。
@@ -2477,8 +2390,7 @@ function validateQstyleOptions(options: QstyleOptions): void {
  *   条件付き・未知参照・衝突 dynamic は untouched にする。
  *   residual が残るもの・parse 不能なものは触らない (correctness first)。
  *   strict mode では untouched 箇所を compile error にする (plan.md §61)。
- * - generateBundle: Route Style Manifest の雛形を emit。
- *   backend 'css-asset' では asset 名解決済み manifest に切り替え (§3.4 R1.3)。
+ * - generateBundle: qstyle-manifest.json (debug/inspector 用 metadata) を emit。
  */
 export function qstyle(
   options: QstyleOptions = {},
@@ -2489,15 +2401,9 @@ export function qstyle(
     readonly __legacyStyles: readonly LegacyStyleUsage[];
   },
   Plugin,
-  Plugin & {
-    /** css-asset backend の chunk plan (id/members/bytes/fileName)。inspector 用。 */
-    readonly __chunkPlans: readonly CssAssetChunk[];
-  },
 ] {
   validateQstyleOptions(options);
   const optimization: OptimizationLevel = options.optimization ?? 'safe';
-  // 既定は読み込み速度・キャッシュ優先: content-hash 付き immutable asset + route 分割。
-  const backend: BackendKind = options.backend ?? 'css-asset';
   // release blocker 3: Qwik には runtime `css` prop 実装が無いため、untouched の
   // `css={...}` は style が黙って消える fallback にはならない。publishable な成果物を
   // 出す build では既定を 'error' に fail-closed にする。'warning' / 'silent' は
@@ -2610,58 +2516,16 @@ export function qstyle(
    */
   function routeOptionKey(optionPath: string): string {
     const norm: string = optionPath.replace(/\\/g, '/').replace(/^\.\//, '');
-    if (rootDir !== '') return norm.replace(/^\//, '');
+    if (rootDir !== '') {
+      // moduleKey と同一の正規化 (root 相対)。auto 検出の絶対 path もここで畳む。
+      if (norm === rootDir) return '';
+      if (norm.startsWith(`${rootDir}/`)) return norm.slice(rootDir.length + 1);
+      return norm.replace(/^\//, '');
+    }
     const slash: number = norm.lastIndexOf('/');
     return slash < 0 ? norm : norm.slice(slash + 1);
   }
 
-  /**
-   * css-asset backend の chunk plan を asset 化する (§3.4 R1.2)。
-   * join → chunk 内 §39 v1 dedup → chunkHash(最終 bytes) → assetFileName。
-   * 純関数 (collected/graph の snapshot から決定論的に導出) で、同一 build pass 内の
-   * 呼び出し間で cache する (main の manifest 生成と css-asset plugin の emit が同一結果を
-   * 参照する。buildStart で reset)。
-   */
-  let cssAssetPlanCache: CssAssetPlan | null = null;
-  const buildCssAssetPlan = (): CssAssetPlan => {
-    if (cssAssetPlanCache !== null) return cssAssetPlanCache;
-    const styles: ChunkInput[] = [...collected.values()].map((s) => ({
-      id: s.id,
-      bytes: s.cssText.length,
-    }));
-    const plans: ChunkPlan[] = planChunks(graph, styles, chunkOptions);
-    const meta = {
-      unitTags: unitTagNames as ReadonlyMap<string, ReadonlySet<string>>,
-      condUnitIds: condUnitIds as ReadonlySet<string>,
-    };
-    const chunks: CssAssetChunk[] = [];
-    const unitToFile = new Map<string, string>();
-    for (const plan of plans) {
-      const joined: string = plan.members
-        .map((unitId) => collected.get(unitId)?.cssText ?? '')
-        .join('');
-      // §39 v1 を chunk 内 (hash 計算前) に適用する — 出力 bytes と hash を一致させる。
-      const finalText: string = groupDuplicateCss(joined, meta);
-      const fileName: string = `assets/${assetFileName('qstyle', chunkHash(finalText))}`;
-      // release blocker 1: 同一 asset fileName (content hash) に異なる CSS bytes が
-      // 紐付いたら、emit 前に deterministic error にする。
-      identities.register('asset', fileName, finalText, plan.id);
-      // R2: usage graph から chunk の route 分類 (route-local / shared / unrouted) を導出。
-      const { classification, routes } = classifyChunkUnits(graph, plan.members);
-      chunks.push({
-        id: plan.id,
-        members: plan.members,
-        bytes: plan.bytes,
-        fileName,
-        cssText: finalText,
-        classification,
-        routes,
-      });
-      for (const unitId of plan.members) unitToFile.set(unitId, fileName);
-    }
-    cssAssetPlanCache = { chunks, unitToFile };
-    return cssAssetPlanCache;
-  };
 
   /** 実効 routes: 手動指定があればそれを、未指定/'auto' なら src/routes 走査を使う。
    * rootDir 確定後 (configResolved 以降) に呼ぶこと。unit test 等 root 不明時は空。 */
@@ -2669,46 +2533,6 @@ export function qstyle(
     if (typeof options.routes === 'object' && options.routes !== null) return options.routes;
     return discoverRoutes(rootDir);
   }
-
-  /**
-   * §3.4 R1.3: route -> modules -> units -> (css-asset) chunk fileName を解決した
-   * Route Style Manifest。main plugin の emit (qstyle.routes.json) と css-asset
-   * plugin の in-process SSG 連携 (globalThis.__QSTYLE_ROUTES__) が同一内容を
-   * 参照するため、build pass 内で cache する (buildStart で reset)。
-   */
-  let routeManifestCache: StyleManifest | null = null;
-  /** auto 時の import 連鎖展開済み routes (generateBundle で確定。buildStart で reset)。 */
-  let expandedRoutesCache: Record<string, readonly string[]> | null = null;
-  const buildRouteStyleManifest = (): StyleManifest => {
-    if (routeManifestCache !== null) return routeManifestCache;
-    // route -> modules の逆引きを unit list へ解決する。
-    // css-asset 時はさらに unit → 所属 chunk の fileName へ解決する (§3.4 R1.3)。
-    const assetPlan: CssAssetPlan | null = backend === 'css-asset' ? buildCssAssetPlan() : null;
-    const routeToAssets = new Map<string, readonly string[]>();
-    const routes: Record<string, readonly string[]> = expandedRoutesCache ?? effectiveRoutes();
-    for (const route of Object.keys(routes)) {
-      const assets = new Set<string>();
-      for (const modulePath of routes[route] ?? []) {
-        for (const [mod, atoms] of moduleToAtoms) {
-          if (modulePathMatches(mod, modulePath)) {
-            for (const atom of atoms) assets.add(atom);
-          }
-        }
-      }
-      if (assetPlan !== null) {
-        const files = new Set<string>();
-        for (const unitId of assets) {
-          const fileName: string | undefined = assetPlan.unitToFile.get(unitId);
-          if (fileName !== undefined) files.add(fileName);
-        }
-        routeToAssets.set(route, [...files]);
-      } else {
-        routeToAssets.set(route, [...assets]);
-      }
-    }
-    routeManifestCache = buildRouteManifest(routeToAssets, { compilerVersion: VERSION });
-    return routeManifestCache;
-  };
 
   /** 実効 routes (手動 or 自動検出) を component -> route の逆引きへ張る (冪等)。
    * moduleToAtoms の実 id と suffix 照合するため、buildStart 時点 (transform 前) は
@@ -2935,7 +2759,7 @@ export function qstyle(
       rootDir = (config.root ?? '').replace(/\\/g, '/').replace(/\/$/, '');
       // §45: route -> module の逆引きを usage graph へ張る (未指定/'auto' は src/routes 自動検出)。
       wireRoutes(graph);
-      log(`optimization=${optimization} backend=${backend} mode=${config.mode} dev=${isDev}`);
+      log(`optimization=${optimization} mode=${config.mode} dev=${isDev}`);
     },
 
     configureServer(server: ViteDevServer): void {
@@ -3014,9 +2838,6 @@ export function qstyle(
       }
       unitTagNames.clear();
       condUnitIds.clear();
-      cssAssetPlanCache = null;
-      routeManifestCache = null;
-      expandedRoutesCache = null;
       graph = createUsageGraph();
       wireRoutes(graph);
     },
@@ -3048,9 +2869,6 @@ export function qstyle(
       }
       if (path === 'residuals') {
         return `export const residuals = ${JSON.stringify(residualLog, null, 2)};\n`;
-      }
-      if (path === 'route-loader') {
-        return ROUTE_LOADER_SOURCE;
       }
       if (path.startsWith('dev/') && path.endsWith('.css')) {
         const key: string = path.slice('dev/'.length);
@@ -4776,28 +4594,16 @@ export function qstyle(
         devCode.set(id, devApplied.code);
         return { code: devApplied.code, map: devApplied.map };
       }
-      // prod: module の全 unit を配信へ繋ぐ。backend で経路が分かれる (§3.4 R1.1)。
+      // prod: module の全 unit を 1 pack (実 CSS module) にし、import graph 経由で
+      // vite/qwik の標準 CSS 配管に載せる。qstyle 固有の client runtime は持たない。
+      // pack id は unit set の hash で決定論的に。
+      // release blocker 1: 同一 pack id に異なる unit set が紐付いたら失敗する。
       const packUnitIds: string[] = moduleToAtoms.get(id) ?? [];
       if (packUnitIds.length > 0) {
-        if (backend === 'css-asset') {
-          // §3.4 R1.6 案 B: vite/qwik の CSS 配管に乗せず、module 先頭に client helper 呼び出し
-          // を注入する。transform 時点では chunk fileName (content hash) が確定しないため JS 側に
-          // 埋め込むのは unit id のみで、unit id → fileName は qstyle.units.json を client が
-          // fetch して解決する。JS bundle の hash 完全性を守るため chunk.code の後付け編集はしない。
-          edits.push({
-            start: 0,
-            end: 0,
-            newText:
-              `import { ensureModuleStyles } from '@qstyle/qwik/client';\n` +
-              `ensureModuleStyles(${JSON.stringify(packUnitIds)});\n`,
-            srcLine: 0,
-          });
-        } else {
-          // qwik-native: module の全 unit を 1 pack (実 CSS module) にする。import graph 経由で
-          // vite/qwik が bundle 単位の css asset を出すため、lazy bundle は直前読み込みに
-          // なる (plan.md §48)。pack id は unit set の hash で決定論的に。
-          // release blocker 1: 同一 pack id に異なる unit set が紐付いたら失敗する。
-          const sortedPackUnitIds: readonly string[] = [...packUnitIds].sort();
+        // vite/qwik が bundle 単位の css asset を出すため、lazy bundle は直前読み込みに
+        // なる。pack id は unit set の hash で決定論的に。
+        // release blocker 1: 同一 pack id に異なる unit set が紐付いたら失敗する。
+        const sortedPackUnitIds: readonly string[] = [...packUnitIds].sort();
           const packId: string = chunkHash(sortedPackUnitIds.join(','));
           identities.register('pack', packId, sortedPackUnitIds.join(','), id);
           modulePacks.set(id, packId);
@@ -4813,15 +4619,14 @@ export function qstyle(
             newText: `import "virtual:qstyle/pack/${packId}.css";\n`,
             srcLine: 0,
           });
-        }
       }
       const applied = applyEditsWithMap(code, id, edits);
       return { code: applied.code, map: applied.map };
     },
 
     generateBundle(): void {
-      // auto routes: entry から import 連鎖で到達する module へ展開し graph へ張る
-      // (chunk 分類と manifest が同一の到達集合を見る。static/dynamic 不問)。
+      // auto routes: entry から import 連鎖で到達する module へ展開し graph へ張る。
+      // chunk 分類 (manifest chunkPlans) が同一の到達集合を見る。
       // module graph が無い context (unit test) では entry のみ配線に fallback。
       if (typeof options.routes !== 'object' || options.routes === null) {
         const bundleCtx = this as unknown as {
@@ -4843,7 +4648,6 @@ export function qstyle(
               return [...(info?.importedIds ?? []), ...(info?.dynamicallyImportedIds ?? [])];
             },
           });
-          expandedRoutesCache = expanded;
           for (const route of Object.keys(expanded)) {
             for (const mod of expanded[route] ?? []) {
               recordComponentRoute(graph, moduleKey(mod), route);
@@ -4855,31 +4659,14 @@ export function qstyle(
       for (const [mod, atoms] of moduleToAtoms) {
         manifest[mod] = atoms;
       }
-      // backend 'css-asset': CSS asset 自体は `qstyle:css-asset` plugin が直接 emit する
-      // (vite/qwik の CSS 配管に乗せない。build.cssCodeSplit 強制と無関係になる)。
-      // ここでは manifest 生成のための unit → fileName 逆引きのみ使う。
-      // backend 'qwik-native': CSS asset は pack css module の import graph 経由で
-      // vite/qwik が出す (§48。lazy bundle は css も直前読み込み)。ここでは metadata
-      // (chunk plan) のみ記録し、直接 emit しない。
-      const assetPlan: CssAssetPlan | null = backend === 'css-asset' ? buildCssAssetPlan() : null;
-      // R2: 両 backend とも chunkPlans に classification / routes を記録する。
-      // css-asset は CssAssetChunk に含まれる値をそのまま、qwik-native は planChunks の
-      // 結果に usage graph 由来の分類を付与する。
-      const chunkPlans: readonly (ChunkPlan | CssAssetChunk)[] =
-        assetPlan !== null
-          ? assetPlan.chunks.map(({ cssText: _cssText, ...meta }) => meta)
-          : planChunks(
-              graph,
-              [...collected.values()].map((s) => ({ id: s.id, bytes: s.cssText.length })),
-              chunkOptions,
-            ).map((plan) => ({ ...plan, ...classifyChunkUnits(graph, plan.members) }));
-      const styleManifest: StyleManifest = buildRouteStyleManifest();
+      // CSS asset は pack css module の import graph 経由で vite/qwik が出す。
+      // ここでは metadata (chunk plan) のみ記録し、直接 emit しない。
+      const chunkPlans: readonly ChunkPlan[] = planChunks(
+        graph,
+        [...collected.values()].map((s) => ({ id: s.id, bytes: s.cssText.length })),
+        chunkOptions,
+      ).map((plan) => ({ ...plan, ...classifyChunkUnits(graph, plan.members) }));
       const ctx = this as unknown as { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void };
-      ctx.emitFile({
-        type: 'asset',
-        fileName: 'qstyle.routes.json',
-        source: serializeManifest(styleManifest),
-      });
       ctx.emitFile({
         type: 'asset',
         fileName: 'qstyle-manifest.json',
@@ -4887,7 +4674,6 @@ export function qstyle(
           {
             version: 0,
             optimization,
-            backend,
             manifest,
             packs: [...collected.values()],
             modulePacks: [...modulePacks.entries()],
@@ -4905,12 +4691,6 @@ export function qstyle(
    * §39 dedup (decl 単位の統合)。vite:css / qwik の css asset 出力後に走る
    * post plugin で、最終 css asset の `.q_*` unit rule を安全にグループ化する。
    * 解析に失敗した場合は元のテキストをそのまま保持する (correctness first)。
-   *
-   * plugin 間の実行順依存 (§3.4 R1.1): 本 plugin は vite 配管由来の CSS にのみ適用する。
-   * css-asset backend の出力 (assets/qstyle.<hash>.css) は emit 前 (hash 計算前) に
-   * chunk 内 dedup 済みのため、出力後に再適用すると bytes が hash と乖離する。
-   * この配列では dedup が css-asset emit の前に走るが、順序に依存しないよう
-   * fileName で明示的に除外する。
    */
   const dedupPlugin: Plugin = {
     name: 'qstyle:dedup',
@@ -4922,7 +4702,6 @@ export function qstyle(
       };
       for (const file of Object.values(bundle)) {
         if (file.type !== 'asset' || !file.fileName.endsWith('.css')) continue;
-        if (file.fileName.startsWith('assets/qstyle.')) continue;
         const source: unknown = file.source;
         if (typeof source !== 'string') continue;
         try {
@@ -4934,64 +4713,7 @@ export function qstyle(
     },
   };
 
-  /**
-   * Backend B (css-asset) の asset emitter (plan.md §3.2/§3.4 R1.1-R1.3)。
-   * vite/qwik の CSS バンドル配管に一切乗せず、chunk planner が決定した chunk 単位で
-   * `this.emitFile({type:'asset'})` により CSS asset を直接出す:
-   * - `cssCodeSplit` 強制 (qwik optimizer) と無関係 (JS 側に CSS import が存在しない)
-   * - 粒度・内容・fileName を planner が完全制御。hash は §39 v1 dedup 適用後の
-   *   最終 bytes から計算する
-   * - unit id → fileName の逆引き index を `qstyle.units.json` として出し、
-   * `@qstyle/qwik/client` の ensureModuleStyles が実行時解決に使う (R1.6 案 B)
-   * build のみ (apply: 'build')。route manifest の asset 名解決は main plugin の
-   * generateBundle (enforce 'pre' なので先に走る) が同一の buildCssAssetPlan で行う。
-   */
-  const cssAssetPlugin: Plugin & {
-    readonly __chunkPlans: readonly CssAssetChunk[];
-  } = {
-    name: 'qstyle:css-asset',
-    enforce: 'post',
-    apply: 'build',
-    /** 直近の build で emit した chunk plan (inspector 表示用。§3.4 R1.8)。 */
-    get __chunkPlans(): readonly CssAssetChunk[] {
-      return cssAssetPlanCache?.chunks ?? [];
-    },
-    generateBundle(): void {
-      if (backend !== 'css-asset') return;
-      const plan: CssAssetPlan = buildCssAssetPlan();
-      // R1.4 (§3.4): SSG render 時に @qstyle/qwik 側の QstyleLinks が in-process で
-      // 読めるよう、route manifest (qstyle.routes.json と同一内容) を globalThis へ
-      // 設定する。実行時 global のため undefined 前提のキャストで型を整える
-      // (reader 側の型宣言と乖離しないよう値の構造は manifest serialize 内容と同一)。
-      (globalThis as { __QSTYLE_ROUTES__?: unknown }).__QSTYLE_ROUTES__ =
-        buildRouteStyleManifest();
-      const ctx = this as unknown as { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void };
-      for (const chunk of plan.chunks) {
-        ctx.emitFile({
-          type: 'asset',
-          fileName: chunk.fileName,
-          source: chunk.cssText,
-        });
-        log(`css-asset chunk ${chunk.id} -> ${chunk.fileName} (${chunk.members.length} units)`);
-      }
-      // R1.8: backend 種別 + chunk plan (members × bytes × fileName × 分類) の report 表示。
-      log(
-        `\n${formatChunkReport(buildChunkReport({ backend, chunks: plan.chunks }))}`,
-      );
-      // unit id → fileName index (R1.6 案 B)。key は sort して決定性を保つ。
-      const units: Record<string, readonly string[]> = {};
-      for (const unitId of [...plan.unitToFile.keys()].sort()) {
-        units[unitId] = [plan.unitToFile.get(unitId) ?? ''];
-      }
-      ctx.emitFile({
-        type: 'asset',
-        fileName: 'qstyle.units.json',
-        source: JSON.stringify({ version: 1, units }, null, 2),
-      });
-    },
-  };
-
-  return [mainPlugin, dedupPlugin, cssAssetPlugin];
+  return [mainPlugin, dedupPlugin];
 }
 
 export default qstyle;

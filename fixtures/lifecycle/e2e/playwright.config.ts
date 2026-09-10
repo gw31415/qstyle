@@ -16,8 +16,6 @@ export default defineConfig({
     'c0-smoke.spec.ts',
     'qwk-matrix.spec.ts',
     'dyn-matrix.spec.ts',
-    'rte-matrix.spec.ts',
-    'fouc.spec.ts',
   ],
   fullyParallel: false,
   retries: 0,
