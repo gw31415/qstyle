@@ -1,6 +1,6 @@
 {
   "name": "@qstyle/qwik",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Qwik authoring APIs for css props, tagged templates, and style handles.",
   "license": "Apache-2.0",
   "repository": {

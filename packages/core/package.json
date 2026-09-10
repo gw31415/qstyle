@@ -1,6 +1,6 @@
 {
   "name": "@qstyle/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-independent style IR, canonicalization, hashing, and chunk planning for qstyle.",
   "license": "Apache-2.0",
   "repository": {
