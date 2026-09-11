@@ -1,12 +1,13 @@
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-  // qstyle 固有の client runtime は持たない (CSS 配信は vite/qwik 標準配管)。
-  // 配布は index (authoring API + 型) のみ。@qwik.dev/* は peer 依存で external。
+  // 配布は authoring API、client runtime、server runtime。@qwik.dev/* は peer 依存で external。
   entry: {
     index: './src/index.ts',
+    runtime: './src/runtime.ts',
+    server: './src/server.ts',
   },
-  format: ['esm', 'cjs'],
+  format: ['esm'],
   dts: true,
   sourcemap: true,
   minify: true,

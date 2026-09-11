@@ -196,3 +196,31 @@ export function formatChunkReport(report: ChunkReport): string {
 function isClassification(value: unknown): value is ChunkClassification {
   return value === 'route-local' || value === 'shared' || value === 'unrouted';
 }
+
+export {
+  assertNativeGuarantee,
+  formatNativePackMappings,
+  formatNativeReportSummary,
+  isNativeReport,
+  mapNativeReportPacks,
+  parseNativeReport,
+  readNativeReport,
+  summarizeNativeReport,
+  validateNativeReport,
+} from './native-report.js';
+export type {
+  NativeReport,
+  NativeReportAsset,
+  NativeReportClassAssignment,
+  NativeReportClassOptimality,
+  NativeReportDiagnostic,
+  NativeReportDiagnosticSpan,
+  NativeReportModule,
+  NativeReportOwner,
+  NativeReportPack,
+  NativeReportPackMapping,
+  NativeReportRule,
+  NativeReportSummary,
+  NativeReportValidationResult,
+} from './native-report.js';
+export { NativeReportValidationError } from './native-report.js';

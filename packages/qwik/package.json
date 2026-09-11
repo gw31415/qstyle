@@ -23,18 +23,26 @@
     "dist"
   ],
   "sideEffects": false,
-  "main": "./dist/index.cjs",
+  "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
-  "types": "./dist/index.d.cts",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.mts",
+      "import": "./dist/runtime.mjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.mts",
+      "import": "./dist/server.mjs"
     },
     "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "@qwik.dev/core": "^2.0.0-beta.43"
+    "@qwik.dev/core": "2.0.0-beta.43"
   },
   "scripts": {
     "build": "tsdown",
@@ -51,7 +59,8 @@
   ],
   "dependencies": {
     "@qstyle/core": "workspace:^",
-    "csstype": "^3.2.3"
+    "csstype": "^3.2.3",
+    "parse5": "^8.0.1"
   },
   "devDependencies": {
     "@qwik.dev/core": "^2.0.0-beta.43",

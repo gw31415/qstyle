@@ -1,6 +1,8 @@
 node_modules/
 dist/
 fixtures/lifecycle/server/
+fixtures/native-contract/server/
+fixtures/compiler-contract/server/
 fixtures/lifecycle/baseline/dist/
 fixtures/lifecycle/baseline/server/
 fixtures/lifecycle/baseline/src/

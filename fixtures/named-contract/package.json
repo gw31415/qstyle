@@ -1,0 +1,12 @@
+{
+  "name": "qstyle-named-routing-contract",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "QSTYLE_NAMED_IMPORT=1 node scripts/build.mjs",
+    "probe": "node scripts/probe.mjs",
+    "hmr": "node scripts/hmr.mjs",
+    "accept": "QSTYLE_NAMED_IMPORT=1 QSTYLE_NAMED_HEAD=1 node scripts/accept.mjs",
+    "accept:ssg": "QSTYLE_NAMED_IMPORT=1 QSTYLE_NAMED_HEAD=1 node scripts/ssg.mjs"
+  }
+}

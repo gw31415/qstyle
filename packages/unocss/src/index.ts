@@ -16,6 +16,12 @@ export type { QstyleUnoOptions, QstyleUnoPlugin } from './plugin.js';
 // tooling 用の CSS rule parser (differential test 等)。
 export { parseCssRules } from './parse.js';
 export type { CssWrapper, RawDecl, RawRule } from './parse.js';
+// Native compiler integration. This is the single structured adapter used by
+// the new qstyle Vite pipeline; it does not expose a second CSS runtime.
+export { unocss } from './native-config.js';
+export type { NativeUnoOptions } from './native-config.js';
+export { createNativeUnoAdapter, parseNativeUnoCss } from './native-adapter.js';
+export type { NativeUnoAdapter } from './native-adapter.js';
 // ponytail: 本家の公開値は透過的にそのまま横流しする (確認も列挙もしない)。
 // `default` は `export *` に含まれないため置換本体が取る。
 export * from '@unocss/vite';

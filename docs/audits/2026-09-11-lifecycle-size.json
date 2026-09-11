@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "dist": "/Users/ama/qstyle/fixtures/lifecycle/dist",
+  "generatedAt": "2026-09-10T15:46:22.306Z",
+  "css": {
+    "fileCount": 1,
+    "totalBytes": 887,
+    "totalGzipBytes": 512,
+    "files": [
+      {
+        "name": "assets/DTTS_25H-style.css",
+        "bytes": 887,
+        "gzipBytes": 512
+      }
+    ]
+  },
+  "manifest": {
+    "packCount": 20,
+    "packCssBytes": 870,
+    "moduleCount": 8
+  },
+  "warnings": []
+}

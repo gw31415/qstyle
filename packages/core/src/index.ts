@@ -100,3 +100,33 @@ export {
 export type { ChunkHashInput, RouteManifestEntry, StyleManifest } from './manifest.js';
 export { MemoryCache, computeCacheKey, invalidateBySource, safeParse } from './cache.js';
 export type { ComputeCacheKeyInput } from './cache.js';
+
+// Native 1.0 compiler surface. Legacy entry points are removed when the frontend migrates.
+export type {
+  SourceSpan, StyleWrapper, SelectorPart, StyleSelector, SlotUnit, StyleValue,
+  StyleDeclaration, NativeStyleRule, NativeKeyframes, NativeGlobal,
+  DeclarationDefinition, DemandSite,
+} from './native-ir.js';
+export { SUBJECT_SELECTOR } from './native-ir.js';
+export { NativeStyleError } from './native-diagnostic.js';
+export type { NativeDiagnostic, NativeDiagnosticCode } from './native-diagnostic.js';
+export {
+  CANONICAL_VERSION, canonicalStyleValue, canonicalStyleDeclaration,
+  canonicalStyleSelector, canonicalStyleWrappers, canonicalRule,
+  canonicalDeclaration, canonicalGlobal,
+} from './canonical.js';
+export { NativeIdentityRegistry, nativeClassName, nativeSlotName, sha256Prefix128 } from './identity.js';
+export type { NativeIdentityNamespace, NativeHasher } from './identity.js';
+export { nativeProperty, nativeSlotUnit, nativeStaticValue, evaluateNativeSlot } from './native-values.js';
+export {
+  slotSchema, declarationSlotName, definitionSlotName, serializeNativeDeclaration, serializeNativeSelector,
+  wrapNativeCss, serializeNativeRule, serializeDeclarationDefinition, serializeNativeGlobal,
+} from './serialize.js';
+export { DeclarationDictionary, createNativePacks } from './declarations.js';
+export type { RegisteredDeclaration, NativeStylePack } from './declarations.js';
+export { solveClassCover, ClassCoverError } from './class-cover.js';
+export type { ClassCoverState, ClassCoverResourceLimits, ClassCoverResult, ClassCoverObjective } from './class-cover.js';
+export { verifyClassCover } from './verify-cover.js';
+export type { ClassCoverVerification } from './verify-cover.js';
+export { optimizeStyleProgram, optimizeFixedStyleProgram } from './program.js';
+export type { StyleProgramState, OptimizedStyleProgram } from './program.js';

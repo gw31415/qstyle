@@ -1,0 +1,883 @@
+{
+  "date": "2026-09-11",
+  "dependency": "Unmodified @qwik.dev/core beta.43",
+  "flags": {
+    "namedImports": true,
+    "headCollector": true,
+    "buildRetry": true
+  },
+  "workspace": {
+    "build": "passed",
+    "typecheck": "passed",
+    "tests": 801
+  },
+  "limitations": [
+    "Fixture-only; public entry has not switched.",
+    "Internal native style-hook exports and beta.43 identity remain coupled.",
+    "Head output buffers the full HTML document and delays first write until render completion.",
+    "Complete CSS request failure exposes an unstyled element until remount recovers.",
+    "Query-bearing asset URLs verified only against fixture servers."
+  ],
+  "tests": [
+    {
+      "kind": "compiler browser",
+      "data": {
+        "checks": [
+          {
+            "name": "head delivery preserves SSR selectors with JavaScript disabled",
+            "pass": true
+          },
+          {
+            "name": "initial SSR and CSSOM contain no lazy-only declaration",
+            "pass": true
+          },
+          {
+            "name": "initial static and numeric styles compute correctly",
+            "pass": true
+          },
+          {
+            "name": "SSR style delivery preserves first-child and adjacent sibling selectors",
+            "pass": true
+          },
+          {
+            "name": "Uno foundation and utilities render with retained anchors and CSS priority",
+            "pass": true
+          },
+          {
+            "name": "finite utility state changes after resume without replacing input",
+            "pass": true
+          },
+          {
+            "name": "Wind4 layers, arbitrary values and group selectors compute correctly",
+            "pass": true
+          },
+          {
+            "name": "aliased authored hooks preserve nonzero indices, scoping, and resume",
+            "pass": true
+          },
+          {
+            "name": "aliased authored lazy hook remounts without duplicate native styles",
+            "pass": true
+          },
+          {
+            "name": "resume updates numeric CSS from 100px to 101px",
+            "pass": true
+          },
+          {
+            "name": "first lazy render loads only its needed CSS and retains shared color",
+            "pass": true
+          },
+          {
+            "name": "remount keeps each native style ID unique",
+            "pass": true
+          },
+          {
+            "name": "SSR-inlined shared CSS is never downloaded again for a new owner",
+            "pass": true
+          },
+          {
+            "name": "removed applied style is restored for a new owner",
+            "pass": true
+          },
+          {
+            "name": "browser has no runtime errors or missing build assets",
+            "pass": true
+          }
+        ],
+        "initialResponses": [
+          {
+            "url": "http://127.0.0.1:60752/build/q-DZYfwtOh.js",
+            "status": 200
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-DAhyjEj2.js",
+            "status": 200
+          }
+        ],
+        "errors": [],
+        "assets": [
+          {
+            "url": "http://127.0.0.1:60752/build/q-DZYfwtOh.js",
+            "status": 200,
+            "bytes": 5132
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-DAhyjEj2.js",
+            "status": 200,
+            "bytes": 106738
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-CmBO-mIk.js",
+            "status": 200,
+            "bytes": 3634
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-9EgiEdI7.js",
+            "status": 200,
+            "bytes": 59
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-B_wY7KK9.js",
+            "status": 200,
+            "bytes": 4383
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-CWkBpWkF.js",
+            "status": 200,
+            "bytes": 111
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-CiF5b5Au.js",
+            "status": 200,
+            "bytes": 235
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-BA4z0992.js",
+            "status": 200,
+            "bytes": 1003
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-BaOP_ZAI.js",
+            "status": 200,
+            "bytes": 109
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-Cojw_o7J.js",
+            "status": 200,
+            "bytes": 60
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-Btqw2z6K.js",
+            "status": 200,
+            "bytes": 88
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-DxcL_wuw.js",
+            "status": 200,
+            "bytes": 69
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-7N1Mx_U7.js",
+            "status": 200,
+            "bytes": 61
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-DZDZ-YNi.js",
+            "status": 200,
+            "bytes": 1292
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-ClHOmB4q.js",
+            "status": 200,
+            "bytes": 665
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-CBhZPR-Y.js",
+            "status": 200,
+            "bytes": 136
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-1hks_lZK.js",
+            "status": 200,
+            "bytes": 52
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-22KbhPq-.js",
+            "status": 200,
+            "bytes": 59
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-DyhoGIPA.js",
+            "status": 200,
+            "bytes": 679
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-DoEkekG9.js",
+            "status": 200,
+            "bytes": 235
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-ckSPqn3R.js",
+            "status": 200,
+            "bytes": 159
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-Dh3r0Ym_.js",
+            "status": 200,
+            "bytes": 235
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-BH_2LVN1.js",
+            "status": 200,
+            "bytes": 235
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-Brj5f1aY.js",
+            "status": 200,
+            "bytes": 431
+          },
+          {
+            "url": "http://127.0.0.1:60752/build/q-DzVp9fCd.js",
+            "status": 200,
+            "bytes": 133
+          }
+        ]
+      }
+    },
+    {
+      "kind": "delivery failure and frame sampling",
+      "data": {
+        "checks": [
+          {
+            "name": "no lazy element is exposed in frames before its CSS resolves",
+            "pass": true,
+            "visibleFrames": 0
+          },
+          {
+            "name": "a new owner retries a failed CSS chunk",
+            "pass": true,
+            "attempts": 3,
+            "requestedUrls": [
+              "http://127.0.0.1:60753/build/q-Brj5f1aY.js",
+              "http://127.0.0.1:60753/build/q-Brj5f1aY.js?qstyle-retry=1",
+              "http://127.0.0.1:60753/build/q-Brj5f1aY.js?qstyle-retry=2"
+            ],
+            "failedMount": [
+              "rgba(0, 0, 0, 0)"
+            ],
+            "errors": [
+              "Failed to fetch dynamically imported module: http://127.0.0.1:60753/build/q-Brj5f1aY.js?qstyle-retry=1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Node SSR routes",
+      "data": {
+        "checks": [
+          {
+            "name": "SSR renders route A and keeps route B-only CSS out of the initial document",
+            "pass": true
+          },
+          {
+            "name": "named server runtime places generated SSR CSS in head",
+            "pass": true
+          },
+          {
+            "name": "initial resume computes shared CSS and scoped authored CSS",
+            "pass": true
+          },
+          {
+            "name": "SPA navigation keeps the shell state and does not reload the document",
+            "pass": true
+          },
+          {
+            "name": "route B receives route-local CSS while shared SSR CSS is not downloaded again",
+            "pass": true
+          },
+          {
+            "name": "SPA navigation back restores route A scoped control and shared CSS",
+            "pass": true
+          },
+          {
+            "name": "two lazy owners share one generated CSS body and one unique native style ID",
+            "pass": true
+          },
+          {
+            "name": "remounting the shared lazy pack keeps one style node and no duplicate IDs",
+            "pass": true
+          },
+          {
+            "name": "no browser errors",
+            "pass": true
+          }
+        ],
+        "errors": [],
+        "navigations": 9,
+        "generated": {
+          "files": 59,
+          "sharedBodies": [
+            "q-DSW-nIMT.js"
+          ],
+          "routeOnlyBodies": [
+            "q-D1GEuFm3.js"
+          ],
+          "lazyBodies": [
+            "q-CODbX5VK.js"
+          ]
+        },
+        "ssr": {
+          "initialStatus": 200,
+          "routeBStatus": 200,
+          "initialHasRouteA": true,
+          "initialHasRouteB": false,
+          "initialHasRouteOnlyColor": false,
+          "routeBHasRouteOnlyColor": true,
+          "initialStyles": [
+            {
+              "id": "mel3r2-0",
+              "text": ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}"
+            },
+            {
+              "id": "x6sppd-1",
+              "text": "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n"
+            },
+            {
+              "id": "81o4c0-1",
+              "text": "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n"
+            }
+          ],
+          "routeBStyles": [
+            {
+              "id": "mel3r2-0",
+              "text": ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}"
+            },
+            {
+              "id": "fuh33i-0",
+              "text": ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}"
+            }
+          ],
+          "sharedInHead": true,
+          "routeOnlyInHead": false
+        },
+        "initial": {
+          "styleIds": [
+            "mel3r2-0",
+            "x6sppd-1",
+            "81o4c0-1"
+          ],
+          "styleTexts": [
+            ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+            "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+            "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n"
+          ],
+          "styleCount": 3,
+          "headStyleCount": 1,
+          "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }",
+          "sharedColor": "rgb(12, 34, 56)",
+          "routeOnlyBackground": null,
+          "lazyBackground": null,
+          "scopedInside": "rgb(168, 20, 92)",
+          "scopedOutside": "rgb(0, 0, 0)",
+          "scopedChildBackground": "rgb(246, 224, 236)",
+          "lazyCount": 0,
+          "routeA": true,
+          "routeB": false,
+          "shellInput": "shell input",
+          "shellStatus": "ready",
+          "pageToken": "named-route-page"
+        },
+        "initialResponses": {
+          "requests": [
+            "/build/q-DZYfwtOh.js",
+            "/build/q-DKKacggv.js",
+            "/build/q-CGjf9sVQ.js",
+            "/build/q-CIPMKKaj.js",
+            "/build/q-iFyPNIfL.js",
+            "/build/q-CmBO-mIk.js",
+            "/build/q-BmQvJva6.js",
+            "/build/q-C_YMN1Se.js"
+          ],
+          "sharedBodies": [],
+          "routeOnlyBodies": [],
+          "lazyBodies": []
+        },
+        "routeB": {
+          "styleIds": [
+            "mel3r2-0",
+            "x6sppd-1",
+            "81o4c0-1",
+            "fuh33i-0"
+          ],
+          "styleTexts": [
+            ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+            "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+            "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n",
+            ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}"
+          ],
+          "styleCount": 4,
+          "headStyleCount": 4,
+          "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }",
+          "sharedColor": "rgb(12, 34, 56)",
+          "routeOnlyBackground": "rgb(255, 226, 180)",
+          "lazyBackground": null,
+          "scopedInside": null,
+          "scopedOutside": null,
+          "scopedChildBackground": null,
+          "lazyCount": 0,
+          "routeA": false,
+          "routeB": true,
+          "shellInput": "kept through routes",
+          "shellStatus": "updated",
+          "pageToken": "named-route-page"
+        },
+        "routeBResponses": {
+          "requests": [
+            "/build/q-DZYfwtOh.js",
+            "/build/q-DKKacggv.js",
+            "/build/q-CGjf9sVQ.js",
+            "/build/q-CIPMKKaj.js",
+            "/build/q-iFyPNIfL.js",
+            "/build/q-CmBO-mIk.js",
+            "/build/q-BmQvJva6.js",
+            "/build/q-C_YMN1Se.js",
+            "/build/q-Cwr_4CEu.js",
+            "/build/q-JQuYDwOO.js",
+            "/build/q-DR-Faaal.js",
+            "/build/q-PmPLIIBR.js",
+            "/build/q-DjHDnuWg.js",
+            "/build/q-DuuQU14H.js",
+            "/build/q-3f8AFll2.js",
+            "/build/q-D_tvtqEt.js",
+            "/build/q-DNw5nY2n.js",
+            "/build/q-Br2f-y9P.js",
+            "/build/q-CiPUiV-1.js",
+            "/build/q-DPW9NF38.js",
+            "/build/q-CrEqrbmH.js",
+            "/build/q-WNwN7jj3.js",
+            "/build/q-DWPK7Nx7.js",
+            "/build/q-BFeyS12U.js",
+            "/build/q-tpINxAZK.js",
+            "/build/q-Df01_-O-.js",
+            "/build/q-D1GEuFm3.js"
+          ],
+          "sharedBodies": [],
+          "routeOnlyBodies": [
+            {
+              "path": "/build/q-D1GEuFm3.js",
+              "bodyBytes": 182
+            }
+          ],
+          "lazyBodies": []
+        },
+        "routeAAgain": {
+          "styleIds": [
+            "mel3r2-0",
+            "x6sppd-1",
+            "81o4c0-1",
+            "fuh33i-0"
+          ],
+          "styleTexts": [
+            ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+            "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+            "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n",
+            ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}"
+          ],
+          "styleCount": 4,
+          "headStyleCount": 4,
+          "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }",
+          "sharedColor": "rgb(12, 34, 56)",
+          "routeOnlyBackground": null,
+          "lazyBackground": null,
+          "scopedInside": "rgb(168, 20, 92)",
+          "scopedOutside": "rgb(0, 0, 0)",
+          "scopedChildBackground": "rgb(246, 224, 236)",
+          "lazyCount": 0,
+          "routeA": true,
+          "routeB": false,
+          "shellInput": "kept through routes",
+          "shellStatus": "updated",
+          "pageToken": "named-route-page"
+        },
+        "routeAAgainResponses": {
+          "requests": [
+            "/build/q-DZYfwtOh.js",
+            "/build/q-DKKacggv.js",
+            "/build/q-CGjf9sVQ.js",
+            "/build/q-CIPMKKaj.js",
+            "/build/q-iFyPNIfL.js",
+            "/build/q-CmBO-mIk.js",
+            "/build/q-BmQvJva6.js",
+            "/build/q-C_YMN1Se.js",
+            "/build/q-Cwr_4CEu.js",
+            "/build/q-JQuYDwOO.js",
+            "/build/q-DR-Faaal.js",
+            "/build/q-PmPLIIBR.js",
+            "/build/q-DjHDnuWg.js",
+            "/build/q-DuuQU14H.js",
+            "/build/q-3f8AFll2.js",
+            "/build/q-D_tvtqEt.js",
+            "/build/q-DNw5nY2n.js",
+            "/build/q-Br2f-y9P.js",
+            "/build/q-CiPUiV-1.js",
+            "/build/q-DPW9NF38.js",
+            "/build/q-CrEqrbmH.js",
+            "/build/q-WNwN7jj3.js",
+            "/build/q-DWPK7Nx7.js",
+            "/build/q-BFeyS12U.js",
+            "/build/q-tpINxAZK.js",
+            "/build/q-Df01_-O-.js",
+            "/build/q-D1GEuFm3.js",
+            "/build/q-B2ztCGE-.js",
+            "/build/q-Z5v81061.js",
+            "/build/q-DCXMi2Jz.js",
+            "/build/q-Dwz8VX0P.js",
+            "/build/q-BeNEG9iR.js"
+          ],
+          "sharedBodies": [],
+          "routeOnlyBodies": [
+            {
+              "path": "/build/q-D1GEuFm3.js",
+              "bodyBytes": 182
+            }
+          ],
+          "lazyBodies": []
+        },
+        "lazyMounted": {
+          "styleIds": [
+            "mel3r2-0",
+            "x6sppd-1",
+            "81o4c0-1",
+            "fuh33i-0",
+            "jzx9wf-0"
+          ],
+          "styleTexts": [
+            ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+            "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+            "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n",
+            ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}",
+            ".q1_c92da6434ed0d4986d9621340e5ad8ed{border:2px solid rgb(36, 96, 160);}.q1_c92da6434ed0d4986d9621340e5ad8ed{background-color:rgb(224, 240, 255);}"
+          ],
+          "styleCount": 5,
+          "headStyleCount": 5,
+          "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }.q1_c92da6434ed0d4986d9621340e5ad8ed { border: 2px solid rgb(36, 96, 160); }\n.q1_c92da6434ed0d4986d9621340e5ad8ed { background-color: rgb(224, 240, 255); }",
+          "sharedColor": "rgb(12, 34, 56)",
+          "routeOnlyBackground": null,
+          "lazyBackground": "rgb(224, 240, 255)",
+          "scopedInside": "rgb(168, 20, 92)",
+          "scopedOutside": "rgb(0, 0, 0)",
+          "scopedChildBackground": "rgb(246, 224, 236)",
+          "lazyCount": 2,
+          "routeA": true,
+          "routeB": false,
+          "shellInput": "kept through routes",
+          "shellStatus": "updated",
+          "pageToken": "named-route-page"
+        },
+        "lazyMountedResponses": {
+          "requests": [
+            "/build/q-DZYfwtOh.js",
+            "/build/q-DKKacggv.js",
+            "/build/q-CGjf9sVQ.js",
+            "/build/q-CIPMKKaj.js",
+            "/build/q-iFyPNIfL.js",
+            "/build/q-CmBO-mIk.js",
+            "/build/q-BmQvJva6.js",
+            "/build/q-C_YMN1Se.js",
+            "/build/q-Cwr_4CEu.js",
+            "/build/q-JQuYDwOO.js",
+            "/build/q-DR-Faaal.js",
+            "/build/q-PmPLIIBR.js",
+            "/build/q-DjHDnuWg.js",
+            "/build/q-DuuQU14H.js",
+            "/build/q-3f8AFll2.js",
+            "/build/q-D_tvtqEt.js",
+            "/build/q-DNw5nY2n.js",
+            "/build/q-Br2f-y9P.js",
+            "/build/q-CiPUiV-1.js",
+            "/build/q-DPW9NF38.js",
+            "/build/q-CrEqrbmH.js",
+            "/build/q-WNwN7jj3.js",
+            "/build/q-DWPK7Nx7.js",
+            "/build/q-BFeyS12U.js",
+            "/build/q-tpINxAZK.js",
+            "/build/q-Df01_-O-.js",
+            "/build/q-D1GEuFm3.js",
+            "/build/q-B2ztCGE-.js",
+            "/build/q-Z5v81061.js",
+            "/build/q-DCXMi2Jz.js",
+            "/build/q-Dwz8VX0P.js",
+            "/build/q-BeNEG9iR.js",
+            "/build/q-BGL1G8nT.js",
+            "/build/q-Ds8Q5k9R.js",
+            "/build/q-DtAH3og_.js",
+            "/build/q-CODbX5VK.js"
+          ],
+          "sharedBodies": [],
+          "routeOnlyBodies": [
+            {
+              "path": "/build/q-D1GEuFm3.js",
+              "bodyBytes": 182
+            }
+          ],
+          "lazyBodies": [
+            {
+              "path": "/build/q-CODbX5VK.js",
+              "bodyBytes": 182
+            }
+          ]
+        },
+        "lazyRemounted": {
+          "styleIds": [
+            "mel3r2-0",
+            "x6sppd-1",
+            "81o4c0-1",
+            "fuh33i-0",
+            "jzx9wf-0"
+          ],
+          "styleTexts": [
+            ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+            "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+            "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n",
+            ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}",
+            ".q1_c92da6434ed0d4986d9621340e5ad8ed{border:2px solid rgb(36, 96, 160);}.q1_c92da6434ed0d4986d9621340e5ad8ed{background-color:rgb(224, 240, 255);}"
+          ],
+          "styleCount": 5,
+          "headStyleCount": 5,
+          "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }.q1_c92da6434ed0d4986d9621340e5ad8ed { border: 2px solid rgb(36, 96, 160); }\n.q1_c92da6434ed0d4986d9621340e5ad8ed { background-color: rgb(224, 240, 255); }",
+          "sharedColor": "rgb(12, 34, 56)",
+          "routeOnlyBackground": null,
+          "lazyBackground": "rgb(224, 240, 255)",
+          "scopedInside": "rgb(168, 20, 92)",
+          "scopedOutside": "rgb(0, 0, 0)",
+          "scopedChildBackground": "rgb(246, 224, 236)",
+          "lazyCount": 2,
+          "routeA": true,
+          "routeB": false,
+          "shellInput": "kept through routes",
+          "shellStatus": "updated",
+          "pageToken": "named-route-page"
+        },
+        "lazyRemountedResponses": {
+          "requests": [
+            "/build/q-DZYfwtOh.js",
+            "/build/q-DKKacggv.js",
+            "/build/q-CGjf9sVQ.js",
+            "/build/q-CIPMKKaj.js",
+            "/build/q-iFyPNIfL.js",
+            "/build/q-CmBO-mIk.js",
+            "/build/q-BmQvJva6.js",
+            "/build/q-C_YMN1Se.js",
+            "/build/q-Cwr_4CEu.js",
+            "/build/q-JQuYDwOO.js",
+            "/build/q-DR-Faaal.js",
+            "/build/q-PmPLIIBR.js",
+            "/build/q-DjHDnuWg.js",
+            "/build/q-DuuQU14H.js",
+            "/build/q-3f8AFll2.js",
+            "/build/q-D_tvtqEt.js",
+            "/build/q-DNw5nY2n.js",
+            "/build/q-Br2f-y9P.js",
+            "/build/q-CiPUiV-1.js",
+            "/build/q-DPW9NF38.js",
+            "/build/q-CrEqrbmH.js",
+            "/build/q-WNwN7jj3.js",
+            "/build/q-DWPK7Nx7.js",
+            "/build/q-BFeyS12U.js",
+            "/build/q-tpINxAZK.js",
+            "/build/q-Df01_-O-.js",
+            "/build/q-D1GEuFm3.js",
+            "/build/q-B2ztCGE-.js",
+            "/build/q-Z5v81061.js",
+            "/build/q-DCXMi2Jz.js",
+            "/build/q-Dwz8VX0P.js",
+            "/build/q-BeNEG9iR.js",
+            "/build/q-BGL1G8nT.js",
+            "/build/q-Ds8Q5k9R.js",
+            "/build/q-DtAH3og_.js",
+            "/build/q-CODbX5VK.js"
+          ],
+          "sharedBodies": [],
+          "routeOnlyBodies": [
+            {
+              "path": "/build/q-D1GEuFm3.js",
+              "bodyBytes": 182
+            }
+          ],
+          "lazyBodies": [
+            {
+              "path": "/build/q-CODbX5VK.js",
+              "bodyBytes": 182
+            }
+          ]
+        },
+        "responseErrors": []
+      }
+    },
+    {
+      "kind": "routed HMR",
+      "data": {
+        "checks": [
+          {
+            "name": "route CSS HMR keeps document and shell state",
+            "pass": true
+          },
+          {
+            "name": "no browser errors",
+            "pass": true
+          }
+        ],
+        "errors": [],
+        "navigations": 0
+      }
+    },
+    {
+      "kind": "routed SSG",
+      "data": {
+        "checks": [
+          {
+            "name": "SSG emits both routes with route-local markup and CSS",
+            "pass": true
+          },
+          {
+            "name": "JavaScript-disabled route A keeps authored structure and styles",
+            "pass": true
+          },
+          {
+            "name": "JavaScript-disabled route B keeps route-local styles",
+            "pass": true
+          },
+          {
+            "name": "resumed SSG route A computes shared and scoped CSS",
+            "pass": true
+          },
+          {
+            "name": "resumed route navigation keeps shell and transfers only route-local CSS",
+            "pass": true
+          },
+          {
+            "name": "no browser errors",
+            "pass": true
+          }
+        ],
+        "errors": [],
+        "navigations": 6,
+        "generated": {
+          "files": 59,
+          "sharedBodies": [
+            "q-DSW-nIMT.js"
+          ],
+          "routeOnlyBodies": [
+            "q-D1GEuFm3.js"
+          ],
+          "lazyBodies": [
+            "q-CODbX5VK.js"
+          ]
+        },
+        "ssg": {
+          "initialStatus": 200,
+          "routeBStatus": 200,
+          "initialHasRouteA": true,
+          "initialHasRouteB": false,
+          "routeBHasRouteA": false,
+          "routeBHasRouteB": true,
+          "initialHasRouteOnlyColor": false,
+          "routeBHasRouteOnlyColor": true,
+          "initialStyles": [
+            {
+              "id": "mel3r2-0",
+              "text": ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}"
+            },
+            {
+              "id": "x6sppd-1",
+              "text": "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n"
+            },
+            {
+              "id": "81o4c0-1",
+              "text": "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n"
+            }
+          ],
+          "routeBStyles": [
+            {
+              "id": "mel3r2-0",
+              "text": ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}"
+            },
+            {
+              "id": "fuh33i-0",
+              "text": ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}"
+            }
+          ]
+        },
+        "initial": {
+          "styleIds": [
+            "mel3r2-0",
+            "x6sppd-1",
+            "81o4c0-1"
+          ],
+          "styleCount": 3,
+          "headStyleCount": 1,
+          "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }",
+          "sharedColor": "rgb(12, 34, 56)",
+          "routeOnlyBackground": null,
+          "lazyBackground": null,
+          "scopedInside": "rgb(168, 20, 92)",
+          "scopedOutside": "rgb(0, 0, 0)",
+          "scopedChildBackground": "rgb(246, 224, 236)",
+          "lazyCount": 0,
+          "routeA": true,
+          "routeB": false,
+          "shellInput": "shell input",
+          "shellStatus": "ready",
+          "pageToken": "named-route-page"
+        },
+        "routeB": {
+          "styleIds": [
+            "mel3r2-0",
+            "x6sppd-1",
+            "81o4c0-1",
+            "fuh33i-0"
+          ],
+          "styleCount": 4,
+          "headStyleCount": 4,
+          "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }",
+          "sharedColor": "rgb(12, 34, 56)",
+          "routeOnlyBackground": "rgb(255, 226, 180)",
+          "lazyBackground": null,
+          "scopedInside": null,
+          "scopedOutside": null,
+          "scopedChildBackground": null,
+          "lazyCount": 0,
+          "routeA": false,
+          "routeB": true,
+          "shellInput": "kept through routes",
+          "shellStatus": "updated",
+          "pageToken": "named-route-page"
+        },
+        "responseErrors": []
+      }
+    },
+    {
+      "kind": "expanded HMR",
+      "data": {
+        "checks": [
+          {
+            "name": "CSS HMR preserves document, signal, input, focus and scroll",
+            "pass": true
+          },
+          {
+            "name": "removing a shared declaration clears its live CSS",
+            "pass": true
+          },
+          {
+            "name": "readding a shared declaration restores its live CSS",
+            "pass": true
+          },
+          {
+            "name": "Uno config edits update utilities and root foundation",
+            "pass": true
+          },
+          {
+            "name": "removing the Uno foundation clears its live CSS",
+            "pass": true
+          },
+          {
+            "name": "restoring the Uno foundation restores its live CSS",
+            "pass": true
+          },
+          {
+            "name": "failed Uno config retains the last working generation and recovers",
+            "pass": true
+          },
+          {
+            "name": "an unproven document root retains the working graph and recovers",
+            "pass": true
+          }
+        ],
+        "errors": [],
+        "navigations": 0
+      }
+    }
+  ],
+  "ssrBoundary": "Explicit direct head/body parsed with scripting enabled and disabled; suffix preserved without parsing."
+}

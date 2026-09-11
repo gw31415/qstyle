@@ -1,0 +1,636 @@
+{
+  "benchmark": "non-invasive head buffering and parse5 observation",
+  "startedAt": "2026-09-11T06:21:38.775Z",
+  "dependency": "@qwik.dev/core stock from fixtures/compiler-contract/node_modules",
+  "protocol": {
+    "experimental": {
+      "suspense": true,
+      "errorBoundary": false
+    },
+    "manifest": "empty source-level manifest; no CSS or QRL module loading",
+    "delayedPromiseMs": 25,
+    "payload": "same html/head/body tree and body text for both modes"
+  },
+  "warmups": 2,
+  "samples": 10,
+  "validation": [
+    {
+      "payloadBytes": 262144,
+      "pass": true,
+      "sameBytes": true,
+      "sameDigest": true,
+      "sameSemantics": true
+    },
+    {
+      "payloadBytes": 4194304,
+      "pass": true,
+      "sameBytes": true,
+      "sameDigest": true,
+      "sameSemantics": true
+    }
+  ],
+  "failures": [],
+  "modes": [
+    {
+      "mode": "direct",
+      "payloadBytes": 262144,
+      "summary": {
+        "firstWriteMs": {
+          "median": 0.071771,
+          "p95": 0.14952254999999992
+        },
+        "totalMs": {
+          "median": 26.9040625,
+          "p95": 27.79639565
+        },
+        "bytes": {
+          "median": 267720,
+          "p95": 267720
+        },
+        "flushes": {
+          "median": 0,
+          "p95": 0
+        },
+        "writes": {
+          "median": 102,
+          "p95": 102
+        },
+        "rssDeltaBytes": {
+          "median": 303104,
+          "p95": 773324.7999999992
+        },
+        "heapUsedDeltaBytes": {
+          "median": 303512,
+          "p95": 790401.5999999999
+        },
+        "reportedSize": {
+          "median": 267720,
+          "p95": 267720
+        }
+      },
+      "records": [
+        {
+          "firstWriteMs": 0.116,
+          "totalMs": 27.002291,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 376832,
+          "heapUsedDeltaBytes": 311560,
+          "reportedSize": 267720,
+          "sha256": "3c08cb7a94a513850b1fd42ae6806ad901e9df7870ffb9c20a11c1fc8df45f51",
+          "normalizedSha256": "4948a66f2e6dad3b6931ee20fdaa98cbe91a09a27568fa9d16ce3a107a674df3",
+          "semantic": {
+            "hasDoctype": true,
+            "headCount": 1,
+            "bodyCount": 1,
+            "hasPayload": true,
+            "hasDelayedChild": true,
+            "headBeforeBody": true
+          }
+        },
+        {
+          "firstWriteMs": 0.116084,
+          "totalMs": 26.821042,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 360448,
+          "heapUsedDeltaBytes": 302264,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 0.065375,
+          "totalMs": 26.731542,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 311296,
+          "heapUsedDeltaBytes": 846000,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 0.075208,
+          "totalMs": 26.987083,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 1097728,
+          "heapUsedDeltaBytes": -520168,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 0.068334,
+          "totalMs": 26.777542,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 16384,
+          "heapUsedDeltaBytes": 309672,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 0.06425,
+          "totalMs": 27.688,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 278528,
+          "heapUsedDeltaBytes": 301120,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 0.175416,
+          "totalMs": 27.885083,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 376832,
+          "heapUsedDeltaBytes": 722448,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 0.117875,
+          "totalMs": 25.189375,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 294912,
+          "heapUsedDeltaBytes": -6728,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 0.051666,
+          "totalMs": 27.649791,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 294912,
+          "heapUsedDeltaBytes": 303336,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 0.028417,
+          "totalMs": 26.654875,
+          "bytes": 267720,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 278528,
+          "heapUsedDeltaBytes": 303688,
+          "reportedSize": 267720
+        }
+      ]
+    },
+    {
+      "mode": "head",
+      "payloadBytes": 262144,
+      "summary": {
+        "firstWriteMs": {
+          "median": 26.951916500000003,
+          "p95": 27.23096875
+        },
+        "totalMs": {
+          "median": 26.9551875,
+          "p95": 27.2335061
+        },
+        "bytes": {
+          "median": 267720,
+          "p95": 267720
+        },
+        "flushes": {
+          "median": 1,
+          "p95": 1
+        },
+        "writes": {
+          "median": 1,
+          "p95": 1
+        },
+        "rssDeltaBytes": {
+          "median": 573440,
+          "p95": 817561.5999999996
+        },
+        "heapUsedDeltaBytes": {
+          "median": 598456,
+          "p95": 1058604.3999999997
+        },
+        "reportedSize": {
+          "median": 267720,
+          "p95": 267720
+        }
+      },
+      "records": [
+        {
+          "firstWriteMs": 27.257125,
+          "totalMs": 27.259625,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 655360,
+          "heapUsedDeltaBytes": 635672,
+          "reportedSize": 267720,
+          "sha256": "a4608abf4215909145d0ffcda12614d3f67742bcefb21020ef978d3268ccfb83",
+          "normalizedSha256": "4948a66f2e6dad3b6931ee20fdaa98cbe91a09a27568fa9d16ce3a107a674df3",
+          "semantic": {
+            "hasDoctype": true,
+            "headCount": 1,
+            "bodyCount": 1,
+            "hasPayload": true,
+            "hasDelayedChild": true,
+            "headBeforeBody": true
+          }
+        },
+        {
+          "firstWriteMs": 27.199,
+          "totalMs": 27.201583,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 950272,
+          "heapUsedDeltaBytes": -867904,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 26.963,
+          "totalMs": 26.965542,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 81920,
+          "heapUsedDeltaBytes": 858576,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 26.883042,
+          "totalMs": 26.885792,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 589824,
+          "heapUsedDeltaBytes": 452672,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 26.865417,
+          "totalMs": 26.8685,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 557056,
+          "heapUsedDeltaBytes": 597240,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 27.047125,
+          "totalMs": 27.051083,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 573440,
+          "heapUsedDeltaBytes": 599672,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 27.08325,
+          "totalMs": 27.087708,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 655360,
+          "heapUsedDeltaBytes": 1222264,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 26.940833,
+          "totalMs": 26.944833,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 573440,
+          "heapUsedDeltaBytes": 95128,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 26.931583,
+          "totalMs": 26.937042,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 475136,
+          "heapUsedDeltaBytes": -1381984,
+          "reportedSize": 267720
+        },
+        {
+          "firstWriteMs": 26.732083,
+          "totalMs": 26.733708,
+          "bytes": 267720,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 0,
+          "heapUsedDeltaBytes": 600808,
+          "reportedSize": 267720
+        }
+      ]
+    },
+    {
+      "mode": "direct",
+      "payloadBytes": 4194304,
+      "summary": {
+        "firstWriteMs": {
+          "median": 0.09022949999999999,
+          "p95": 0.12759795
+        },
+        "totalMs": {
+          "median": 27.471104500000003,
+          "p95": 27.93465855
+        },
+        "bytes": {
+          "median": 4199880,
+          "p95": 4199880
+        },
+        "flushes": {
+          "median": 0,
+          "p95": 0
+        },
+        "writes": {
+          "median": 102,
+          "p95": 102
+        },
+        "rssDeltaBytes": {
+          "median": 4218880,
+          "p95": 4376166.4
+        },
+        "heapUsedDeltaBytes": {
+          "median": 4237808,
+          "p95": 4360259.2
+        },
+        "reportedSize": {
+          "median": 4199880,
+          "p95": 4199880
+        }
+      },
+      "records": [
+        {
+          "firstWriteMs": 0.09275,
+          "totalMs": 27.393584,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 4390912,
+          "heapUsedDeltaBytes": 4175712,
+          "reportedSize": 4199880,
+          "sha256": "429ad9a81eb56de66a524d2d0b694dc9bcfec601e852c97fcdd102f4ece1bbe4",
+          "normalizedSha256": "9daa458b8ccb2133a822818cb5aab2d6824a5ce59b2003a30c0a6c654318a0a4",
+          "semantic": {
+            "hasDoctype": true,
+            "headCount": 1,
+            "bodyCount": 1,
+            "hasPayload": true,
+            "hasDelayedChild": true,
+            "headBeforeBody": true
+          }
+        },
+        {
+          "firstWriteMs": 0.095459,
+          "totalMs": 27.548625,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": -12075008,
+          "heapUsedDeltaBytes": -17686720,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 0.08,
+          "totalMs": 27.828708,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 0,
+          "heapUsedDeltaBytes": 4263688,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 0.082167,
+          "totalMs": 26.49975,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 4358144,
+          "heapUsedDeltaBytes": 4246840,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 0.097708,
+          "totalMs": 27.885708,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 4210688,
+          "heapUsedDeltaBytes": 4239640,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 0.087709,
+          "totalMs": 27.974709,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 4210688,
+          "heapUsedDeltaBytes": 4189192,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 0.118958,
+          "totalMs": 27.701041,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 4276224,
+          "heapUsedDeltaBytes": 4439272,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 0.134667,
+          "totalMs": 26.777292,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 4227072,
+          "heapUsedDeltaBytes": 4244016,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 0.063583,
+          "totalMs": 26.977833,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 4227072,
+          "heapUsedDeltaBytes": 4235624,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 0.047208,
+          "totalMs": 26.549791,
+          "bytes": 4199880,
+          "flushes": 0,
+          "writes": 102,
+          "rssDeltaBytes": 4210688,
+          "heapUsedDeltaBytes": 4235976,
+          "reportedSize": 4199880
+        }
+      ]
+    },
+    {
+      "mode": "head",
+      "payloadBytes": 4194304,
+      "summary": {
+        "firstWriteMs": {
+          "median": 27.190313,
+          "p95": 28.3289981
+        },
+        "totalMs": {
+          "median": 27.194646,
+          "p95": 28.3323875
+        },
+        "bytes": {
+          "median": 4199880,
+          "p95": 4199880
+        },
+        "flushes": {
+          "median": 1,
+          "p95": 1
+        },
+        "writes": {
+          "median": 1,
+          "p95": 1
+        },
+        "rssDeltaBytes": {
+          "median": 6348800,
+          "p95": 8455782.4
+        },
+        "heapUsedDeltaBytes": {
+          "median": 8231880,
+          "p95": 8535936.8
+        },
+        "reportedSize": {
+          "median": 4199880,
+          "p95": 4199880
+        }
+      },
+      "records": [
+        {
+          "firstWriteMs": 26.428708,
+          "totalMs": 26.432666,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": -7946240,
+          "heapUsedDeltaBytes": -9786328,
+          "reportedSize": 4199880,
+          "sha256": "8c8ab5b055b0f0feb78fcad36f53d10c59e9ef99b6009a942ff8885ffa7518af",
+          "normalizedSha256": "9daa458b8ccb2133a822818cb5aab2d6824a5ce59b2003a30c0a6c654318a0a4",
+          "semantic": {
+            "hasDoctype": true,
+            "headCount": 1,
+            "bodyCount": 1,
+            "hasPayload": true,
+            "hasDelayedChild": true,
+            "headBeforeBody": true
+          }
+        },
+        {
+          "firstWriteMs": 28.387292,
+          "totalMs": 28.389875,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 4259840,
+          "heapUsedDeltaBytes": 4272760,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 27.41575,
+          "totalMs": 27.418209,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 8470528,
+          "heapUsedDeltaBytes": 8595776,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 26.02825,
+          "totalMs": 26.032417,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 32768,
+          "heapUsedDeltaBytes": -66696,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 27.268917,
+          "totalMs": 27.272542,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 8421376,
+          "heapUsedDeltaBytes": 8461688,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 27.025167,
+          "totalMs": 27.029125,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 8437760,
+          "heapUsedDeltaBytes": 8461032,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 28.25775,
+          "totalMs": 28.262125,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 4276224,
+          "heapUsedDeltaBytes": -4161592,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 27.111709,
+          "totalMs": 27.11675,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 16384,
+          "heapUsedDeltaBytes": 8002728,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 27.030209,
+          "totalMs": 27.036084,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 8437760,
+          "heapUsedDeltaBytes": 8462800,
+          "reportedSize": 4199880
+        },
+        {
+          "firstWriteMs": 28.0815,
+          "totalMs": 28.083958,
+          "bytes": 4199880,
+          "flushes": 1,
+          "writes": 1,
+          "rssDeltaBytes": 8437760,
+          "heapUsedDeltaBytes": 8461032,
+          "reportedSize": 4199880
+        }
+      ]
+    }
+  ],
+  "note": "RSS and heap deltas are observational per-render deltas, not peak-memory guarantees; this report makes no performance acceptance claim."
+}

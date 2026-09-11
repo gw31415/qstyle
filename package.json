@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@12.2.1",
   "engines": {
-    "node": ">=22.13",
+    "node": ">=24.11",
     "pnpm": ">=12"
   },
   "scripts": {
@@ -13,12 +13,18 @@
     "test": "pnpm -r test && node scripts/size-report.test.mjs",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "changeset-status": "echo \"no changesets yet\""
+    "changeset-status": "echo \"no changesets yet\"",
+    "test:native": "pnpm build && node scripts/test-named-contract.mjs",
+    "test:package-consumer": "pnpm build && node scripts/test-package-consumer.mjs",
+    "test:native-contract": "pnpm test:native",
+    "check:native-report": "node scripts/check-native-report.mjs",
+    "report:delivery": "pnpm build && node scripts/measure-native-delivery.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.4.1",
     "fast-check": "^4.9.0",
+    "parse5": "^8.0.1",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

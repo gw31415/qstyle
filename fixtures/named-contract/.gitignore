@@ -1,0 +1,7 @@
+dist/
+dist-ssg/
+node_modules/
+server/build/
+server/entry.node-server.js
+server-ssg/
+.node-dist-*

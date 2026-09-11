@@ -180,8 +180,12 @@ describe('TYP: authoring API 型の固定', () => {
         ],
       ],
       [
-        'index.d.cts',
-        ['css', 'StyleHandle', 'CssProp', 'lowerStyleObject', 'lowerTaggedTemplate'],
+        'runtime.d.mts',
+        ['useStyles$', 'useStylesScoped$', 'retryStyleImport'],
+      ],
+      [
+        'server.d.mts',
+        ['renderToString', 'renderToStream'],
       ],
     ];
 

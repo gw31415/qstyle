@@ -1,0 +1,625 @@
+{
+  "date": "2026-09-11",
+  "releaseComplete": false,
+  "publicPipeline": "legacy",
+  "productionQwikDependencyPatched": false,
+  "fixtureQwik": "isolated beta.43 candidate",
+  "workspace": {
+    "tests": {
+      "core": 196,
+      "compiler": 85,
+      "qwik": 120,
+      "unocss": 76,
+      "inspector": 13,
+      "vite": 290,
+      "root": 5,
+      "total": 785
+    },
+    "test": true,
+    "typecheck": true,
+    "build": true
+  },
+  "browser": {
+    "passed": 12,
+    "total": 12,
+    "checks": [
+      {
+        "name": "head delivery preserves SSR selectors with JavaScript disabled",
+        "pass": true
+      },
+      {
+        "name": "initial SSR and CSSOM contain no lazy-only declaration",
+        "pass": true
+      },
+      {
+        "name": "initial static and numeric styles compute correctly",
+        "pass": true
+      },
+      {
+        "name": "SSR style delivery preserves first-child and adjacent sibling selectors",
+        "pass": true
+      },
+      {
+        "name": "Uno foundation and utilities render with retained anchors and CSS priority",
+        "pass": true
+      },
+      {
+        "name": "finite utility state changes after resume without replacing input",
+        "pass": true
+      },
+      {
+        "name": "Wind4 layers, arbitrary values and group selectors compute correctly",
+        "pass": true
+      },
+      {
+        "name": "resume updates numeric CSS from 100px to 101px",
+        "pass": true
+      },
+      {
+        "name": "first lazy render loads only its needed CSS and retains shared color",
+        "pass": true
+      },
+      {
+        "name": "remount keeps each native style ID unique",
+        "pass": true
+      },
+      {
+        "name": "SSR-inlined shared CSS is never downloaded again for a new owner",
+        "pass": true
+      },
+      {
+        "name": "browser has no runtime errors or missing build assets",
+        "pass": true
+      }
+    ]
+  },
+  "node": {
+    "passed": 11,
+    "total": 11,
+    "checks": [
+      {
+        "name": "route-only utility is absent initially and compiled on SPA navigation",
+        "pass": true,
+        "details": {
+          "paddingTop": "23px"
+        }
+      },
+      {
+        "name": "Node adapter resolves the document foundation and preserves it across SPA routes",
+        "pass": true,
+        "details": {
+          "ssrFoundationHeadCount": 1,
+          "values": [
+            "rgb(17,34,51)",
+            "rgb(17,34,51)",
+            "rgb(17,34,51)"
+          ]
+        }
+      },
+      {
+        "name": "initial SSR inlines one shared pack style ID",
+        "pass": true,
+        "details": {
+          "ssrStyles": [
+            {
+              "id": "r917zz-0",
+              "text": ":root{--native-foundation:rgb(17,34,51);}"
+            },
+            {
+              "id": "58ujbm-0",
+              "text": ".native-shared { color: rgb(12, 34, 56); }"
+            },
+            {
+              "id": "v772wx-0",
+              "text": "\n    .native-identical { color: rgb(78, 90, 12); }\n  "
+            },
+            {
+              "id": "95rdrl-0",
+              "text": "\n    .native-identical { color: rgb(78, 90, 12); }\n  "
+            }
+          ],
+          "styleIds": [
+            "r917zz-0",
+            "58ujbm-0",
+            "v772wx-0",
+            "95rdrl-0"
+          ]
+        }
+      },
+      {
+        "name": "initial shared computed style is correct",
+        "pass": true,
+        "details": {
+          "sharedColor": "rgb(12, 34, 56)"
+        }
+      },
+      {
+        "name": "equal CSS literals in independent components remain two definitions",
+        "pass": true,
+        "details": {
+          "styleTexts": [
+            ":root{--native-foundation:rgb(17,34,51);}",
+            ".native-shared { color: rgb(12, 34, 56); }",
+            "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+            "\n    .native-identical { color: rgb(78, 90, 12); }\n  "
+          ],
+          "identicalColor": "rgb(78, 90, 12)"
+        }
+      },
+      {
+        "name": "lazy CSS is absent from initial HTML/CSSOM and CSS QRL responses",
+        "pass": true,
+        "details": {
+          "ssrHasLazyClass": false,
+          "initial": {
+            "styleIds": [
+              "r917zz-0",
+              "58ujbm-0",
+              "v772wx-0",
+              "95rdrl-0"
+            ],
+            "styleTexts": [
+              ":root{--native-foundation:rgb(17,34,51);}",
+              ".native-shared { color: rgb(12, 34, 56); }",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  "
+            ],
+            "styleCount": 4,
+            "foundationValue": "rgb(17,34,51)",
+            "foundationHeadCount": 1,
+            "htmlHasLazyClass": false,
+            "cssomHasLazyRule": false,
+            "lazyPresent": false,
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeSharedColor": null,
+            "routePadding": null,
+            "identicalColor": "rgb(78, 90, 12)",
+            "lazyBackground": null,
+            "lazyBorderTop": null
+          },
+          "initialLazyBodies": 0
+        }
+      },
+      {
+        "name": "SPA A to B does not refetch the inlined shared CSS QRL",
+        "pass": true,
+        "details": {
+          "routeBSharedBodies": 0,
+          "initialStyleCount": 4,
+          "routeBStyleCount": 5
+        }
+      },
+      {
+        "name": "SPA B to A reuses the shared CSS without refetch or duplicate style",
+        "pass": true,
+        "details": {
+          "routeAAgainSharedBodies": 0,
+          "routeAAgain": {
+            "styleIds": [
+              "r917zz-0",
+              "58ujbm-0",
+              "v772wx-0",
+              "95rdrl-0",
+              "yjh54h-0"
+            ],
+            "styleTexts": [
+              ":root{--native-foundation:rgb(17,34,51);}",
+              ".native-shared { color: rgb(12, 34, 56); }",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              ".q1_d763ec6b37909abdac69a051abe744c2{padding-top:23px;}"
+            ],
+            "styleCount": 5,
+            "foundationValue": "rgb(17,34,51)",
+            "foundationHeadCount": 1,
+            "htmlHasLazyClass": false,
+            "cssomHasLazyRule": false,
+            "lazyPresent": false,
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeSharedColor": null,
+            "routePadding": null,
+            "identicalColor": "rgb(78, 90, 12)",
+            "lazyBackground": null,
+            "lazyBorderTop": null
+          }
+        }
+      },
+      {
+        "name": "new shared pack instance after click has no CSS QRL refetch or style insertion",
+        "pass": true,
+        "details": {
+          "afterSharedBodies": 0,
+          "sharedCssResponses": [],
+          "beforeStyleCount": 4,
+          "afterStyleCount": 4
+        }
+      },
+      {
+        "name": "lazy unique pack resolves once on first render and computes correctly",
+        "pass": true,
+        "details": {
+          "afterLazyBodies": 1,
+          "afterLazy": {
+            "styleIds": [
+              "r917zz-0",
+              "58ujbm-0",
+              "v772wx-0",
+              "95rdrl-0",
+              "yjh54h-0",
+              "mw7r8a-0"
+            ],
+            "styleTexts": [
+              ":root{--native-foundation:rgb(17,34,51);}",
+              ".native-shared { color: rgb(12, 34, 56); }",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              ".q1_d763ec6b37909abdac69a051abe744c2{padding-top:23px;}",
+              "\n    .native-lazy { background: rgb(230, 240, 255); border: 2px solid rgb(20, 80, 160); }\n  "
+            ],
+            "styleCount": 6,
+            "foundationValue": "rgb(17,34,51)",
+            "foundationHeadCount": 1,
+            "htmlHasLazyClass": true,
+            "cssomHasLazyRule": true,
+            "lazyPresent": true,
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeSharedColor": null,
+            "routePadding": null,
+            "identicalColor": "rgb(78, 90, 12)",
+            "lazyBackground": "rgb(230, 240, 255)",
+            "lazyBorderTop": "2px"
+          }
+        }
+      },
+      {
+        "name": "all observed native style IDs stay unique",
+        "pass": true
+      }
+    ]
+  },
+  "ssg": {
+    "passed": 13,
+    "total": 13,
+    "checks": [
+      {
+        "name": "route-only utility is absent initially and compiled on SPA navigation",
+        "pass": true,
+        "details": {
+          "paddingTop": "23px"
+        }
+      },
+      {
+        "name": "every generated SSG document contains exactly one head foundation and no lazy CSS",
+        "pass": true,
+        "details": [
+          {
+            "route": "/",
+            "status": 200,
+            "foundationHeadCount": 1,
+            "foundationTotalCount": 1,
+            "routeUtilityCount": 0,
+            "lazyAbsent": true
+          },
+          {
+            "route": "/route-b/",
+            "status": 200,
+            "foundationHeadCount": 1,
+            "foundationTotalCount": 1,
+            "routeUtilityCount": 1,
+            "lazyAbsent": true
+          }
+        ]
+      },
+      {
+        "name": "SSG includes route-only CSS exclusively on the matching page",
+        "pass": true,
+        "details": [
+          {
+            "route": "/",
+            "status": 200,
+            "foundationHeadCount": 1,
+            "foundationTotalCount": 1,
+            "routeUtilityCount": 0,
+            "lazyAbsent": true
+          },
+          {
+            "route": "/route-b/",
+            "status": 200,
+            "foundationHeadCount": 1,
+            "foundationTotalCount": 1,
+            "routeUtilityCount": 1,
+            "lazyAbsent": true
+          }
+        ]
+      },
+      {
+        "name": "SSG adapter resolves the document foundation and preserves it across SPA routes",
+        "pass": true,
+        "details": {
+          "ssrFoundationHeadCount": 1,
+          "values": [
+            "rgb(17,34,51)",
+            "rgb(17,34,51)",
+            "rgb(17,34,51)"
+          ]
+        }
+      },
+      {
+        "name": "initial SSR inlines one shared pack style ID",
+        "pass": true,
+        "details": {
+          "ssrStyles": [
+            {
+              "id": "r917zz-0",
+              "text": ":root{--native-foundation:rgb(17,34,51);}"
+            },
+            {
+              "id": "58ujbm-0",
+              "text": ".native-shared { color: rgb(12, 34, 56); }"
+            },
+            {
+              "id": "v772wx-0",
+              "text": "\n    .native-identical { color: rgb(78, 90, 12); }\n  "
+            },
+            {
+              "id": "95rdrl-0",
+              "text": "\n    .native-identical { color: rgb(78, 90, 12); }\n  "
+            }
+          ],
+          "styleIds": [
+            "r917zz-0",
+            "58ujbm-0",
+            "v772wx-0",
+            "95rdrl-0"
+          ]
+        }
+      },
+      {
+        "name": "initial shared computed style is correct",
+        "pass": true,
+        "details": {
+          "sharedColor": "rgb(12, 34, 56)"
+        }
+      },
+      {
+        "name": "equal CSS literals in independent components remain two definitions",
+        "pass": true,
+        "details": {
+          "styleTexts": [
+            ":root{--native-foundation:rgb(17,34,51);}",
+            ".native-shared { color: rgb(12, 34, 56); }",
+            "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+            "\n    .native-identical { color: rgb(78, 90, 12); }\n  "
+          ],
+          "identicalColor": "rgb(78, 90, 12)"
+        }
+      },
+      {
+        "name": "lazy CSS is absent from initial HTML/CSSOM and CSS QRL responses",
+        "pass": true,
+        "details": {
+          "ssrHasLazyClass": false,
+          "initial": {
+            "styleIds": [
+              "r917zz-0",
+              "58ujbm-0",
+              "v772wx-0",
+              "95rdrl-0"
+            ],
+            "styleTexts": [
+              ":root{--native-foundation:rgb(17,34,51);}",
+              ".native-shared { color: rgb(12, 34, 56); }",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  "
+            ],
+            "styleCount": 4,
+            "foundationValue": "rgb(17,34,51)",
+            "foundationHeadCount": 1,
+            "htmlHasLazyClass": false,
+            "cssomHasLazyRule": false,
+            "lazyPresent": false,
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeSharedColor": null,
+            "routePadding": null,
+            "identicalColor": "rgb(78, 90, 12)",
+            "lazyBackground": null,
+            "lazyBorderTop": null
+          },
+          "initialLazyBodies": 0
+        }
+      },
+      {
+        "name": "SPA A to B does not refetch the inlined shared CSS QRL",
+        "pass": true,
+        "details": {
+          "routeBSharedBodies": 0,
+          "initialStyleCount": 4,
+          "routeBStyleCount": 5
+        }
+      },
+      {
+        "name": "SPA B to A reuses the shared CSS without refetch or duplicate style",
+        "pass": true,
+        "details": {
+          "routeAAgainSharedBodies": 0,
+          "routeAAgain": {
+            "styleIds": [
+              "r917zz-0",
+              "58ujbm-0",
+              "v772wx-0",
+              "95rdrl-0",
+              "yjh54h-0"
+            ],
+            "styleTexts": [
+              ":root{--native-foundation:rgb(17,34,51);}",
+              ".native-shared { color: rgb(12, 34, 56); }",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              ".q1_d763ec6b37909abdac69a051abe744c2{padding-top:23px;}"
+            ],
+            "styleCount": 5,
+            "foundationValue": "rgb(17,34,51)",
+            "foundationHeadCount": 1,
+            "htmlHasLazyClass": false,
+            "cssomHasLazyRule": false,
+            "lazyPresent": false,
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeSharedColor": null,
+            "routePadding": null,
+            "identicalColor": "rgb(78, 90, 12)",
+            "lazyBackground": null,
+            "lazyBorderTop": null
+          }
+        }
+      },
+      {
+        "name": "new shared pack instance after click has no CSS QRL refetch or style insertion",
+        "pass": true,
+        "details": {
+          "afterSharedBodies": 0,
+          "sharedCssResponses": [],
+          "beforeStyleCount": 4,
+          "afterStyleCount": 4
+        }
+      },
+      {
+        "name": "lazy unique pack resolves once on first render and computes correctly",
+        "pass": true,
+        "details": {
+          "afterLazyBodies": 1,
+          "afterLazy": {
+            "styleIds": [
+              "r917zz-0",
+              "58ujbm-0",
+              "v772wx-0",
+              "95rdrl-0",
+              "yjh54h-0",
+              "mw7r8a-0"
+            ],
+            "styleTexts": [
+              ":root{--native-foundation:rgb(17,34,51);}",
+              ".native-shared { color: rgb(12, 34, 56); }",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              "\n    .native-identical { color: rgb(78, 90, 12); }\n  ",
+              ".q1_d763ec6b37909abdac69a051abe744c2{padding-top:23px;}",
+              "\n    .native-lazy { background: rgb(230, 240, 255); border: 2px solid rgb(20, 80, 160); }\n  "
+            ],
+            "styleCount": 6,
+            "foundationValue": "rgb(17,34,51)",
+            "foundationHeadCount": 1,
+            "htmlHasLazyClass": true,
+            "cssomHasLazyRule": true,
+            "lazyPresent": true,
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeSharedColor": null,
+            "routePadding": null,
+            "identicalColor": "rgb(78, 90, 12)",
+            "lazyBackground": "rgb(230, 240, 255)",
+            "lazyBorderTop": "2px"
+          }
+        }
+      },
+      {
+        "name": "all observed native style IDs stay unique",
+        "pass": true
+      }
+    ]
+  },
+  "finalReport": {
+    "checks": [
+      "final byte counts and SHA-256 digests",
+      "single payload per pack",
+      "source path privacy",
+      "authored controls reject whole-site guarantee",
+      "managed source passes",
+      "source restored"
+    ],
+    "results": [
+      {
+        "label": "authored-controls",
+        "wholeSiteGuarantee": false,
+        "assetCount": 41,
+        "packCount": 13,
+        "duplicateDefinitionCount": 0,
+        "duplicatePayloadCount": 0,
+        "classCount": 9,
+        "fixedClassCount": 1,
+        "classOptimality": {
+          "status": "optimal",
+          "lowerBound": {
+            "K": 9,
+            "T": 9
+          },
+          "upperBound": {
+            "K": 9,
+            "T": 9
+          },
+          "candidateCount": 11,
+          "exploredNodes": 29,
+          "modelVersion": "native-class-cover-v1"
+        },
+        "diagnostics": [
+          {
+            "code": "QS1603",
+            "message": "The final Qwik manifest contains an unmanaged authored style hook.",
+            "file": "q-manifest.json",
+            "start": 0,
+            "end": 31340
+          },
+          {
+            "code": "QS1603",
+            "message": "Authored unmanaged style control useStyles$ is present in src/root.tsx.",
+            "file": "src/root.tsx",
+            "start": 195,
+            "end": 240
+          },
+          {
+            "code": "QS1603",
+            "message": "Authored unmanaged style control jsx-style is present in src/root.tsx.",
+            "file": "src/root.tsx",
+            "start": 1916,
+            "end": 1983
+          },
+          {
+            "code": "QS1603",
+            "message": "Unmanaged stylesheet is present: src/root.tsx."
+          }
+        ]
+      },
+      {
+        "label": "managed-styles",
+        "wholeSiteGuarantee": true,
+        "assetCount": 39,
+        "packCount": 13,
+        "duplicateDefinitionCount": 0,
+        "duplicatePayloadCount": 0,
+        "classCount": 9,
+        "fixedClassCount": 1,
+        "classOptimality": {
+          "status": "optimal",
+          "lowerBound": {
+            "K": 9,
+            "T": 9
+          },
+          "upperBound": {
+            "K": 9,
+            "T": 9
+          },
+          "candidateCount": 11,
+          "exploredNodes": 29,
+          "modelVersion": "native-class-cover-v1"
+        },
+        "diagnostics": []
+      }
+    ]
+  },
+  "runtimeReportReferences": 0,
+  "headPerformanceAudit": "2026-09-11-head-performance.json",
+  "limits": [
+    "Reports verify the supported finite native program and Qwik optimizer export provenance; they do not invent route delivery results.",
+    "Exact CSS asset bytes alone fail native delivery/cascade proof.",
+    "QS1601/QS1602 and duplicate payloads fail before output; QS1603 remains report-only in the internal comparison pipeline, pending public cutover.",
+    "Standard released Qwik beta.43 still fails the inline-reuse prerequisite; head buffering remains an isolated candidate with a measured first-write delay.",
+    "Public native exports, consumer migration, complete performance/cache acceptance and release/deployment remain unfinished."
+  ]
+}

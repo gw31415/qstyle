@@ -46,6 +46,8 @@ import type {
 import { composeCssProp, lowerStyleObject, lowerTaggedTemplate } from '@qstyle/qwik';
 import { groupDuplicateCss } from './dedup.js';
 import type { StyleHandle, StyleObject } from '@qstyle/qwik';
+export { qstyleNative } from './native-plugin.js';
+export type { NativeQstyleOptions } from './native-plugin.js';
 
 export type OptimizationLevel = 'preserve' | 'safe' | 'strict';
 

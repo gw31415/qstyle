@@ -1,0 +1,184 @@
+{
+  "date": "2026-09-11",
+  "scope": "isolated Qwik beta.43 source-copy candidate; not production adoption",
+  "options": {
+    "COMPILER_CONTRACT_QWIK": "candidate",
+    "QSTYLE_CONTRACT_WIND4": "1",
+    "QSTYLE_CONTRACT_HEAD": "1"
+  },
+  "browser": {
+    "checks": [
+      {
+        "name": "head delivery preserves SSR selectors with JavaScript disabled",
+        "pass": true
+      },
+      {
+        "name": "initial SSR and CSSOM contain no lazy-only declaration",
+        "pass": true
+      },
+      {
+        "name": "initial static and numeric styles compute correctly",
+        "pass": true
+      },
+      {
+        "name": "SSR style delivery preserves first-child and adjacent sibling selectors",
+        "pass": true
+      },
+      {
+        "name": "Uno foundation and utilities render with retained anchors and CSS priority",
+        "pass": true
+      },
+      {
+        "name": "finite utility state changes after resume without replacing input",
+        "pass": true
+      },
+      {
+        "name": "Wind4 layers, arbitrary values and group selectors compute correctly",
+        "pass": true
+      },
+      {
+        "name": "resume updates numeric CSS from 100px to 101px",
+        "pass": true
+      },
+      {
+        "name": "first lazy render loads only its needed CSS and retains shared color",
+        "pass": true
+      },
+      {
+        "name": "remount keeps each native style ID unique",
+        "pass": true
+      },
+      {
+        "name": "SSR-inlined shared CSS is never downloaded again for a new owner",
+        "pass": true
+      },
+      {
+        "name": "browser has no runtime errors or missing build assets",
+        "pass": true
+      }
+    ],
+    "initialResponses": [
+      {
+        "url": "http://127.0.0.1:54568/build/q-DZYfwtOh.js",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-EfXMnT6f.js",
+        "status": 200
+      }
+    ],
+    "errors": [],
+    "assets": [
+      {
+        "url": "http://127.0.0.1:54568/build/q-DZYfwtOh.js",
+        "status": 200,
+        "bytes": 5132
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-EfXMnT6f.js",
+        "status": 200,
+        "bytes": 104941
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-CmBO-mIk.js",
+        "status": 200,
+        "bytes": 3634
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-9EgiEdI7.js",
+        "status": 200,
+        "bytes": 59
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-CGbdv-U8.js",
+        "status": 200,
+        "bytes": 4144
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-DWxho2IW.js",
+        "status": 200,
+        "bytes": 111
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-CMQBaUq7.js",
+        "status": 200,
+        "bytes": 143
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-BaOP_ZAI.js",
+        "status": 200,
+        "bytes": 109
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-1hks_lZK.js",
+        "status": 200,
+        "bytes": 52
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-22KbhPq-.js",
+        "status": 200,
+        "bytes": 59
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-OqrAb-uw.js",
+        "status": 200,
+        "bytes": 679
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-ByDgdszi.js",
+        "status": 200,
+        "bytes": 143
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-ckSPqn3R.js",
+        "status": 200,
+        "bytes": 159
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-F4WWARZV.js",
+        "status": 200,
+        "bytes": 143
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-Bu1XKXyy.js",
+        "status": 200,
+        "bytes": 143
+      },
+      {
+        "url": "http://127.0.0.1:54568/build/q-Brj5f1aY.js",
+        "status": 200,
+        "bytes": 431
+      }
+    ]
+  },
+  "stream": {
+    "pass": true,
+    "checks": [
+      "head-only rendered styles",
+      "one deferred flush",
+      "async sink awaited",
+      "unsupported modes rejected before writing",
+      "sink rejection propagated"
+    ],
+    "htmlBytes": 15797,
+    "timing": {
+      "firstFlush": 1.6659125000000003e-05,
+      "render": 2.5395830000000004e-06,
+      "snapshot": 1.3463416999999997e-05
+    }
+  },
+  "limitations": [
+    "Full document buffered before first network write",
+    "Non-HTML containers and out-of-order streaming rejected",
+    "Router, SSG adapters, dev server head mode and performance/memory gates not established"
+  ],
+  "sourceBoundary": {
+    "dev": true,
+    "prod": true,
+    "experimentalSuspenseEnabled": true,
+    "checks": [
+      "missing and duplicate head rejected before output",
+      "one empty-style head accepted with implicit OOOS disabled"
+    ]
+  }
+}

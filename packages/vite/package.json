@@ -17,19 +17,17 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=24.11"
   },
   "files": [
     "dist"
   ],
   "sideEffects": false,
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.cts",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -41,12 +39,13 @@
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@qstyle/compiler": "workspace:^",
     "@qstyle/core": "workspace:^",
     "@qstyle/inspector": "workspace:^",
     "@qstyle/qwik": "workspace:^"
   },
   "peerDependencies": {
-    "@qwik.dev/core": "^2.0.0-beta.43",
+    "@qwik.dev/core": "2.0.0-beta.43",
     "vite": "^8.0.0"
   },
   "devDependencies": {

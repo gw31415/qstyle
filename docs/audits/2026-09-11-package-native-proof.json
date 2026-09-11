@@ -1,0 +1,1351 @@
+{
+  "date": "2026-09-11",
+  "dependency": "Unmodified @qwik.dev/core 2.0.0-beta.43",
+  "entry": "@qstyle/vite qstyleNative + @qstyle/qwik/runtime and /server",
+  "workspace": {
+    "build": "passed",
+    "typecheck": "passed",
+    "tests": 810
+  },
+  "tests": [
+    {
+      "kind": "fixture-probe",
+      "runs": [
+        {
+          "checks": [
+            {
+              "name": "head delivery preserves SSR selectors with JavaScript disabled",
+              "pass": true
+            },
+            {
+              "name": "initial SSR and CSSOM contain no lazy-only declaration",
+              "pass": true
+            },
+            {
+              "name": "initial static and numeric styles compute correctly",
+              "pass": true
+            },
+            {
+              "name": "SSR style delivery preserves first-child and adjacent sibling selectors",
+              "pass": true
+            },
+            {
+              "name": "Uno foundation and utilities render with retained anchors and CSS priority",
+              "pass": true
+            },
+            {
+              "name": "finite utility state changes after resume without replacing input",
+              "pass": true
+            },
+            {
+              "name": "Wind4 layers, arbitrary values and group selectors compute correctly",
+              "pass": true
+            },
+            {
+              "name": "aliased authored hooks preserve nonzero indices, scoping, and resume",
+              "pass": true
+            },
+            {
+              "name": "aliased authored lazy hook remounts without duplicate native styles",
+              "pass": true
+            },
+            {
+              "name": "resume updates numeric CSS from 100px to 101px",
+              "pass": true
+            },
+            {
+              "name": "first lazy render loads only its needed CSS and retains shared color",
+              "pass": true
+            },
+            {
+              "name": "remount keeps each native style ID unique",
+              "pass": true
+            },
+            {
+              "name": "SSR-inlined shared CSS is never downloaded again for a new owner",
+              "pass": true
+            },
+            {
+              "name": "removed applied style is restored for a new owner",
+              "pass": true
+            },
+            {
+              "name": "browser has no runtime errors or missing build assets",
+              "pass": true
+            }
+          ],
+          "initialResponses": [
+            {
+              "url": "http://127.0.0.1:61188/build/q-DZYfwtOh.js",
+              "status": 200
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-BhrRZxlT.js",
+              "status": 200
+            }
+          ],
+          "errors": [],
+          "assets": [
+            {
+              "url": "http://127.0.0.1:61188/build/q-DZYfwtOh.js",
+              "status": 200,
+              "bytes": 5132
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-BhrRZxlT.js",
+              "status": 200,
+              "bytes": 106795
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-CmBO-mIk.js",
+              "status": 200,
+              "bytes": 3634
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-9EgiEdI7.js",
+              "status": 200,
+              "bytes": 59
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-BBG_NmuG.js",
+              "status": 200,
+              "bytes": 4378
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-BjG2Qw21.js",
+              "status": 200,
+              "bytes": 111
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-DSUdEWG3.js",
+              "status": 200,
+              "bytes": 235
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-hGj4KvJh.js",
+              "status": 200,
+              "bytes": 1003
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-BaOP_ZAI.js",
+              "status": 200,
+              "bytes": 109
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-Cojw_o7J.js",
+              "status": 200,
+              "bytes": 60
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-Btqw2z6K.js",
+              "status": 200,
+              "bytes": 88
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-DxcL_wuw.js",
+              "status": 200,
+              "bytes": 69
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-7N1Mx_U7.js",
+              "status": 200,
+              "bytes": 61
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-C22H1Qh2.js",
+              "status": 200,
+              "bytes": 1287
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-C-sN7Maj.js",
+              "status": 200,
+              "bytes": 660
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-CBhZPR-Y.js",
+              "status": 200,
+              "bytes": 136
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-1hks_lZK.js",
+              "status": 200,
+              "bytes": 52
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-22KbhPq-.js",
+              "status": 200,
+              "bytes": 59
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-7l9wt72n.js",
+              "status": 200,
+              "bytes": 679
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-DlDbQlEN.js",
+              "status": 200,
+              "bytes": 235
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-ckSPqn3R.js",
+              "status": 200,
+              "bytes": 159
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-xmw65kIB.js",
+              "status": 200,
+              "bytes": 235
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-BmmLD_Ta.js",
+              "status": 200,
+              "bytes": 235
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-Brj5f1aY.js",
+              "status": 200,
+              "bytes": 431
+            },
+            {
+              "url": "http://127.0.0.1:61188/build/q-DzVp9fCd.js",
+              "status": 200,
+              "bytes": 133
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "delivery",
+      "runs": [
+        {
+          "checks": [
+            {
+              "name": "no lazy element is exposed in frames before its CSS resolves",
+              "pass": true,
+              "visibleFrames": 0
+            },
+            {
+              "name": "a new owner retries a failed CSS chunk",
+              "pass": true,
+              "attempts": 3,
+              "requestedUrls": [
+                "http://127.0.0.1:61232/build/q-Brj5f1aY.js",
+                "http://127.0.0.1:61232/build/q-Brj5f1aY.js?qstyle-retry=1",
+                "http://127.0.0.1:61232/build/q-Brj5f1aY.js?qstyle-retry=2"
+              ],
+              "failedMount": [
+                "rgba(0, 0, 0, 0)"
+              ],
+              "errors": [
+                "Failed to fetch dynamically imported module: http://127.0.0.1:61232/build/q-Brj5f1aY.js?qstyle-retry=1"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "accept",
+      "runs": [
+        {
+          "checks": [
+            {
+              "name": "SSR renders route A and keeps route B-only CSS out of the initial document",
+              "pass": true
+            },
+            {
+              "name": "named server runtime places generated SSR CSS in head",
+              "pass": true
+            },
+            {
+              "name": "initial resume computes shared CSS and scoped authored CSS",
+              "pass": true
+            },
+            {
+              "name": "SPA navigation keeps the shell state and does not reload the document",
+              "pass": true
+            },
+            {
+              "name": "route B receives route-local CSS while shared SSR CSS is not downloaded again",
+              "pass": true
+            },
+            {
+              "name": "SPA navigation back restores route A scoped control and shared CSS",
+              "pass": true
+            },
+            {
+              "name": "two lazy owners share one generated CSS body and one unique native style ID",
+              "pass": true
+            },
+            {
+              "name": "remounting the shared lazy pack keeps one style node and no duplicate IDs",
+              "pass": true
+            },
+            {
+              "name": "no browser errors",
+              "pass": true
+            }
+          ],
+          "errors": [],
+          "navigations": 9,
+          "generated": {
+            "files": 59,
+            "sharedBodies": [
+              "q-DSW-nIMT.js"
+            ],
+            "routeOnlyBodies": [
+              "q-D1GEuFm3.js"
+            ],
+            "lazyBodies": [
+              "q-CODbX5VK.js"
+            ]
+          },
+          "ssr": {
+            "initialStatus": 200,
+            "routeBStatus": 200,
+            "initialHasRouteA": true,
+            "initialHasRouteB": false,
+            "initialHasRouteOnlyColor": false,
+            "routeBHasRouteOnlyColor": true,
+            "initialStyles": [
+              {
+                "id": "mel3r2-0",
+                "text": ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}"
+              },
+              {
+                "id": "x6sppd-1",
+                "text": "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n"
+              },
+              {
+                "id": "81o4c0-1",
+                "text": "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n"
+              }
+            ],
+            "routeBStyles": [
+              {
+                "id": "mel3r2-0",
+                "text": ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}"
+              },
+              {
+                "id": "fuh33i-0",
+                "text": ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}"
+              }
+            ],
+            "sharedInHead": true,
+            "routeOnlyInHead": false
+          },
+          "initial": {
+            "styleIds": [
+              "mel3r2-0",
+              "x6sppd-1",
+              "81o4c0-1"
+            ],
+            "styleTexts": [
+              ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+              "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+              "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n"
+            ],
+            "styleCount": 3,
+            "headStyleCount": 1,
+            "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }",
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeOnlyBackground": null,
+            "lazyBackground": null,
+            "scopedInside": "rgb(168, 20, 92)",
+            "scopedOutside": "rgb(0, 0, 0)",
+            "scopedChildBackground": "rgb(246, 224, 236)",
+            "lazyCount": 0,
+            "routeA": true,
+            "routeB": false,
+            "shellInput": "shell input",
+            "shellStatus": "ready",
+            "pageToken": "named-route-page"
+          },
+          "initialResponses": {
+            "requests": [
+              "/build/q-DZYfwtOh.js",
+              "/build/q-CFULr5sM.js",
+              "/build/q-CGjf9sVQ.js",
+              "/build/q-DYWSL6h3.js",
+              "/build/q-BZH8LG3m.js",
+              "/build/q-CmBO-mIk.js",
+              "/build/q--1f3a456.js",
+              "/build/q-BPOFea1k.js"
+            ],
+            "sharedBodies": [],
+            "routeOnlyBodies": [],
+            "lazyBodies": []
+          },
+          "routeB": {
+            "styleIds": [
+              "mel3r2-0",
+              "x6sppd-1",
+              "81o4c0-1",
+              "fuh33i-0"
+            ],
+            "styleTexts": [
+              ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+              "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+              "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n",
+              ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}"
+            ],
+            "styleCount": 4,
+            "headStyleCount": 4,
+            "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }",
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeOnlyBackground": "rgb(255, 226, 180)",
+            "lazyBackground": null,
+            "scopedInside": null,
+            "scopedOutside": null,
+            "scopedChildBackground": null,
+            "lazyCount": 0,
+            "routeA": false,
+            "routeB": true,
+            "shellInput": "kept through routes",
+            "shellStatus": "updated",
+            "pageToken": "named-route-page"
+          },
+          "routeBResponses": {
+            "requests": [
+              "/build/q-DZYfwtOh.js",
+              "/build/q-CFULr5sM.js",
+              "/build/q-CGjf9sVQ.js",
+              "/build/q-DYWSL6h3.js",
+              "/build/q-BZH8LG3m.js",
+              "/build/q-CmBO-mIk.js",
+              "/build/q--1f3a456.js",
+              "/build/q-BPOFea1k.js",
+              "/build/q-Cwr_4CEu.js",
+              "/build/q-JQuYDwOO.js",
+              "/build/q-CXv5FKDq.js",
+              "/build/q-Ndpo5tYz.js",
+              "/build/q-CeYpibMp.js",
+              "/build/q-DEXphfpE.js",
+              "/build/q-CN2MAm8U.js",
+              "/build/q-DQTmhYV-.js",
+              "/build/q-BaZmQflE.js",
+              "/build/q-B8PF1eDh.js",
+              "/build/q-Bmr2GAAb.js",
+              "/build/q-DAezW8H3.js",
+              "/build/q-Q8ut0ZRD.js",
+              "/build/q-BU3gvnCd.js",
+              "/build/q-BDlR4JgR.js",
+              "/build/q-0gAjLc84.js",
+              "/build/q-D3kpijWv.js",
+              "/build/q-BTqZP8vU.js",
+              "/build/q-D1GEuFm3.js"
+            ],
+            "sharedBodies": [],
+            "routeOnlyBodies": [
+              {
+                "path": "/build/q-D1GEuFm3.js",
+                "bodyBytes": 182
+              }
+            ],
+            "lazyBodies": []
+          },
+          "routeAAgain": {
+            "styleIds": [
+              "mel3r2-0",
+              "x6sppd-1",
+              "81o4c0-1",
+              "fuh33i-0"
+            ],
+            "styleTexts": [
+              ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+              "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+              "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n",
+              ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}"
+            ],
+            "styleCount": 4,
+            "headStyleCount": 4,
+            "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }",
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeOnlyBackground": null,
+            "lazyBackground": null,
+            "scopedInside": "rgb(168, 20, 92)",
+            "scopedOutside": "rgb(0, 0, 0)",
+            "scopedChildBackground": "rgb(246, 224, 236)",
+            "lazyCount": 0,
+            "routeA": true,
+            "routeB": false,
+            "shellInput": "kept through routes",
+            "shellStatus": "updated",
+            "pageToken": "named-route-page"
+          },
+          "routeAAgainResponses": {
+            "requests": [
+              "/build/q-DZYfwtOh.js",
+              "/build/q-CFULr5sM.js",
+              "/build/q-CGjf9sVQ.js",
+              "/build/q-DYWSL6h3.js",
+              "/build/q-BZH8LG3m.js",
+              "/build/q-CmBO-mIk.js",
+              "/build/q--1f3a456.js",
+              "/build/q-BPOFea1k.js",
+              "/build/q-Cwr_4CEu.js",
+              "/build/q-JQuYDwOO.js",
+              "/build/q-CXv5FKDq.js",
+              "/build/q-Ndpo5tYz.js",
+              "/build/q-CeYpibMp.js",
+              "/build/q-DEXphfpE.js",
+              "/build/q-CN2MAm8U.js",
+              "/build/q-DQTmhYV-.js",
+              "/build/q-BaZmQflE.js",
+              "/build/q-B8PF1eDh.js",
+              "/build/q-Bmr2GAAb.js",
+              "/build/q-DAezW8H3.js",
+              "/build/q-Q8ut0ZRD.js",
+              "/build/q-BU3gvnCd.js",
+              "/build/q-BDlR4JgR.js",
+              "/build/q-0gAjLc84.js",
+              "/build/q-D3kpijWv.js",
+              "/build/q-BTqZP8vU.js",
+              "/build/q-D1GEuFm3.js",
+              "/build/q-BJbTlk5L.js",
+              "/build/q-xlB9b9Rz.js",
+              "/build/q-DCXMi2Jz.js",
+              "/build/q-CJyI9AFl.js",
+              "/build/q-BeNEG9iR.js"
+            ],
+            "sharedBodies": [],
+            "routeOnlyBodies": [
+              {
+                "path": "/build/q-D1GEuFm3.js",
+                "bodyBytes": 182
+              }
+            ],
+            "lazyBodies": []
+          },
+          "lazyMounted": {
+            "styleIds": [
+              "mel3r2-0",
+              "x6sppd-1",
+              "81o4c0-1",
+              "fuh33i-0",
+              "jzx9wf-0"
+            ],
+            "styleTexts": [
+              ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+              "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+              "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n",
+              ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}",
+              ".q1_c92da6434ed0d4986d9621340e5ad8ed{border:2px solid rgb(36, 96, 160);}.q1_c92da6434ed0d4986d9621340e5ad8ed{background-color:rgb(224, 240, 255);}"
+            ],
+            "styleCount": 5,
+            "headStyleCount": 5,
+            "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }.q1_c92da6434ed0d4986d9621340e5ad8ed { border: 2px solid rgb(36, 96, 160); }\n.q1_c92da6434ed0d4986d9621340e5ad8ed { background-color: rgb(224, 240, 255); }",
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeOnlyBackground": null,
+            "lazyBackground": "rgb(224, 240, 255)",
+            "scopedInside": "rgb(168, 20, 92)",
+            "scopedOutside": "rgb(0, 0, 0)",
+            "scopedChildBackground": "rgb(246, 224, 236)",
+            "lazyCount": 2,
+            "routeA": true,
+            "routeB": false,
+            "shellInput": "kept through routes",
+            "shellStatus": "updated",
+            "pageToken": "named-route-page"
+          },
+          "lazyMountedResponses": {
+            "requests": [
+              "/build/q-DZYfwtOh.js",
+              "/build/q-CFULr5sM.js",
+              "/build/q-CGjf9sVQ.js",
+              "/build/q-DYWSL6h3.js",
+              "/build/q-BZH8LG3m.js",
+              "/build/q-CmBO-mIk.js",
+              "/build/q--1f3a456.js",
+              "/build/q-BPOFea1k.js",
+              "/build/q-Cwr_4CEu.js",
+              "/build/q-JQuYDwOO.js",
+              "/build/q-CXv5FKDq.js",
+              "/build/q-Ndpo5tYz.js",
+              "/build/q-CeYpibMp.js",
+              "/build/q-DEXphfpE.js",
+              "/build/q-CN2MAm8U.js",
+              "/build/q-DQTmhYV-.js",
+              "/build/q-BaZmQflE.js",
+              "/build/q-B8PF1eDh.js",
+              "/build/q-Bmr2GAAb.js",
+              "/build/q-DAezW8H3.js",
+              "/build/q-Q8ut0ZRD.js",
+              "/build/q-BU3gvnCd.js",
+              "/build/q-BDlR4JgR.js",
+              "/build/q-0gAjLc84.js",
+              "/build/q-D3kpijWv.js",
+              "/build/q-BTqZP8vU.js",
+              "/build/q-D1GEuFm3.js",
+              "/build/q-BJbTlk5L.js",
+              "/build/q-xlB9b9Rz.js",
+              "/build/q-DCXMi2Jz.js",
+              "/build/q-CJyI9AFl.js",
+              "/build/q-BeNEG9iR.js",
+              "/build/q-BGL1G8nT.js",
+              "/build/q-HN2Av_Dx.js",
+              "/build/q-Cwjx6Wz1.js",
+              "/build/q-CODbX5VK.js"
+            ],
+            "sharedBodies": [],
+            "routeOnlyBodies": [
+              {
+                "path": "/build/q-D1GEuFm3.js",
+                "bodyBytes": 182
+              }
+            ],
+            "lazyBodies": [
+              {
+                "path": "/build/q-CODbX5VK.js",
+                "bodyBytes": 182
+              }
+            ]
+          },
+          "lazyRemounted": {
+            "styleIds": [
+              "mel3r2-0",
+              "x6sppd-1",
+              "81o4c0-1",
+              "fuh33i-0",
+              "jzx9wf-0"
+            ],
+            "styleTexts": [
+              ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}",
+              "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n",
+              "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n",
+              ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}",
+              ".q1_c92da6434ed0d4986d9621340e5ad8ed{border:2px solid rgb(36, 96, 160);}.q1_c92da6434ed0d4986d9621340e5ad8ed{background-color:rgb(224, 240, 255);}"
+            ],
+            "styleCount": 5,
+            "headStyleCount": 5,
+            "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }.q1_c92da6434ed0d4986d9621340e5ad8ed { border: 2px solid rgb(36, 96, 160); }\n.q1_c92da6434ed0d4986d9621340e5ad8ed { background-color: rgb(224, 240, 255); }",
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeOnlyBackground": null,
+            "lazyBackground": "rgb(224, 240, 255)",
+            "scopedInside": "rgb(168, 20, 92)",
+            "scopedOutside": "rgb(0, 0, 0)",
+            "scopedChildBackground": "rgb(246, 224, 236)",
+            "lazyCount": 2,
+            "routeA": true,
+            "routeB": false,
+            "shellInput": "kept through routes",
+            "shellStatus": "updated",
+            "pageToken": "named-route-page"
+          },
+          "lazyRemountedResponses": {
+            "requests": [
+              "/build/q-DZYfwtOh.js",
+              "/build/q-CFULr5sM.js",
+              "/build/q-CGjf9sVQ.js",
+              "/build/q-DYWSL6h3.js",
+              "/build/q-BZH8LG3m.js",
+              "/build/q-CmBO-mIk.js",
+              "/build/q--1f3a456.js",
+              "/build/q-BPOFea1k.js",
+              "/build/q-Cwr_4CEu.js",
+              "/build/q-JQuYDwOO.js",
+              "/build/q-CXv5FKDq.js",
+              "/build/q-Ndpo5tYz.js",
+              "/build/q-CeYpibMp.js",
+              "/build/q-DEXphfpE.js",
+              "/build/q-CN2MAm8U.js",
+              "/build/q-DQTmhYV-.js",
+              "/build/q-BaZmQflE.js",
+              "/build/q-B8PF1eDh.js",
+              "/build/q-Bmr2GAAb.js",
+              "/build/q-DAezW8H3.js",
+              "/build/q-Q8ut0ZRD.js",
+              "/build/q-BU3gvnCd.js",
+              "/build/q-BDlR4JgR.js",
+              "/build/q-0gAjLc84.js",
+              "/build/q-D3kpijWv.js",
+              "/build/q-BTqZP8vU.js",
+              "/build/q-D1GEuFm3.js",
+              "/build/q-BJbTlk5L.js",
+              "/build/q-xlB9b9Rz.js",
+              "/build/q-DCXMi2Jz.js",
+              "/build/q-CJyI9AFl.js",
+              "/build/q-BeNEG9iR.js",
+              "/build/q-BGL1G8nT.js",
+              "/build/q-HN2Av_Dx.js",
+              "/build/q-Cwjx6Wz1.js",
+              "/build/q-CODbX5VK.js"
+            ],
+            "sharedBodies": [],
+            "routeOnlyBodies": [
+              {
+                "path": "/build/q-D1GEuFm3.js",
+                "bodyBytes": 182
+              }
+            ],
+            "lazyBodies": [
+              {
+                "path": "/build/q-CODbX5VK.js",
+                "bodyBytes": 182
+              }
+            ]
+          },
+          "responseErrors": []
+        }
+      ]
+    },
+    {
+      "kind": "route-hmr",
+      "runs": [
+        {
+          "checks": [
+            {
+              "name": "route CSS HMR keeps document and shell state",
+              "pass": true
+            },
+            {
+              "name": "no browser errors",
+              "pass": true
+            }
+          ],
+          "errors": [],
+          "navigations": 0
+        }
+      ]
+    },
+    {
+      "kind": "hmr",
+      "runs": [
+        {
+          "qwikMode": "stock",
+          "checks": [
+            {
+              "name": "CSS HMR preserves document, signal, input, focus and scroll",
+              "pass": true
+            },
+            {
+              "name": "removing a shared declaration clears its live CSS",
+              "pass": true
+            },
+            {
+              "name": "readding a shared declaration restores its live CSS",
+              "pass": true
+            },
+            {
+              "name": "Uno config edits update utilities and root foundation",
+              "pass": true
+            },
+            {
+              "name": "removing the Uno foundation clears its live CSS",
+              "pass": true
+            },
+            {
+              "name": "restoring the Uno foundation restores its live CSS",
+              "pass": true
+            },
+            {
+              "name": "failed Uno config retains the last working generation and recovers",
+              "pass": true
+            },
+            {
+              "name": "an unproven document root retains the working graph and recovers",
+              "pass": true
+            }
+          ],
+          "console": [
+            "[vite] connecting...",
+            "%câ­ï¸ Qwik Dev SSR Mode background: #0c75d2; color: white; padding: 2px 3px; border-radius: 2px; font-size: 0.8em; App is running in SSR development mode!\n - Additional JS is loaded by Vite for debugging and live reloading\n - Rendering performance might not be optimal\n - Delayed interactivity because prefetching is disabled\n - Vite dev bundles do not represent production output\n\nProduction build can be tested running 'npm run preview'",
+            "%cðŸ” Qwik Click-To-Source background: #564CE0; color: white; padding: 2px 3px; border-radius: 2px; font-size: 0.8em; Hold-press the 'Alt' key and click a component to jump directly to the source code in your IDE!",
+            "[vite] connected.",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI.js?t=1789109320938\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50.js?t=1789109320938\")",
+            "Couldn't find import() in symbolFn for Lazy_component_UagF8RKF0lI, cannot update it for HMR ()=>import(\"/src/root.tsx_Lazy_component_UagF8RKF0lI.js?t=1789109320938\")",
+            "[vite] hot updated: /src/root.tsx_App_component_oCJN8mLyERE.js",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI.js?t=1789109321408\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50.js?t=1789109321408\")",
+            "Couldn't find import() in symbolFn for Lazy_component_UagF8RKF0lI, cannot update it for HMR ()=>import(\"/src/root.tsx_Lazy_component_UagF8RKF0lI.js?t=1789109321408\")",
+            "Couldn't find import() in symbolFn for HeadStyle_component_useStyles_7nOxR0GMw90, cannot update it for HMR ()=>import(\"/src/root.tsx_HeadStyle_component_useStyles_7nOxR0GMw90.js?t=1789109321408\")",
+            "1789109321408 1789109321408",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI.js?t=1789109322232\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50.js?t=1789109322232\")",
+            "Couldn't find import() in symbolFn for Lazy_component_UagF8RKF0lI, cannot update it for HMR ()=>import(\"/src/root.tsx_Lazy_component_UagF8RKF0lI.js?t=1789109322232\")",
+            "Couldn't find import() in symbolFn for HeadStyle_component_useStyles_7nOxR0GMw90, cannot update it for HMR ()=>import(\"/src/root.tsx_HeadStyle_component_useStyles_7nOxR0GMw90.js?t=1789109322232\")",
+            "1789109322232 1789109322232",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI.js?t=1789109323069\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50.js?t=1789109323069\")",
+            "Couldn't find import() in symbolFn for Lazy_component_UagF8RKF0lI, cannot update it for HMR ()=>import(\"/src/root.tsx_Lazy_component_UagF8RKF0lI.js?t=1789109323069\")",
+            "Couldn't find import() in symbolFn for HeadStyle_component_useStyles_7nOxR0GMw90, cannot update it for HMR ()=>import(\"/src/root.tsx_HeadStyle_component_useStyles_7nOxR0GMw90.js?t=1789109323069\")",
+            "1789109323069 1789109323069",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI.js?t=1789109323821\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50.js?t=1789109323821\")",
+            "Couldn't find import() in symbolFn for Lazy_component_UagF8RKF0lI, cannot update it for HMR ()=>import(\"/src/root.tsx_Lazy_component_UagF8RKF0lI.js?t=1789109323821\")",
+            "Couldn't find import() in symbolFn for HeadStyle_component_useStyles_7nOxR0GMw90, cannot update it for HMR ()=>import(\"/src/root.tsx_HeadStyle_component_useStyles_7nOxR0GMw90.js?t=1789109323821\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI.js?t=1789109324239\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50.js?t=1789109324239\")",
+            "Couldn't find import() in symbolFn for Lazy_component_UagF8RKF0lI, cannot update it for HMR ()=>import(\"/src/root.tsx_Lazy_component_UagF8RKF0lI.js?t=1789109324239\")",
+            "Couldn't find import() in symbolFn for HeadStyle_component_useStyles_7nOxR0GMw90, cannot update it for HMR ()=>import(\"/src/root.tsx_HeadStyle_component_useStyles_7nOxR0GMw90.js?t=1789109324239\")",
+            "1789109324239 1789109324239",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI.js?t=1789109324942\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50.js?t=1789109324942\")",
+            "Couldn't find import() in symbolFn for Lazy_component_UagF8RKF0lI, cannot update it for HMR ()=>import(\"/src/root.tsx_Lazy_component_UagF8RKF0lI.js?t=1789109324942\")",
+            "Couldn't find import() in symbolFn for HeadStyle_component_useStyles_7nOxR0GMw90, cannot update it for HMR ()=>import(\"/src/root.tsx_HeadStyle_component_useStyles_7nOxR0GMw90.js?t=1789109324942\")",
+            "1789109324942 1789109324942",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_1_5ThEyvkoZdI.js?t=1789109326055\")",
+            "Couldn't find import() in symbolFn for App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50, cannot update it for HMR ()=>import(\"/src/root.tsx_App_component_Fragment_button_q_e_click_2_ZYjpRv3SV50.js?t=1789109326055\")",
+            "Couldn't find import() in symbolFn for Lazy_component_UagF8RKF0lI, cannot update it for HMR ()=>import(\"/src/root.tsx_Lazy_component_UagF8RKF0lI.js?t=1789109326055\")"
+          ],
+          "errors": [],
+          "navigations": 0,
+          "watchEvents": [
+            "/Users/ama/qstyle/fixtures/compiler-contract/src/root.tsx",
+            "/Users/ama/qstyle/fixtures/compiler-contract/src/root.tsx",
+            "/Users/ama/qstyle/fixtures/compiler-contract/src/root.tsx",
+            "/Users/ama/qstyle/fixtures/compiler-contract/uno.config.ts",
+            "/Users/ama/qstyle/fixtures/compiler-contract/uno.config.ts",
+            "/Users/ama/qstyle/fixtures/compiler-contract/uno.config.ts",
+            "/Users/ama/qstyle/fixtures/compiler-contract/uno.config.ts",
+            "/Users/ama/qstyle/fixtures/compiler-contract/uno.config.ts",
+            "/Users/ama/qstyle/fixtures/compiler-contract/src/root.tsx",
+            "/Users/ama/qstyle/fixtures/compiler-contract/src/root.tsx"
+          ],
+          "hotMessages": [
+            "{\"type\":\"connected\"}",
+            "{\"type\":\"custom\",\"event\":\"qwik:hmr\",\"data\":{\"files\":[\"/src/root.tsx\",\"/.qstyle/native/550d6ee6e56d1d20301cb80870dcf876.tsx\",\"/src/named-hook-controls.tsx\"],\"t\":1789109320938}}",
+            "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789109320938,\"path\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"acceptedPath\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+            "{\"type\":\"custom\",\"event\":\"qwik:hmr\",\"data\":{\"files\":[\"/src/root.tsx\",\"/.qstyle/native/550d6ee6e56d1d20301cb80870dcf876.tsx\",\"/src/named-hook-controls.tsx\"],\"t\":1789109321408}}",
+            "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789109321408,\"path\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"acceptedPath\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+            "{\"type\":\"custom\",\"event\":\"qwik:hmr\",\"data\":{\"files\":[\"/src/root.tsx\",\"/.qstyle/native/550d6ee6e56d1d20301cb80870dcf876.tsx\",\"/src/named-hook-controls.tsx\"],\"t\":1789109322232}}",
+            "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789109322232,\"path\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"acceptedPath\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+            "{\"type\":\"custom\",\"event\":\"qwik:hmr\",\"data\":{\"files\":[\"/uno.config.ts\",\"/.qstyle/native/2bd8b7b0d83e0ec92abdf6f714ca199a.tsx\",\"/.qstyle/native/885f72084866c1bfd64b6611f4e10964.tsx\",\"/src/named-hook-controls.tsx\",\"/src/root.tsx\"],\"t\":1789109323069}}",
+            "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789109323069,\"path\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"acceptedPath\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+            "{\"type\":\"custom\",\"event\":\"qwik:hmr\",\"data\":{\"files\":[\"/uno.config.ts\",\"/.qstyle/native/2bd8b7b0d83e0ec92abdf6f714ca199a.tsx\",\"/.qstyle/native/885f72084866c1bfd64b6611f4e10964.tsx\",\"/src/named-hook-controls.tsx\",\"/src/root.tsx\"],\"t\":1789109323821}}",
+            "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789109323821,\"path\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"acceptedPath\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+            "{\"type\":\"custom\",\"event\":\"qwik:hmr\",\"data\":{\"files\":[\"/uno.config.ts\",\"/.qstyle/native/2bd8b7b0d83e0ec92abdf6f714ca199a.tsx\",\"/src/named-hook-controls.tsx\",\"/src/root.tsx\"],\"t\":1789109324239}}",
+            "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789109324239,\"path\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"acceptedPath\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+            "{\"type\":\"error\",\"err\":{\"message\":\"ParseError: Unexpected token  \\n /Users/ama/qstyle/fixtures/compiler-contract/uno.config.ts:1:25\",\"stack\":\"\",\"frame\":\"\"}}",
+            "{\"type\":\"custom\",\"event\":\"qwik:hmr\",\"data\":{\"files\":[\"/uno.config.ts\",\"/.qstyle/native/885f72084866c1bfd64b6611f4e10964.tsx\",\"/src/named-hook-controls.tsx\",\"/src/root.tsx\"],\"t\":1789109324942}}",
+            "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789109324942,\"path\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"acceptedPath\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+            "{\"type\":\"error\",\"err\":{\"message\":\"[qstyle QS1103] Cannot prove a document head from Qwik application entries: src/root.tsx. Return the document root directly, or pass it directly to the public Qwik renderToString/renderToStream API or Router createRenderer callback.\",\"stack\":\"    at _e$1 (file:///Users/ama/qstyle/fixtures/compiler-contract/node_modules/.vite-temp/vite.config.ts.timestamp-1789109319276-cc4e7c040c0b4.mjs:247:35)\\n    at async file:///Users/ama/qstyle/fixtures/compiler-contract/node_modules/.vite-temp/vite.config.ts.timestamp-1789109319276-cc4e7c040c0b4.mjs:1000:90\\n    at async m (file:///Users/ama/qstyle/fixtures/compiler-contract/node_modules/.vite-temp/vite.config.ts.timestamp-1789109319276-cc4e7c040c0b4.mjs:1040:11)\\n    at async MinimalPluginContext.hotUpdate (file:///Users/ama/qstyle/fixtures/compiler-contract/node_modules/.vite-temp/vite.config.ts.timestamp-1789109319276-cc4e7c040c0b4.mjs:1145:12)\\n    at async handleHMRUpdate (file:///Users/ama/qstyle/node_modules/.pnpm/vite@8.2.2_@types+node@26.4.1_jiti@2.7.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:27067:28)\\n    at async onHMRUpdate (file:///Users/ama/qstyle/node_modules/.pnpm/vite@8.2.2_@types+node@26.4.1_jiti@2.7.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:26581:35)\\n    at async onFileChange (file:///Users/ama/qstyle/node_modules/.pnpm/vite@8.2.2_@types+node@26.4.1_jiti@2.7.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:26606:3)\",\"frame\":\"\"}}",
+            "{\"type\":\"custom\",\"event\":\"qwik:hmr\",\"data\":{\"files\":[\"/src/root.tsx\",\"/.qstyle/native/550d6ee6e56d1d20301cb80870dcf876.tsx\",\"/src/named-hook-controls.tsx\"],\"t\":1789109326055}}",
+            "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789109326055,\"path\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"acceptedPath\":\"/src/root.tsx_App_component_oCJN8mLyERE.js\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}"
+          ],
+          "graphBefore": {
+            "default": null,
+            "ssr": {
+              "generation": 2,
+              "css": [
+                ":root{--contract-foundation:rgb(20, 40, 60);}",
+                ".q1_05199fcc548ba4f458e011776930b238,.q1_8957be0c09e47e1984f1848e8509b586{color:rgb(12, 34, 56);}",
+                ".q1_05199fcc548ba4f458e011776930b238{background-color:rgb(230, 240, 255);}.q1_05199fcc548ba4f458e011776930b238{outline-style:solid;}.q1_05199fcc548ba4f458e011776930b238{outline-width:3px;}.q1_05199fcc548ba4f458e011776930b238{border-width:2px;}",
+                ".q1_8957be0c09e47e1984f1848e8509b586{width:var(--qstyle-1-5df119f342aa432f9279c8be69229fdc-0);}",
+                ".q1_7705efe0b56a6b7bb5bbc6a689ba014b,.q1_fad978fa85ea457d14db74ccee529f55{color:var(--contract-foundation);}.q1_7705efe0b56a6b7bb5bbc6a689ba014b,.q1_fad978fa85ea457d14db74ccee529f55{padding:8px;}",
+                ".q1_7705efe0b56a6b7bb5bbc6a689ba014b{border-radius:12px;}",
+                ".q1_fad978fa85ea457d14db74ccee529f55{border-radius:0px;}",
+                ".q1_5b75d2c340d1816fca1f6bb58db66037{color:rgb(0, 100, 0);}",
+                ".q1_5230b88207b5a23e3f3669370731ce69:first-child{color:rgb(100, 0, 100);}",
+                "li + .q1_18457719e9683185b8b268f6d5931334{color:rgb(0, 100, 100);}"
+              ]
+            },
+            "client": {
+              "generation": 1,
+              "css": [
+                ":root{--contract-foundation:rgb(20, 40, 60);}",
+                ".q1_05199fcc548ba4f458e011776930b238,.q1_8957be0c09e47e1984f1848e8509b586{color:rgb(12, 34, 56);}",
+                ".q1_05199fcc548ba4f458e011776930b238{background-color:rgb(230, 240, 255);}.q1_05199fcc548ba4f458e011776930b238{outline-style:solid;}.q1_05199fcc548ba4f458e011776930b238{outline-width:3px;}.q1_05199fcc548ba4f458e011776930b238{border-width:2px;}",
+                ".q1_8957be0c09e47e1984f1848e8509b586{width:var(--qstyle-1-5df119f342aa432f9279c8be69229fdc-0);}",
+                ".q1_7705efe0b56a6b7bb5bbc6a689ba014b,.q1_fad978fa85ea457d14db74ccee529f55{color:var(--contract-foundation);}.q1_7705efe0b56a6b7bb5bbc6a689ba014b,.q1_fad978fa85ea457d14db74ccee529f55{padding:8px;}",
+                ".q1_7705efe0b56a6b7bb5bbc6a689ba014b{border-radius:12px;}",
+                ".q1_fad978fa85ea457d14db74ccee529f55{border-radius:0px;}",
+                ".q1_5b75d2c340d1816fca1f6bb58db66037{color:rgb(0, 100, 0);}",
+                ".q1_5230b88207b5a23e3f3669370731ce69:first-child{color:rgb(100, 0, 100);}",
+                "li + .q1_18457719e9683185b8b268f6d5931334{color:rgb(0, 100, 100);}"
+              ]
+            }
+          },
+          "expectedConfigErrors": [
+            "ParseError: Unexpected token  \n /Users/ama/qstyle/fixtures/compiler-contract/uno.config.ts:1:25",
+            "[qstyle QS1103] Cannot prove a document head from Qwik application entries: src/root.tsx. Return the document root directly, or pass it directly to the public Qwik renderToString/renderToStream API or Router createRenderer callback."
+          ],
+          "graphAfter": {
+            "default": null,
+            "ssr": {
+              "generation": 20,
+              "css": [
+                ":root{--contract-foundation:rgb(20, 40, 60);}",
+                ".q1_05199fcc548ba4f458e011776930b238,.q1_8957be0c09e47e1984f1848e8509b586{color:rgb(60, 34, 12);}",
+                ".q1_05199fcc548ba4f458e011776930b238{background-color:rgb(230, 240, 255);}.q1_05199fcc548ba4f458e011776930b238{outline-style:solid;}.q1_05199fcc548ba4f458e011776930b238{outline-width:3px;}.q1_05199fcc548ba4f458e011776930b238{border-width:2px;}",
+                ".q1_8957be0c09e47e1984f1848e8509b586{width:var(--qstyle-1-5df119f342aa432f9279c8be69229fdc-0);}",
+                ".q1_7705efe0b56a6b7bb5bbc6a689ba014b,.q1_fad978fa85ea457d14db74ccee529f55{color:var(--contract-foundation);}.q1_7705efe0b56a6b7bb5bbc6a689ba014b,.q1_fad978fa85ea457d14db74ccee529f55{padding:24px;}",
+                ".q1_7705efe0b56a6b7bb5bbc6a689ba014b{border-radius:12px;}",
+                ".q1_fad978fa85ea457d14db74ccee529f55{border-radius:0px;}",
+                ".q1_5b75d2c340d1816fca1f6bb58db66037{color:rgb(0, 100, 0);}",
+                ".q1_5230b88207b5a23e3f3669370731ce69:first-child{color:rgb(100, 0, 100);}",
+                "li + .q1_18457719e9683185b8b268f6d5931334{color:rgb(0, 100, 100);}"
+              ]
+            },
+            "client": {
+              "generation": 19,
+              "css": [
+                ":root{--contract-foundation:rgb(20, 40, 60);}",
+                ".q1_05199fcc548ba4f458e011776930b238,.q1_8957be0c09e47e1984f1848e8509b586{color:rgb(60, 34, 12);}",
+                ".q1_05199fcc548ba4f458e011776930b238{background-color:rgb(230, 240, 255);}.q1_05199fcc548ba4f458e011776930b238{outline-style:solid;}.q1_05199fcc548ba4f458e011776930b238{outline-width:3px;}.q1_05199fcc548ba4f458e011776930b238{border-width:2px;}",
+                ".q1_8957be0c09e47e1984f1848e8509b586{width:var(--qstyle-1-5df119f342aa432f9279c8be69229fdc-0);}",
+                ".q1_7705efe0b56a6b7bb5bbc6a689ba014b,.q1_fad978fa85ea457d14db74ccee529f55{color:var(--contract-foundation);}.q1_7705efe0b56a6b7bb5bbc6a689ba014b,.q1_fad978fa85ea457d14db74ccee529f55{padding:24px;}",
+                ".q1_7705efe0b56a6b7bb5bbc6a689ba014b{border-radius:12px;}",
+                ".q1_fad978fa85ea457d14db74ccee529f55{border-radius:0px;}",
+                ".q1_5b75d2c340d1816fca1f6bb58db66037{color:rgb(0, 100, 0);}",
+                ".q1_5230b88207b5a23e3f3669370731ce69:first-child{color:rgb(100, 0, 100);}",
+                "li + .q1_18457719e9683185b8b268f6d5931334{color:rgb(0, 100, 100);}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "kind": "ssg",
+      "runs": [
+        {
+          "checks": [
+            {
+              "name": "SSG emits both routes with route-local markup and CSS",
+              "pass": true
+            },
+            {
+              "name": "JavaScript-disabled route A keeps authored structure and styles",
+              "pass": true
+            },
+            {
+              "name": "JavaScript-disabled route B keeps route-local styles",
+              "pass": true
+            },
+            {
+              "name": "resumed SSG route A computes shared and scoped CSS",
+              "pass": true
+            },
+            {
+              "name": "resumed route navigation keeps shell and transfers only route-local CSS",
+              "pass": true
+            },
+            {
+              "name": "no browser errors",
+              "pass": true
+            }
+          ],
+          "errors": [],
+          "navigations": 6,
+          "generated": {
+            "files": 59,
+            "sharedBodies": [
+              "q-DSW-nIMT.js"
+            ],
+            "routeOnlyBodies": [
+              "q-D1GEuFm3.js"
+            ],
+            "lazyBodies": [
+              "q-CODbX5VK.js"
+            ]
+          },
+          "ssg": {
+            "initialStatus": 200,
+            "routeBStatus": 200,
+            "initialHasRouteA": true,
+            "initialHasRouteB": false,
+            "routeBHasRouteA": false,
+            "routeBHasRouteB": true,
+            "initialHasRouteOnlyColor": false,
+            "routeBHasRouteOnlyColor": true,
+            "initialStyles": [
+              {
+                "id": "mel3r2-0",
+                "text": ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}"
+              },
+              {
+                "id": "x6sppd-1",
+                "text": "\n.named-route-outside {\n  color: rgb(0, 0, 0);\n}\n"
+              },
+              {
+                "id": "81o4c0-1",
+                "text": "\n.named-route-scoped.⚡️81o4c0-1 {\n  color: rgb(168, 20, 92);\n}\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 {\n  background-color: rgb(246, 224, 236);\n}\n"
+              }
+            ],
+            "routeBStyles": [
+              {
+                "id": "mel3r2-0",
+                "text": ".q1_300c572c4da5b1239629f9fb3ee0f0e4{color:rgb(12, 34, 56);}"
+              },
+              {
+                "id": "fuh33i-0",
+                "text": ".q1_9d1980b63efb3a012655cb8d7ae63127{border:2px solid rgb(160, 96, 36);}.q1_9d1980b63efb3a012655cb8d7ae63127{background-color:rgb(255, 226, 180);}"
+              }
+            ]
+          },
+          "initial": {
+            "styleIds": [
+              "mel3r2-0",
+              "x6sppd-1",
+              "81o4c0-1"
+            ],
+            "styleCount": 3,
+            "headStyleCount": 1,
+            "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }",
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeOnlyBackground": null,
+            "lazyBackground": null,
+            "scopedInside": "rgb(168, 20, 92)",
+            "scopedOutside": "rgb(0, 0, 0)",
+            "scopedChildBackground": "rgb(246, 224, 236)",
+            "lazyCount": 0,
+            "routeA": true,
+            "routeB": false,
+            "shellInput": "shell input",
+            "shellStatus": "ready",
+            "pageToken": "named-route-page"
+          },
+          "routeB": {
+            "styleIds": [
+              "mel3r2-0",
+              "x6sppd-1",
+              "81o4c0-1",
+              "fuh33i-0"
+            ],
+            "styleCount": 4,
+            "headStyleCount": 4,
+            "cssomText": ".q1_300c572c4da5b1239629f9fb3ee0f0e4 { color: rgb(12, 34, 56); }.named-route-outside { color: rgb(0, 0, 0); }.named-route-scoped.⚡️81o4c0-1 { color: rgb(168, 20, 92); }\n.named-route-scoped.⚡️81o4c0-1 > .named-route-scoped-child.⚡️81o4c0-1 { background-color: rgb(246, 224, 236); }.q1_9d1980b63efb3a012655cb8d7ae63127 { border: 2px solid rgb(160, 96, 36); }\n.q1_9d1980b63efb3a012655cb8d7ae63127 { background-color: rgb(255, 226, 180); }",
+            "sharedColor": "rgb(12, 34, 56)",
+            "routeOnlyBackground": "rgb(255, 226, 180)",
+            "lazyBackground": null,
+            "scopedInside": null,
+            "scopedOutside": null,
+            "scopedChildBackground": null,
+            "lazyCount": 0,
+            "routeA": false,
+            "routeB": true,
+            "shellInput": "kept through routes",
+            "shellStatus": "updated",
+            "pageToken": "named-route-page"
+          },
+          "responseErrors": []
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Default legacy entry has not switched.",
+    "Internal native style hooks require exact Qwik beta.43.",
+    "SSR buffers the response and first write waits for completion.",
+    "Complete CSS request failure exposes an unstyled element until remount.",
+    "Query-bearing retry URLs are only verified against fixture servers.",
+    "Full delivery-size gates and the second consumer remain pending."
+  ],
+  "browserChecks": 42,
+  "finalReport": {
+    "checks": [
+      "final byte counts and SHA-256 digests",
+      "single payload per pack",
+      "source path privacy",
+      "authored controls reject whole-site guarantee",
+      "managed source passes",
+      "source fixture unchanged"
+    ],
+    "results": [
+      {
+        "label": "authored-controls",
+        "wholeSiteGuarantee": false,
+        "assetCount": 53,
+        "packCount": 13,
+        "duplicateDefinitionCount": 0,
+        "duplicatePayloadCount": 0,
+        "classCount": 9,
+        "fixedClassCount": 1,
+        "classOptimality": {
+          "status": "optimal",
+          "lowerBound": {
+            "K": 9,
+            "T": 9
+          },
+          "upperBound": {
+            "K": 9,
+            "T": 9
+          },
+          "candidateCount": 11,
+          "exploredNodes": 29,
+          "modelVersion": "native-class-cover-v1"
+        },
+        "diagnostics": [
+          {
+            "code": "QS1603",
+            "message": "The final Qwik manifest contains an unmanaged authored style hook.",
+            "file": "q-manifest.json",
+            "start": 0,
+            "end": 41050
+          },
+          {
+            "code": "QS1603",
+            "message": "Authored unmanaged style control useStyles$ is present in src/root.tsx.",
+            "file": "src/root.tsx",
+            "start": 254,
+            "end": 299
+          },
+          {
+            "code": "QS1603",
+            "message": "Authored unmanaged style control jsx-style is present in src/root.tsx.",
+            "file": "src/root.tsx",
+            "start": 2003,
+            "end": 2070
+          },
+          {
+            "code": "QS1603",
+            "message": "Authored unmanaged style control useStyles$ is present in src/named-hook-controls.tsx.",
+            "file": "src/named-hook-controls.tsx",
+            "start": 1270,
+            "end": 1304
+          },
+          {
+            "code": "QS1603",
+            "message": "Authored unmanaged style control useStylesScoped$ is present in src/named-hook-controls.tsx.",
+            "file": "src/named-hook-controls.tsx",
+            "start": 2207,
+            "end": 2247
+          },
+          {
+            "code": "QS1603",
+            "message": "Authored unmanaged style control useStyles$ is present in src/named-hook-controls.tsx.",
+            "file": "src/named-hook-controls.tsx",
+            "start": 2989,
+            "end": 3021
+          },
+          {
+            "code": "QS1603",
+            "message": "Unmanaged stylesheet is present: src/root.tsx."
+          },
+          {
+            "code": "QS1603",
+            "message": "Unmanaged stylesheet is present: src/named-hook-controls.tsx."
+          }
+        ]
+      },
+      {
+        "label": "managed-styles",
+        "wholeSiteGuarantee": true,
+        "assetCount": 40,
+        "packCount": 13,
+        "duplicateDefinitionCount": 0,
+        "duplicatePayloadCount": 0,
+        "classCount": 9,
+        "fixedClassCount": 1,
+        "classOptimality": {
+          "status": "optimal",
+          "lowerBound": {
+            "K": 9,
+            "T": 9
+          },
+          "upperBound": {
+            "K": 9,
+            "T": 9
+          },
+          "candidateCount": 11,
+          "exploredNodes": 29,
+          "modelVersion": "native-class-cover-v1"
+        },
+        "diagnostics": []
+      }
+    ]
+  },
+  "packageFormat": "ESM only for @qstyle/vite, @qstyle/qwik and @qstyle/unocss",
+  "nodeTooling": ">=24.11",
+  "regressionsFixed": [
+    "Initialize runtime resolution for each Vite dev environment; verified by routed and component HMR.",
+    "Remove advertised unusable CommonJS entries for import-only Qwik/compiler dependencies.",
+    "Restrict SSR import replacement to server environments."
+  ],
+  "externalConsumer": {
+    "packages": [
+      {
+        "name": "@qstyle/core",
+        "file": "qstyle-core-0.1.1.tgz",
+        "bytes": 166739
+      },
+      {
+        "name": "@qstyle/compiler",
+        "file": "qstyle-compiler-1.0.0-alpha.0.tgz",
+        "bytes": 97117
+      },
+      {
+        "name": "@qstyle/inspector",
+        "file": "qstyle-inspector-0.1.1.tgz",
+        "bytes": 37751
+      },
+      {
+        "name": "@qstyle/qwik",
+        "file": "qstyle-qwik-0.2.0.tgz",
+        "bytes": 41500
+      },
+      {
+        "name": "@qstyle/unocss",
+        "file": "qstyle-unocss-0.1.1.tgz",
+        "bytes": 68336
+      },
+      {
+        "name": "@qstyle/vite",
+        "file": "qstyle-vite-0.2.0.tgz",
+        "bytes": 143189
+      }
+    ],
+    "installMode": "offline",
+    "publicChecks": [
+      {
+        "name": "ESM @qstyle/core",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/compiler",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/inspector",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/qwik",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/qwik/runtime",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/qwik/server",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/unocss",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/vite",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/qwik/runtime exposes native hook aliases",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/qwik/server exposes render wrappers",
+        "pass": true
+      },
+      {
+        "name": "ESM @qstyle/vite qstyleNative returns compiler and adapter plugins",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/core",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/core require condition",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/compiler",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/compiler require condition",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/inspector",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/inspector require condition",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/qwik",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/qwik require condition",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/qwik/runtime",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/qwik/runtime require condition",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/qwik/server",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/qwik/server require condition",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/unocss",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/unocss require condition",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/vite",
+        "pass": true
+      },
+      {
+        "name": "package metadata @qstyle/vite require condition",
+        "pass": true
+      },
+      {
+        "name": "CJS @qstyle/core",
+        "pass": true
+      },
+      {
+        "name": "CJS @qstyle/compiler",
+        "pass": true
+      },
+      {
+        "name": "CJS @qstyle/inspector",
+        "pass": true
+      },
+      {
+        "name": "CJS @qstyle/qwik",
+        "pass": true
+      },
+      {
+        "name": "CJS @qstyle/qwik/runtime",
+        "pass": true
+      },
+      {
+        "name": "CJS @qstyle/qwik/server",
+        "pass": true
+      },
+      {
+        "name": "CJS @qstyle/unocss",
+        "pass": true
+      },
+      {
+        "name": "CJS @qstyle/vite",
+        "pass": true
+      }
+    ],
+    "buildPassed": true,
+    "renderedClientModules": 9,
+    "parse5Absent": true,
+    "ssrBuildAndRenderPassed": true,
+    "failures": [],
+    "finalRerun": "passed after production-slot and literal-attribute optimizations",
+    "ssrHtmlBytes": 671
+  },
+  "deliveryGate": {
+    "status": "failed",
+    "evidence": "2026-09-11-delivery-cost.json",
+    "initialRawDeltaPrefetchOff": 145,
+    "initialGzipDeltaPrefetchOff": 35,
+    "cumulative105Percent": "passed",
+    "largeConsumer": "not measured",
+    "runtimeModuleZero": "not established: emitted module provenance is not retained by delivery audit; named-import runtime supplies client reuse, restoration and retry"
+  }
+}
