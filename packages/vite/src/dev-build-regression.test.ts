@@ -821,7 +821,7 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     options: Parameters<typeof qstyleFactory>[0],
   ): {
     main: HmrPlugin;
-    dedup: { generateBundle: (options: unknown, bundle: Record<string, unknown>) => void };
+    dedup: { transform: (source: string, id: string) => { code: string } | null };
   } {
     const found = qstyleFactory(options) as unknown as HmrPlugin[];
     const byName = (n: string): HmrPlugin => {
@@ -834,7 +834,7 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     return {
       main: byName('qstyle'),
       dedup: byName('qstyle:dedup') as unknown as {
-        generateBundle: (options: unknown, bundle: Record<string, unknown>) => void;
+        transform: (source: string, id: string) => { code: string } | null;
       },
     };
   }
@@ -986,19 +986,32 @@ describe('BLD-101〜: build/generateBundle の境界', () => {
     expect(p.load('./foo')).toBeNull();
   });
 
-  it('BLD-108: dedup plugin は非 string source と非 css asset を素通しする', () => {
+  it('BLD-108: dedup only transforms generated build packs before CSS hashing', () => {
     const { dedup } = generateOf({ diagnostics: 'silent' });
-    const cssObj = { type: 'asset', fileName: 'assets/app.css', source: '.q_aaaaaaaa{color:red}' };
-    const bufObj = {
-      type: 'asset',
-      fileName: 'assets/other.css',
-      source: { toString: (): string => 'x' },
-    };
-    const jsObj = { type: 'chunk', fileName: 'assets/app.js', source: '.q_aaaaaaaa{color:red}' };
-    const bundle: Record<string, unknown> = { a: cssObj, b: bufObj, c: jsObj };
-    dedup.generateBundle({}, bundle);
-    // css asset は通常処理、他は同一参照のまま。
-    expect((bundle['b'] as { source: unknown }).source).toBe(bufObj.source);
-    expect((bundle['c'] as { source: unknown }).source).toBe(jsObj.source);
+    const source = Array.from({ length: 8 }, (_, i) =>
+      `.q_${i.toString(16).padStart(8, '0')}{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;color:rebeccapurple;font-weight:700}`,
+    ).join('');
+    expect(dedup.transform(source, '/assets/app.css')).toBeNull();
+    expect(dedup.transform(source, '/src/app.js')).toBeNull();
+    expect(dedup.transform(source, 'virtual:qstyle/dev/app.css')).toBeNull();
+    const out = dedup.transform(source, '\0virtual:qstyle/pack/q_aaaaaaaa.css');
+    expect(out?.code.length).toBeLessThan(source.length);
+    expect(dedup.transform(source, '\0virtual:qstyle/pack/q_aaaaaaaa.css?inline')).toEqual(out);
+    expect(dedup.transform('.q_aaaaaaaa{color:blue}', '\0virtual:qstyle/pack/q_aaaaaaaa.css')).toBeNull();
+    const config = qstyleFactory({}).find((plugin) => plugin.name === 'qstyle:dedup');
+    expect(config?.apply).toBe('build');
+    expect(config?.enforce).toBe('pre');
+    expect(config?.generateBundle).toBeUndefined();
+  });
+
+  it('BLD-109: generated pack loads preserve CSS for inline query variants', () => {
+    const { main } = generateOf({ diagnostics: 'silent' });
+    const out = main.transform('export const A = () => <p css={{ color: "red" }} />;', '/src/inline-pack.tsx');
+    const id = out?.code.match(/import "(virtual:qstyle\/pack\/[^\"]+\.css)"/)?.[1];
+    expect(id).toBeDefined();
+    const source = main.load(id!);
+    expect(source).toContain('color:red');
+    expect(main.load(`${id}?inline`)).toBe(source);
+    expect(main.load(`${id}?inline&used`)).toBe(source);
   });
 });

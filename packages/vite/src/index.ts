@@ -44,7 +44,9 @@ import type {
   UsageGraph,
 } from '@qstyle/core';
 import { composeCssProp, lowerStyleObject, lowerTaggedTemplate } from '@qstyle/qwik';
-import { groupDuplicateCss } from './dedup.js';
+import { optimizeDuplicateCss } from './dedup.js';
+import { createCssNormalizer } from './css-minifier.js';
+import type { CssNormalizer } from './css-minifier.js';
 import type { StyleHandle, StyleObject } from '@qstyle/qwik';
 export { qstyleNative } from './native-plugin.js';
 export type { NativeQstyleOptions } from './native-plugin.js';
@@ -2442,6 +2444,7 @@ export function qstyle(
   const modulePacks = new Map<string, string>();
   /** prod: pack id -> css text。load(`virtual:qstyle/pack/<id>.css`) が返す。 */
   const packCss = new Map<string, string>();
+  const optimizedPackCss = new Map<string, { source: string; css: string }>();
   /** legacy Qwik style hook の利用記録 (§24)。rewrite せず provenance のみ追跡する。 */
   let legacyStyles: LegacyStyleUsage[] = [];
   /** untouched 箇所の residual nodes (DIA-003: inspector で理由を表示する)。 */
@@ -2828,6 +2831,7 @@ export function qstyle(
       identities = new IdentityRegistry();
       modulePacks.clear();
       packCss.clear();
+      optimizedPackCss.clear();
       residualLog = [];
       legacyStyles = [];
       devCss.clear();
@@ -2853,7 +2857,7 @@ export function qstyle(
     },
 
     load(id: string): string | null {
-      const resolved = resolveQstyleId(id);
+      const resolved = resolveQstyleId(id.split('?')[0] ?? id);
       if (resolved === null) return null;
       const path = resolved.slice(RESOLVED_PREFIX.length);
       if (path === 'registry') {
@@ -4689,29 +4693,27 @@ export function qstyle(
     },
   };
 
-  /**
-   * §39 dedup (decl 単位の統合)。vite:css / qwik の css asset 出力後に走る
-   * post plugin で、最終 css asset の `.q_*` unit rule を安全にグループ化する。
-   * 解析に失敗した場合は元のテキストをそのまま保持する (correctness first)。
-   */
+  // Optimize the shared CSS source before Vite minification/asset hashing and Qwik
+  // inline extraction. Never mutate an already named asset in generateBundle.
+  let normalizePackCss: CssNormalizer | undefined = (css) => css;
   const dedupPlugin: Plugin = {
     name: 'qstyle:dedup',
-    enforce: 'post',
-    generateBundle(_options, bundle) {
-      const meta = {
-        unitTags: unitTagNames as ReadonlyMap<string, ReadonlySet<string>>,
-        condUnitIds: condUnitIds as ReadonlySet<string>,
-      };
-      for (const file of Object.values(bundle)) {
-        if (file.type !== 'asset' || !file.fileName.endsWith('.css')) continue;
-        const source: unknown = file.source;
-        if (typeof source !== 'string') continue;
-        try {
-          file.source = groupDuplicateCss(source, meta);
-        } catch {
-          // 解析エラー時は元の CSS を保持する
-        }
+    enforce: 'pre',
+    apply: 'build',
+    configResolved(config) { normalizePackCss = createCssNormalizer(config); },
+    transform(source, id) {
+      const resolved = resolveQstyleId(id.split('?')[0] ?? id);
+      if (!resolved?.startsWith(`${RESOLVED_PREFIX}pack/`) || !resolved.endsWith('.css')) return null;
+      if (!normalizePackCss) return null;
+      const cached = optimizedPackCss.get(resolved);
+      if (cached?.source === source) {
+        return cached.css === source ? null : { code: cached.css, map: null };
       }
+      let css: string;
+      try { css = optimizeDuplicateCss(source, { unitTags: unitTagNames, condUnitIds }, normalizePackCss); }
+      catch { return null; } // Let Vite handle parser errors on the unchanged input.
+      optimizedPackCss.set(resolved, { source, css });
+      return css === source ? null : { code: css, map: null };
     },
   };
 

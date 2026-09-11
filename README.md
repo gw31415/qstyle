@@ -2,6 +2,8 @@
 
 Qwik 向け Style Graph Compiler。`css` prop / `css()` / tagged template で書いたスタイルを build 時に解析し、意味的に同一な宣言の重複排除・route 単位の分割・content-hash 付き immutable asset 化を行う。runtime に CSS パーサやコンパイラは持ち込まない。
 
+`qstyle()` の本番ビルドは、各CSS pack内の共通宣言の抽出と、安全に変更できる宣言・ルールの記載順を組み合わせて探索します。Vite標準のminifierを通した未圧縮・gzip・Brotliのサイズを比較し、いずれかが増える候補は採用しません。最小性を保証するものではありません。[比較条件と対象範囲](packages/vite/README.md#css-compression-in-qstyle)と[調査・設計根拠](docs/css-compression.md)を参照してください。
+
 ## パッケージ
 
 - `@qstyle/vite` — Vite plugin (transform・asset emission・dev/HMR)
