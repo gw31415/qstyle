@@ -7,9 +7,9 @@ compiler checkpoint commit. This plan contains unfinished acceptance work.
 
 ## Immediate investigation
 
-- Attribute every byte of the initial +145 raw-byte delta in the retained
-  delivery report. Re-run the same fixture with artifacts preserved, compare
-  initial response bodies, and distinguish stable payload costs from build IDs.
+- Initial +145 raw-byte attribution is recorded in
+  [the delta audit](docs/audits/2026-09-11-initial-delivery-delta.json).
+  Select a separately verified optimization; no fix was made during diagnosis.
 - Persist emitted module provenance to establish the additional-runtime gate;
   marker-body substring counts are insufficient evidence.
 - Keep existing release thresholds while diagnosing; initial transfer remains

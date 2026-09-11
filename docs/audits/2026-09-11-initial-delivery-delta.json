@@ -1,0 +1,316 @@
+{
+  "schema": "qstyle.initial-delivery-delta.v1",
+  "checkpointCommit": "f9f2f4f",
+  "comparison": "native qstyle minus legacy, initial route A, prefetch disabled",
+  "baselineReport": "2026-09-11-delivery-cost.json",
+  "reproduction": {
+    "command": "QSTYLE_DELIVERY_KEEP=1 node scripts/measure-native-delivery.mjs",
+    "retainedBuild": ".qstyle/delivery-cost/run-37603",
+    "capturedHtmlDirectory": ".qstyle/145-byte-diagnosis",
+    "captureUrl": "http://127.0.0.1:4632/",
+    "repeatInitialRawNative": 141565,
+    "repeatInitialRawLegacy": 141420,
+    "sourceFilesChanged": false
+  },
+  "transport": {
+    "native": {
+      "byKind": {
+        "html": {
+          "raw": 6129,
+          "gzip": 2829,
+          "brotli": 2479
+        },
+        "js": {
+          "raw": 135436,
+          "gzip": 51231,
+          "brotli": 45535
+        },
+        "css": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        }
+      },
+      "total": {
+        "raw": 141565,
+        "gzip": 54060,
+        "brotli": 48014
+      }
+    },
+    "legacy": {
+      "byKind": {
+        "html": {
+          "raw": 5992,
+          "gzip": 2800,
+          "brotli": 2433
+        },
+        "js": {
+          "raw": 135428,
+          "gzip": 51225,
+          "brotli": 45595
+        },
+        "css": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        }
+      },
+      "total": {
+        "raw": 141420,
+        "gzip": 54025,
+        "brotli": 48028
+      }
+    }
+  },
+  "html": {
+    "native": {
+      "htmlBytes": 6129,
+      "sha256": "5a532af710adc6459c0258b31152509f461c3f29910fdbcc2c7c8117a34f05ca",
+      "parts": {
+        "generatedClassTokens": 105,
+        "emptyStyleAttributes": 9,
+        "qwikDomMarkerAttributes": 67,
+        "remainingMarkup": 1606,
+        "styleTagMarkup": 139,
+        "cssText": 403,
+        "qwikVnodeData": 376,
+        "otherScriptBodiesAndMarkup": 3424
+      },
+      "styleCount": 4,
+      "qwikStateBytes": 2584
+    },
+    "legacy": {
+      "htmlBytes": 5992,
+      "sha256": "0955c31a9a7ada2266c5d285be6757b0c5386ead5c2547b0fc19a7ecac5b1199",
+      "parts": {
+        "generatedClassTokens": 30,
+        "emptyStyleAttributes": 0,
+        "qwikDomMarkerAttributes": 74,
+        "remainingMarkup": 1606,
+        "styleTagMarkup": 127,
+        "cssText": 434,
+        "qwikVnodeData": 297,
+        "otherScriptBodiesAndMarkup": 3424
+      },
+      "styleCount": 3,
+      "qwikStateBytes": 2584
+    }
+  },
+  "htmlBreakdown": [
+    {
+      "part": "generatedClassTokens",
+      "nativeBytes": 105,
+      "legacyBytes": 30,
+      "delta": 75
+    },
+    {
+      "part": "emptyStyleAttributes",
+      "nativeBytes": 9,
+      "legacyBytes": 0,
+      "delta": 9
+    },
+    {
+      "part": "qwikDomMarkerAttributes",
+      "nativeBytes": 67,
+      "legacyBytes": 74,
+      "delta": -7
+    },
+    {
+      "part": "remainingMarkup",
+      "nativeBytes": 1606,
+      "legacyBytes": 1606,
+      "delta": 0
+    },
+    {
+      "part": "styleTagMarkup",
+      "nativeBytes": 139,
+      "legacyBytes": 127,
+      "delta": 12
+    },
+    {
+      "part": "cssText",
+      "nativeBytes": 403,
+      "legacyBytes": 434,
+      "delta": -31
+    },
+    {
+      "part": "qwikVnodeData",
+      "nativeBytes": 376,
+      "legacyBytes": 297,
+      "delta": 79
+    },
+    {
+      "part": "otherScriptBodiesAndMarkup",
+      "nativeBytes": 3424,
+      "legacyBytes": 3424,
+      "delta": 0
+    }
+  ],
+  "javascript": {
+    "files": {
+      "native": "q-CFULr5sM.js",
+      "legacy": "q-DKKacggv.js"
+    },
+    "native": {
+      "bodyBytes": 110387,
+      "implementationPrefixBytes": 109857,
+      "prefixSha256": "78c0e7012a4c589b22ceb514919f53cf6249568eb65dd38024020637143450c1",
+      "exportBytes": 530,
+      "exports": {
+        "fl": "A",
+        "Fl": "B",
+        "Ra": "C",
+        "sl": "D",
+        "lo": "E",
+        "Ca": "F",
+        "Du": "H",
+        "Ks": "I",
+        "Ua": "L",
+        "Vc": "M",
+        "Va": "N",
+        "ne": "O",
+        "uo": "P",
+        "aa": "R",
+        "Vn": "S",
+        "Au": "T",
+        "vc": "V",
+        "Xi": "_",
+        "ee": "_chk",
+        "Lu": "_eaC",
+        "Iu": "_eaT",
+        "Fu": "_ebC",
+        "Nu": "_ebR",
+        "Uu": "_reC",
+        "Vu": "_reR",
+        "Hu": "_reT",
+        "te": "_res",
+        "bc": "_rsc",
+        "ce": "_run",
+        "Bu": "_shC",
+        "zu": "_shT",
+        "Gu": "_suC",
+        "Wu": "_suT",
+        "en": "_task",
+        "b": "_val",
+        "Ou": "a",
+        "Pl": "b",
+        "ia": "c",
+        "Hc": "d",
+        "In": "f",
+        "Hs": "g",
+        "va": "h",
+        "Ms": "i",
+        "xn": "j",
+        "za": "k",
+        "zl": "l",
+        "si": "m",
+        "_c": "n",
+        "Uc": "o",
+        "Rc": "p",
+        "Ln": "r",
+        "Ha": "s",
+        "Il": "t",
+        "Gs": "u",
+        "Z": "v",
+        "bn": "w",
+        "Xa": "x",
+        "ha": "y",
+        "dl": "z"
+      }
+    },
+    "legacy": {
+      "bodyBytes": 110379,
+      "implementationPrefixBytes": 109857,
+      "prefixSha256": "78c0e7012a4c589b22ceb514919f53cf6249568eb65dd38024020637143450c1",
+      "exportBytes": 522,
+      "exports": {
+        "fl": "A",
+        "vc": "B",
+        "Ra": "C",
+        "sl": "D",
+        "lo": "E",
+        "Ks": "F",
+        "Ua": "I",
+        "aa": "L",
+        "Vc": "M",
+        "Va": "N",
+        "ne": "O",
+        "Ca": "P",
+        "dl": "R",
+        "Vn": "S",
+        "Au": "T",
+        "Du": "V",
+        "Xi": "_",
+        "ee": "_chk",
+        "Lu": "_eaC",
+        "Iu": "_eaT",
+        "Fu": "_ebC",
+        "Nu": "_ebR",
+        "Uu": "_reC",
+        "Vu": "_reR",
+        "Hu": "_reT",
+        "te": "_res",
+        "bc": "_rsc",
+        "ce": "_run",
+        "Bu": "_shC",
+        "zu": "_shT",
+        "Gu": "_suC",
+        "Wu": "_suT",
+        "en": "_task",
+        "b": "_val",
+        "Ou": "a",
+        "Pl": "b",
+        "ia": "c",
+        "Hc": "d",
+        "In": "f",
+        "Hs": "g",
+        "va": "h",
+        "Ms": "i",
+        "xn": "j",
+        "za": "k",
+        "zl": "l",
+        "si": "m",
+        "_c": "n",
+        "Uc": "o",
+        "Rc": "p",
+        "Ln": "r",
+        "Ha": "s",
+        "Il": "t",
+        "Gs": "u",
+        "Z": "v",
+        "bn": "w",
+        "Xa": "x",
+        "ha": "y",
+        "Fl": "z"
+      }
+    },
+    "addedExports": {
+      "uo": "P"
+    },
+    "addedSymbol": "useConstant",
+    "addedExportSerialized": ",uo as P",
+    "implementationBodyEqual": true,
+    "explanation": "The shared Qwik core implementation is byte-identical before the final export clause. The named-import runtime imports useConstant for the dev-only SSR hook slot. The final production runtime no longer imports this symbol, but its export remains in the shared chunk. Other export aliases change without changing byte length."
+  },
+  "reconciliation": {
+    "html": 137,
+    "javascript": 8,
+    "externalCss": 0,
+    "total": 145,
+    "formula": "75 + 79 + 9 + 12 - 7 - 31 + 8 = 145"
+  },
+  "causes": {
+    "generatedClassTokens": "Three DOM class tokens grow from q_ + 8 hex digits (10 bytes) to q1_ + 32 hex digits (35 bytes): 3 * 25 = 75. See packages/core/src/identity.ts nativeClassName.",
+    "qwikVnodeData": "Native StylePack component boundaries and the remaining dynamic-attribute Fragment increase serialized vnode data from 297 to 376 bytes. See packages/compiler/src/transform.ts owner generation and packages/vite/src/native.ts.",
+    "emptyStyleAttributes": "The shared component has data-testid={props.testId}, so it uses general evaluated lowering and emits one empty style attribute: 9 bytes.",
+    "styleTagMarkup": "Two generated native style tags total 67 bytes replace one 55-byte legacy CSS-asset tag; authored style tags remain 72 bytes in both lanes.",
+    "qwikDomMarkerAttributes": "The shared component marker changes from :=\"nf_0\" to a bare colon because the generated Fragment owns its component boundary: -7 bytes.",
+    "cssText": "Generated initial CSS is 181 native bytes versus 212 legacy bytes; authored CSS is 222 in each. Legacy includes future-route/lazy declarations, while native excludes them.",
+    "sharedCoreExport": "One additional serialized export for the already-present useConstant implementation costs 8 bytes."
+  },
+  "limits": [
+    "The 145-byte value is raw response-body difference, not wire headers, request count, or installed package size.",
+    "Compressed bytes cannot be partitioned additively by HTML attribute: compression uses the full body. The archived gzip/Brotli differences are +35/-14, but fresh SSR request ports and instance/build IDs change those exact compressed totals.",
+    "This is an attribution of the committed implementation; no performance fix or release-threshold change was made."
+  ]
+}
