@@ -164,7 +164,7 @@ importers:
         specifier: ^8.0.4
         version: 8.0.4
       '@qstyle/core':
-        specifier: workspace:^
+        specifier: ^0.1.1
         version: link:../core
       magic-string:
         specifier: ^1.2.3
@@ -225,7 +225,7 @@ importers:
   packages/inspector:
     dependencies:
       '@qstyle/core':
-        specifier: workspace:^
+        specifier: ^0.1.1
         version: link:../core
     devDependencies:
       '@types/node':
@@ -250,7 +250,7 @@ importers:
   packages/qwik:
     dependencies:
       '@qstyle/core':
-        specifier: workspace:^
+        specifier: ^0.1.1
         version: link:../core
       csstype:
         specifier: ^3.2.3
@@ -290,10 +290,10 @@ importers:
   packages/unocss:
     dependencies:
       '@qstyle/compiler':
-        specifier: workspace:^
+        specifier: ^1.0.0-alpha.0
         version: link:../compiler
       '@qstyle/core':
-        specifier: workspace:^
+        specifier: ^0.1.1
         version: link:../core
       '@unocss/config':
         specifier: ^66.10.0
@@ -336,16 +336,16 @@ importers:
   packages/vite:
     dependencies:
       '@qstyle/compiler':
-        specifier: workspace:^
+        specifier: ^1.0.0-alpha.0
         version: link:../compiler
       '@qstyle/core':
-        specifier: workspace:^
+        specifier: ^0.1.1
         version: link:../core
       '@qstyle/inspector':
-        specifier: workspace:^
+        specifier: ^0.1.1
         version: link:../inspector
       '@qstyle/qwik':
-        specifier: workspace:^
+        specifier: ^0.2.0
         version: link:../qwik
       '@qwik.dev/core':
         specifier: 2.0.0-beta.43
