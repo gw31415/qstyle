@@ -39,10 +39,10 @@
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@qstyle/compiler": "workspace:^",
-    "@qstyle/core": "workspace:^",
-    "@qstyle/inspector": "workspace:^",
-    "@qstyle/qwik": "workspace:^"
+    "@qstyle/compiler": "github:gw31415/qstyle#path:packages/compiler&git-consumer",
+    "@qstyle/core": "github:gw31415/qstyle#path:packages/core&git-consumer",
+    "@qstyle/inspector": "github:gw31415/qstyle#path:packages/inspector&git-consumer",
+    "@qstyle/qwik": "github:gw31415/qstyle#path:packages/qwik&git-consumer"
   },
   "peerDependencies": {
     "@qwik.dev/core": "2.0.0-beta.43",

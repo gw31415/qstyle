@@ -46,7 +46,7 @@
     "inspector"
   ],
   "dependencies": {
-    "@qstyle/core": "workspace:^"
+    "@qstyle/core": "github:gw31415/qstyle#path:packages/core&git-consumer"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",

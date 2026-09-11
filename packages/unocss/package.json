@@ -45,11 +45,11 @@
     "css"
   ],
   "dependencies": {
-    "@qstyle/core": "workspace:^",
+    "@qstyle/core": "github:gw31415/qstyle#path:packages/core&git-consumer",
     "@unocss/config": "^66.10.0",
     "@unocss/vite": "^66.10.0",
     "unocss": "^66.10.0",
-    "@qstyle/compiler": "workspace:^",
+    "@qstyle/compiler": "github:gw31415/qstyle#path:packages/compiler&git-consumer",
     "postcss": "^8.5.28",
     "postcss-selector-parser": "^7.1.6"
   },

@@ -58,7 +58,7 @@
     "styling"
   ],
   "dependencies": {
-    "@qstyle/core": "workspace:^",
+    "@qstyle/core": "github:gw31415/qstyle#path:packages/core&git-consumer",
     "csstype": "^3.2.3",
     "parse5": "^8.0.1"
   },
